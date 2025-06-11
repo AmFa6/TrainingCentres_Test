@@ -370,36 +370,17 @@ AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
-    if (isUpdatingSliders) return;
-    isUpdatingSliders = true;
-    updateSliderRanges('Amenities', 'Opacity');
-    isUpdatingSliders = false;
-    setTimeout(() => {
-        if (!isUpdatingStyles) {
-            updateOpacityAndOutlineFields();
-        }
-    }, 50);
+  updateSliderRanges('Amenities', 'Opacity')
 });
 AmenitiesOutline.addEventListener("change", () => {
-    if (isUpdatingSliders) return;
-    isUpdatingSliders = true;
-    updateSliderRanges('Amenities', 'Outline');
-    isUpdatingSliders = false;
-    setTimeout(() => {
-        if (!isUpdatingStyles) {
-            updateOpacityAndOutlineFields();
-        }
-    }, 50);
+  updateSliderRanges('Amenities', 'Outline')
 });
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
-  updateOpacityAndOutlineFields();
 });
 AmenitiesInverseOutline.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Outline');
-  updateOpacityAndOutlineFields();
 });
-
 filterTypeDropdown.addEventListener('change', () => {
   updateFilterValues();
   updateSummaryStatistics(getCurrentFeatures());
@@ -2824,263 +2805,155 @@ function isPanelOpen(panelName) {
 }
 
 function configureSlider(sliderElement, isInverse) {
-    console.log(`configureSlider called for ${sliderElement.id} with isInverse: ${isInverse}`);
-    
-    if (sliderElement.noUiSlider) {
-        console.log("Slider already has noUiSlider instance, removing update event listener");
-        sliderElement.noUiSlider.off('update');
-    } else {
-        console.log("WARNING: sliderElement doesn't have noUiSlider property");
-        return;
-    }
+  if (sliderElement.noUiSlider) {
+    sliderElement.noUiSlider.off('update');
+  }
+  
+  const handles = sliderElement.querySelectorAll('.noUi-handle');
+  const connectElements = sliderElement.querySelectorAll('.noUi-connect');
 
-    const handles = sliderElement.querySelectorAll('.noUi-handle');
-    console.log(`Found ${handles.length} handles`);
-    
-    const connectElements = sliderElement.querySelectorAll('.noUi-connect');
-    console.log(`Found ${connectElements.length} connect elements`);
+  if (handles.length >= 2) {
+    handles[0].classList.add('noUi-handle-lower');
+    handles[1].classList.add('noUi-handle-upper');
+  }
+  
+  handles.forEach(handle => {
+    handle.classList.remove('noUi-handle-transparent');
+  });
+  
+  connectElements.forEach(connect => {
+    connect.classList.remove('noUi-connect-dark-grey', 'noUi-connect-gradient-right', 'noUi-connect-gradient-left');
+  });
 
+  if (isInverse) {
+    sliderElement.noUiSlider.updateOptions({
+      connect: [true, true, true]
+    }, false);
+    
     if (handles.length >= 2) {
-        console.log("Adding handle classes");
-        handles[0].classList.add('noUi-handle-lower');
-        handles[1].classList.add('noUi-handle-upper');
+      handles[1].classList.add('noUi-handle-transparent');
+      handles[0].classList.remove('noUi-handle-transparent');
     }
     
-    console.log("Removing transparent classes from all handles");
-    handles.forEach(handle => {
-        handle.classList.remove('noUi-handle-transparent');
-    });
-    
-    console.log("Removing connect element classes");
-    connectElements.forEach(connect => {
-        connect.classList.remove('noUi-connect-dark-grey', 'noUi-connect-gradient-right', 'noUi-connect-gradient-left');
-    });
-
-    console.log(`Configuring slider for isInverse: ${isInverse}`);
-    if (isInverse) {
-        console.log("Setting up inverse slider style");
-        sliderElement.noUiSlider.updateOptions({
-            connect: [true, true, true]
-        }, false);
-        
-        if (handles.length >= 2) {
-            console.log("Making upper handle transparent in inverse mode");
-            handles[1].classList.add('noUi-handle-transparent');
-        }
-        
-        if (connectElements.length >= 3) {
-            console.log("Setting up connect elements for inverse mode");
-            connectElements[0].classList.add('noUi-connect-dark-grey');
-            connectElements[1].classList.add('noUi-connect-gradient-left');
-        }
-    } else {
-        console.log("Setting up normal slider style");
-        sliderElement.noUiSlider.updateOptions({
-            connect: [true, true, true]
-        }, false);
-        
-        if (handles.length >= 2) {
-            console.log("Making lower handle transparent in normal mode");
-            handles[0].classList.add('noUi-handle-transparent');
-        }
-        
-        if (connectElements.length >= 3) {
-            console.log("Setting up connect elements for normal mode");
-            connectElements[1].classList.add('noUi-connect-gradient-right');
-            connectElements[2].classList.add('noUi-connect-dark-grey');
-        }
+    if (connectElements.length >= 3) {
+      connectElements[0].classList.add('noUi-connect-dark-grey');
+      connectElements[1].classList.add('noUi-connect-gradient-left');
+      connectElements[2].classList.remove('noUi-connect-dark-grey');
     }
-
-    console.log("Adding update event listener to slider");
-    sliderElement.noUiSlider.on('update', function (values, handle) {
-        console.log(`Slider update event fired with values: [${values}], handle: ${handle}`);
-        
-        const handleElement = handles[handle];
-        const step = sliderElement.noUiSlider.options.step;
-        const formattedValue = formatValue(values[handle], step);
-        
-        console.log(`Setting data-value=${formattedValue} on handle ${handle}`);
-        handleElement.setAttribute('data-value', formattedValue);
-        
-        console.log(`isUpdatingStyles: ${isUpdatingStyles}`);
-        if (!isUpdatingStyles) {
-            console.log("Setting isUpdatingStyles to true and scheduling style update");
-            isUpdatingStyles = true;
-            requestAnimationFrame(() => {
-                console.log("Inside requestAnimationFrame, applying styles");
-                applyAmenitiesCatchmentLayerStyling();
-                console.log("Setting isUpdatingStyles back to false");
-                isUpdatingStyles = false;
-            });
-        } else {
-            console.log("Skipping style update due to isUpdatingStyles flag");
-        }
-    });
+  } else {
+    sliderElement.noUiSlider.updateOptions({
+      connect: [true, true, true]
+    }, false);
     
-    console.log("configureSlider completed");
+    if (handles.length >= 2) {
+      handles[0].classList.add('noUi-handle-transparent');
+      handles[1].classList.remove('noUi-handle-transparent');
+    }
+    
+    if (connectElements.length >= 3) {
+      connectElements[0].classList.remove('noUi-connect-dark-grey');
+      connectElements[1].classList.add('noUi-connect-gradient-right');
+      connectElements[2].classList.add('noUi-connect-dark-grey');
+    }
+  }
+
+  sliderElement.noUiSlider.on('update', function (values, handle) {
+    const handleElement = handles[handle];
+    const step = sliderElement.noUiSlider.options.step;
+    const formattedValue = formatValue(values[handle], step);
+    handleElement.setAttribute('data-value', formattedValue);
+    
+    if (!isUpdatingStyles) {
+      isUpdatingStyles = true;
+      requestAnimationFrame(() => {
+        updateOpacityAndOutlineFields();
+        isUpdatingStyles = false;
+      });
+    }
+  });
 }
 
 function updateSliderRanges(type, scaleType) {
-    console.log(`updateSliderRanges called with type: ${type}, scaleType: ${scaleType}`);
-    console.log(`isUpdatingSliders at start: ${isUpdatingSliders}`);
+  console.log('Updating slider ranges...');
+  if (isUpdatingSliders) return;
+  isUpdatingSliders = true;
+
+  let field, rangeElement, minElement, maxElement, gridData, order, isInverse;
+
+  if (scaleType === 'Opacity') {
+    field = AmenitiesOpacity.value;
+    rangeElement = AmenitiesOpacityRange;
+    minElement = document.getElementById('opacityRangeAmenitiesMin');
+    maxElement = document.getElementById('opacityRangeAmenitiesMax');
+    gridData = gridLayer;
+    order = opacityAmenitiesOrder;
+    isInverse = isInverseAmenitiesOpacity;
+  } else if (scaleType === 'Outline') {
+    field = AmenitiesOutline.value;
+    rangeElement = AmenitiesOutlineRange;
+    minElement = document.getElementById('outlineRangeAmenitiesMin');
+    maxElement = document.getElementById('outlineRangeAmenitiesMax');
+    gridData = gridLayer;
+    order = outlineAmenitiesOrder;
+    isInverse = isInverseAmenitiesOutline;
+  }
+
+  if (!rangeElement || !rangeElement.noUiSlider) {
+    isUpdatingSliders = false;
+    return;
+  }
+  
+  if (gridData) {
+    const values = field !== "None" ? 
+      gridData.features.map(feature => feature.properties[field]).filter(value => value !== null && value !== 0) : [];
     
-    if (isUpdatingSliders) {
-        console.log("Preventing recursion: isUpdatingSliders is true, returning early from updateSliderRanges");
-        return;
-    }
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
     
-    console.log("Setting isUpdatingSliders to true");
-    isUpdatingSliders = true;
+    const roundedMaxValue = Math.pow(10, Math.ceil(Math.log10(maxValue)));
+    let step = roundedMaxValue / 100;
 
-    try {
-        console.log("Inside try block of updateSliderRanges");
-        let field, rangeElement, minElement, maxElement, gridData, order, isInverse;
-
-        if (type === 'Amenities') {
-            console.log("Type is Amenities");
-            if (scaleType === 'Opacity') {
-                console.log("ScaleType is Opacity");
-                field = AmenitiesOpacity.value;
-                console.log("Field value:", field);
-                rangeElement = AmenitiesOpacityRange;
-                minElement = document.getElementById('opacityRangeAmenitiesMin');
-                maxElement = document.getElementById('opacityRangeAmenitiesMax');
-                gridData = grid;
-                order = opacityAmenitiesOrder;
-                isInverse = isInverseAmenitiesOpacity;
-            } else if (scaleType === 'Outline') {
-                console.log("ScaleType is Outline");
-                field = AmenitiesOutline.value;
-                console.log("Field value:", field);
-                rangeElement = AmenitiesOutlineRange;
-                minElement = document.getElementById('outlineRangeAmenitiesMin');
-                maxElement = document.getElementById('outlineRangeAmenitiesMax');
-                gridData = grid;
-                order = outlineAmenitiesOrder;
-                isInverse = isInverseAmenitiesOutline;
-            }
-        }
-
-        console.log("Checking if rangeElement and noUiSlider exist");
-        if (!rangeElement || !rangeElement.noUiSlider) {
-            console.log("rangeElement or noUiSlider missing, setting isUpdatingSliders to false and returning");
-            isUpdatingSliders = false;
-            return;
-        }
-
-        console.log("Working with grid data");
-        if (gridData) {
-            console.log("Grid data exists");
-            let values = [];
-            if (field !== "None") {
-                console.log("Collecting values for field:", field);
-                for (let i = 0; i < gridData.features.length; i++) {
-                    const val = gridData.features[i].properties[field];
-                    if (val !== null && val !== undefined && val !== 0) {
-                        values.push(Number(val));
-                    }
-                }
-                console.log(`Collected ${values.length} values`);
-            }
-            
-            console.log("Filtering values");
-            values = values.filter(v => !isNaN(v) && isFinite(v));
-            console.log(`After filtering: ${values.length} valid values`);
-            
-            const minValue = values.length > 0 ? Math.min(...values) : 0;
-            const maxValue = values.length > 0 ? Math.max(...values) : 100;
-            console.log(`Min value: ${minValue}, Max value: ${maxValue}`);
-
-            if (values.length === 0 || minValue === maxValue) {
-                console.log("No valid values or min equals max");
-                rangeElement.setAttribute('disabled', true);
-                console.log("Updating slider with default range 0-100");
-                rangeElement.noUiSlider.updateOptions({
-                    range: {
-                        'min': 0,
-                        'max': 100
-                    },
-                    step: 1
-                }, false);
-                console.log("Setting slider values to [0, 100]");
-                rangeElement.noUiSlider.set([0, 100], false);
-                minElement.innerText = '0';
-                maxElement.innerText = '100';
-                console.log("Slider update complete, setting isUpdatingSliders to false");
-                isUpdatingSliders = false;
-                return;
-            }
-        
-            let step;
-            const range = maxValue - minValue;
-            console.log(`Range: ${range}`);
-            
-            if (range > 10000) {
-                step = 1000;
-            } else if (range > 1000) {
-                step = 100;
-            } else if (range > 100) {
-                step = 10;
-            } else if (range > 10) {
-                step = 1;
-            } else if (range > 1) {
-                step = 0.1;
-            } else {
-                step = 0.01;
-            }
-            console.log(`Selected step size: ${step}`);
-
-            const adjustedMaxValue = Math.ceil(maxValue / step) * step;
-            const adjustedMinValue = Math.floor(minValue / step) * step;
-            console.log(`Adjusted min: ${adjustedMinValue}, Adjusted max: ${adjustedMaxValue}`);
-        
-            if (field === "None") {
-                console.log("Field is None, disabling slider");
-                rangeElement.setAttribute('disabled', true);
-                rangeElement.noUiSlider.updateOptions({
-                    range: {
-                        'min': 0,
-                        'max': 0
-                    },
-                    step: 1
-                }, false);
-                rangeElement.noUiSlider.set(['', ''], false);
-                minElement.innerText = '';
-                maxElement.innerText = '';
-            } else {
-                console.log("Enabling slider with adjusted range");
-                rangeElement.removeAttribute('disabled');
-                console.log(`Updating slider options with min: ${adjustedMinValue}, max: ${adjustedMaxValue}, step: ${step}`);
-                rangeElement.noUiSlider.updateOptions({
-                    range: {
-                        'min': adjustedMinValue,
-                        'max': adjustedMaxValue
-                    },
-                    step: step
-                }, false);
-                console.log(`Setting slider values to [${adjustedMinValue}, ${adjustedMaxValue}]`);
-                rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
-                minElement.innerText = formatValue(adjustedMinValue, step);
-                maxElement.innerText = formatValue(adjustedMaxValue, step);
-            }
-
-            console.log(`About to call configureSlider with isInverse: ${isInverse}`);
-            configureSlider(rangeElement, isInverse);
-            console.log("configureSlider call complete");
-        }
-        console.log("End of try block in updateSliderRanges");
-    } catch (error) {
-        console.error("Error in updateSliderRanges:", error);
-        console.error("Error stack:", error.stack);
-    } finally {
-        console.log("In finally block, setting isUpdatingSliders to false");
-        isUpdatingSliders = false;
+    if (isNaN(step) || step <= 0) {
+      step = 1;
     }
-    console.log("Exiting updateSliderRanges function");
+
+    const adjustedMaxValue = Math.ceil(maxValue / step) * step;
+    const adjustedMinValue = Math.floor(minValue / step) * step;
+    
+    if (field === "None") {
+      rangeElement.setAttribute('disabled', true);
+      rangeElement.noUiSlider.updateOptions({
+        range: {
+          'min': 0,
+          'max': 0
+        },
+        step: 1
+      }, false);
+      rangeElement.noUiSlider.set(['', ''], false);
+      minElement.innerText = '';
+      maxElement.innerText = '';
+    } else {
+      rangeElement.removeAttribute('disabled');
+      rangeElement.noUiSlider.updateOptions({
+        range: {
+          'min': adjustedMinValue,
+          'max': adjustedMaxValue
+        },
+        step: step
+      }, false);
+      rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
+      minElement.innerText = formatValue(adjustedMinValue, step);
+      maxElement.innerText = formatValue(adjustedMaxValue, step);
+    }
+    configureSlider(rangeElement, isInverse);   
+  }
+
+  isUpdatingSliders = false;
+
+  updateOpacityAndOutlineFields();
 }
 
 function initializeSliders(sliderElement) {
-  console.log('Initializing slider:', sliderElement.id);
   if (sliderElement.noUiSlider) {
     sliderElement.noUiSlider.destroy();
   }
@@ -3115,55 +2988,31 @@ function initializeSliders(sliderElement) {
 }
 
 function toggleInverseScale(type, scaleType) {
-    console.log(`toggleInverseScale called with type: ${type}, scaleType: ${scaleType}`);
-    console.log(`Current isUpdatingSliders value: ${isUpdatingSliders}`);
-    
-    isUpdatingSliders = true;
-    console.log("Set isUpdatingSliders to true");
+  console.log('Toggling inverse scale...');
+  isUpdatingSliders = true;
 
-    let isInverse, rangeElement, order;
+  let isInverse, rangeElement, order;
 
-    if (type === 'Amenities') {
-        console.log("Type is Amenities");
-        if (scaleType === 'Opacity') {
-            console.log("ScaleType is Opacity");
-            isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
-            isInverse = isInverseAmenitiesOpacity;
-            console.log(`Toggled isInverseAmenitiesOpacity to: ${isInverse}`);
-            
-            rangeElement = AmenitiesOpacityRange;
-            opacityAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
-            console.log(`Set opacityAmenitiesOrder to: ${opacityAmenitiesOrder}`);
-        } else if (scaleType === 'Outline') {
-            console.log("ScaleType is Outline");
-            isInverseAmenitiesOutline = !isInverseAmenitiesOutline;
-            isInverse = isInverseAmenitiesOutline;
-            console.log(`Toggled isInverseAmenitiesOutline to: ${isInverse}`);
-            
-            rangeElement = AmenitiesOutlineRange;
-            outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
-            console.log(`Set outlineAmenitiesOrder to: ${outlineAmenitiesOrder}`);
-        }
-    }
+  if (scaleType === 'Opacity') {
+    isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
+    isInverse = isInverseAmenitiesOpacity;
+    rangeElement = AmenitiesOpacityRange;
+    opacityAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+  } else if (scaleType === 'Outline') {
+    isInverseAmenitiesOutline = !isInverseAmenitiesOutline;
+    isInverse = isInverseAmenitiesOutline;
+    rangeElement = AmenitiesOutlineRange;
+    outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+  }
 
-    const currentValues = rangeElement.noUiSlider.get();
-    console.log(`Current slider values: [${currentValues}]`);
-    
-    console.log(`Calling configureSlider with isInverse: ${isInverse}`);
-    configureSlider(rangeElement, isInverse);
-    
-    console.log(`Setting slider values to: [${currentValues}]`);
-    rangeElement.noUiSlider.set(currentValues, false);
+  const currentValues = rangeElement.noUiSlider.get();
+  
+  configureSlider(rangeElement, isInverse);
+  rangeElement.noUiSlider.set(currentValues, false);
 
-    console.log(`About to call updateSliderRanges with type: ${type}, scaleType: ${scaleType}`);
-    setTimeout(() => {
-        console.log("In setTimeout, setting isUpdatingSliders to false before calling updateSliderRanges");
-        isUpdatingSliders = false;
-        updateSliderRanges(type, scaleType);
-    }, 10);
+  updateSliderRanges(type, scaleType);
 
-    console.log("Setting isUpdatingSliders to false");
-    isUpdatingSliders = false;
+  isUpdatingSliders = false;
 }
 
 function scaleExp(value, minVal, maxVal, minScale, maxScale, order) {
