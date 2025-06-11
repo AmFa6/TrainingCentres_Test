@@ -2824,6 +2824,136 @@ function isPanelOpen(panelName) {
   return false;
 }
 
+function updateSliderRanges(type, scaleType) {
+    console.log(`updateSliderRanges called with type: ${type}, scaleType: ${scaleType}`);
+    
+    let field, rangeElement, minElement, maxElement, gridData, isInverse;
+    
+    if (type === 'Amenities') {
+        gridData = grid;
+        if (scaleType === 'Opacity') {
+            field = AmenitiesOpacity.value;
+            rangeElement = AmenitiesOpacityRange;
+            minElement = document.getElementById('opacityRangeAmenitiesMin');
+            maxElement = document.getElementById('opacityRangeAmenitiesMax');
+            isInverse = isInverseAmenitiesOpacity;
+        } else if (scaleType === 'Outline') {
+            field = AmenitiesOutline.value;
+            rangeElement = AmenitiesOutlineRange;
+            minElement = document.getElementById('outlineRangeAmenitiesMin');
+            maxElement = document.getElementById('outlineRangeAmenitiesMax');
+            isInverse = isInverseAmenitiesOutline;
+        }
+    }
+    
+    if (!rangeElement || !rangeElement.noUiSlider) {
+        console.log("No slider found for", type, scaleType);
+        return;
+    }
+    
+    if (field === "None" || !gridData) {
+        rangeElement.setAttribute('disabled', true);
+        if (minElement) minElement.textContent = "-";
+        if (maxElement) maxElement.textContent = "-";
+        return;
+    }
+    
+    rangeElement.removeAttribute('disabled');
+    
+    let values = [];
+    for (let feature of gridData.features) {
+        if (feature.properties && feature.properties[field] != null) {
+            const val = parseFloat(feature.properties[field]);
+            if (!isNaN(val)) {
+                values.push(val);
+            }
+        }
+    }
+    
+    if (values.length === 0) {
+        console.log("No valid values found for field:", field);
+        rangeElement.setAttribute('disabled', true);
+        if (minElement) minElement.textContent = "-";
+        if (maxElement) maxElement.textContent = "-";
+        return;
+    }
+    
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+    
+    if (minValue === maxValue) {
+        console.log("Min equals max for field:", field);
+        rangeElement.setAttribute('disabled', true);
+        if (minElement) minElement.textContent = formatValue(minValue, 0.1);
+        if (maxElement) maxElement.textContent = formatValue(maxValue, 0.1);
+        return;
+    }
+    
+    const range = maxValue - minValue;
+    let step;
+    
+    if (range > 10000) {
+        step = 1000;
+    } else if (range > 1000) {
+        step = 100;
+    } else if (range > 100) {
+        step = 10;
+    } else if (range > 10) {
+        step = 1;
+    } else if (range > 1) {
+        step = 0.1;
+    } else {
+        step = 0.01;
+    }
+    
+    const adjustedMinValue = Math.floor(minValue / step) * step;
+    const adjustedMaxValue = Math.ceil(maxValue / step) * step;
+    
+    console.log(`Setting slider range for ${field}: min=${adjustedMinValue}, max=${adjustedMaxValue}, step=${step}`);
+    
+    rangeElement.noUiSlider.updateOptions({
+        range: {
+            'min': adjustedMinValue,
+            'max': adjustedMaxValue
+        },
+        step: step
+    }, false);
+    
+    rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue]);
+    
+    if (minElement) minElement.textContent = formatValue(adjustedMinValue, step);
+    if (maxElement) maxElement.textContent = formatValue(adjustedMaxValue, step);
+}
+
+function initializeSliders(sliderElement) {
+    console.log('Initializing slider:', sliderElement.id);
+    
+    if (sliderElement.noUiSlider) {
+        sliderElement.noUiSlider.destroy();
+    }
+
+    noUiSlider.create(sliderElement, {
+        start: [0, 100],
+        connect: true,
+        range: {
+            'min': 0,
+            'max': 100
+        },
+        step: 1,
+        tooltips: true,
+        format: {
+            to: value => parseFloat(value).toFixed(1),
+            from: value => parseFloat(value)
+        }
+    });
+
+    sliderElement.noUiSlider.on('change', function() {
+        if (AmenitiesCatchmentLayer) {
+            updateOpacityAndOutlineFields();
+        }
+    });
+}
+
 function configureSlider(sliderElement, isInverse) {
     if (sliderElement.noUiSlider) {
         sliderElement.noUiSlider.off('update');
@@ -2843,12 +2973,6 @@ function configureSlider(sliderElement, isInverse) {
     if (handles.length >= 2) {
         handles[0].classList.add('noUi-handle-lower');
         handles[1].classList.add('noUi-handle-upper');
-        
-        if (isInverse) {
-            handles[1].classList.add('noUi-handle-transparent');
-        } else {
-            handles[0].classList.add('noUi-handle-transparent');
-        }
     }
 
     sliderElement.noUiSlider.updateOptions({
@@ -2874,205 +2998,7 @@ function configureSlider(sliderElement, isInverse) {
     
     sliderElement.noUiSlider.on('change', debounce(function() {
         if (!isUpdatingStyles) {
-            isUpdatingStyles = true;
-            if (AmenitiesCatchmentLayer) {
-                applyAmenitiesCatchmentLayerStyling();
-            }
-            isUpdatingStyles = false;
-        }
-    }, 250));
-}
-
-function updateSliderRanges(type, scaleType) {
-    //console.log(`updateSliderRanges called with type: ${type}, scaleType: ${scaleType}`);
-    
-    if (isUpdatingSliders) {
-        //console.log("Already updating sliders, preventing recursion");
-        return;
-    }
-    
-    try {
-        isUpdatingSliders = true;
-        
-        let field, rangeElement, minElement, maxElement, gridData, isInverse;
-        
-        if (type === 'Amenities') {
-            if (scaleType === 'Opacity') {
-                field = AmenitiesOpacity.value;
-                rangeElement = AmenitiesOpacityRange;
-                minElement = document.getElementById('opacityRangeAmenitiesMin');
-                maxElement = document.getElementById('opacityRangeAmenitiesMax');
-                gridData = grid;
-                isInverse = isInverseAmenitiesOpacity;
-            } else if (scaleType === 'Outline') {
-                field = AmenitiesOutline.value;
-                rangeElement = AmenitiesOutlineRange;
-                minElement = document.getElementById('outlineRangeAmenitiesMin');
-                maxElement = document.getElementById('outlineRangeAmenitiesMax');
-                gridData = grid;
-                isInverse = isInverseAmenitiesOutline;
-            }
-        }
-        
-        if (!rangeElement || !rangeElement.noUiSlider) {
-            //console.log("No slider element or noUiSlider instance");
-            return;
-        }
-        
-        if (field === "None" || !gridData) {
-            //console.log("Field is None or no grid data available");
-            rangeElement.setAttribute('disabled', true);
-            rangeElement.noUiSlider.updateOptions({
-                range: {
-                    'min': 0,
-                    'max': 0
-                },
-                start: [0, 0]
-            }, false);
-            
-            if (minElement) minElement.innerText = '';
-            if (maxElement) maxElement.innerText = '';
-            
-            configureSlider(rangeElement, isInverse);
-            return;
-        }
-        
-        rangeElement.removeAttribute('disabled');
-        
-        let values = [];
-        for (let feature of gridData.features) {
-            const val = feature.properties[field];
-            if (val !== undefined && val !== null && !isNaN(val)) {
-                values.push(Number(val));
-            }
-        }
-        
-        if (values.length === 0) {
-            //console.log("No valid values found for field:", field);
-            rangeElement.setAttribute('disabled', true);
-            rangeElement.noUiSlider.updateOptions({
-                range: {
-                    'min': 0,
-                    'max': 100
-                },
-                start: [0, 100]
-            }, false);
-            
-            if (minElement) minElement.innerText = '0';
-            if (maxElement) maxElement.innerText = '100';
-            
-            configureSlider(rangeElement, isInverse);
-            return;
-        }
-        
-        const minValue = Math.min(...values);
-        const maxValue = Math.max(...values);
-        
-        if (minValue === maxValue) {
-            const value = minValue;
-            const minRange = Math.max(0, value - 1);
-            const maxRange = value + 1;
-            
-            rangeElement.noUiSlider.updateOptions({
-                range: {
-                    'min': minRange,
-                    'max': maxRange
-                },
-                start: [minRange, maxRange]
-            }, false);
-            
-            if (minElement) minElement.innerText = formatValue(minRange, 0.1);
-            if (maxElement) maxElement.innerText = formatValue(maxRange, 0.1);
-            
-            configureSlider(rangeElement, isInverse);
-            return;
-        }
-        
-        const range = maxValue - minValue;
-        let step;
-        
-        if (range > 10000) step = 1000;
-        else if (range > 1000) step = 100;
-        else if (range > 100) step = 10;
-        else if (range > 10) step = 1;
-        else if (range > 1) step = 0.1;
-        else step = 0.01;
-        
-        const adjustedMinValue = Math.floor(minValue / step) * step;
-        const adjustedMaxValue = Math.ceil(maxValue / step) * step;
-        
-        rangeElement.noUiSlider.updateOptions({
-            range: {
-                'min': adjustedMinValue,
-                'max': adjustedMaxValue
-            },
-            step: step
-        }, false);
-        
-        rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue]);
-        
-        if (minElement) minElement.innerText = formatValue(adjustedMinValue, step);
-        if (maxElement) maxElement.innerText = formatValue(adjustedMaxValue, step);
-        
-        configureSlider(rangeElement, isInverse);
-        
-    } catch (error) {
-        //console.error("Error in updateSliderRanges:", error);
-        //console.error("Error stack:", error.stack);
-    } finally {
-        isUpdatingSliders = false;
-    }
-}
-
-function initializeSliders(sliderElement) {
-    //console.log('Initializing slider:', sliderElement.id);
-    
-    if (sliderElement.noUiSlider) {
-        sliderElement.noUiSlider.destroy();
-    }
-
-    noUiSlider.create(sliderElement, {
-        start: [0, 0],
-        connect: [true, true, true],
-        range: {
-            'min': 0,
-            'max': 0
-        },
-        step: 1,
-        tooltips: false,
-        format: {
-            to: value => parseFloat(value),
-            from: value => parseFloat(value)
-        }
-    });
-
-    const handles = sliderElement.querySelectorAll('.noUi-handle');
-    if (handles.length > 0) {
-        handles[0].classList.add('noUi-handle-transparent');
-        if (handles.length > 1) {
-            handles[0].classList.add('noUi-handle-lower');
-            handles[1].classList.add('noUi-handle-upper');
-        }
-    }
-
-    const connectElements = sliderElement.querySelectorAll('.noUi-connect');
-    if (connectElements.length > 2) {
-        connectElements[1].classList.add('noUi-connect-gradient-right');
-        connectElements[2].classList.add('noUi-connect-dark-grey');
-    }
-
-    sliderElement.noUiSlider.on('update', function(values, handle) {
-        const handleElement = handles[handle];
-        const step = sliderElement.noUiSlider.options.step || 1;
-        const formattedValue = formatValue(values[handle], step);
-        handleElement.setAttribute('data-value', formattedValue);
-    });
-    
-    sliderElement.noUiSlider.on('change', debounce(function() {
-        if (!isUpdatingStyles && AmenitiesCatchmentLayer) {
-            isUpdatingStyles = true;
             applyAmenitiesCatchmentLayerStyling();
-            isUpdatingStyles = false;
         }
     }, 250));
 }
