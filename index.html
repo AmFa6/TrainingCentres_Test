@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Access to Training Centres</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+  <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
+  <script src="https://unpkg.com/proj4"></script>
+  <script src="https://unpkg.com/proj4leaflet"></script>
+  <style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Trebuchet MS', sans-serif;
+    font-weight: normal;
+  }
+  #map {
+    height: 100%;
+    width: 100%;
+  }
+  #panel-container, #legend, #summary-panel {
+    position: absolute;
+    background: white;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    box-sizing: border-box;
+  }
+  #panel-container {
+    top: 10px;
+    left: 10px;
+    width: 275px;
+    padding: 10px;
+  }
+  #legend {
+    top: 10px;
+    right: 10px;
+    padding: 5px;
+    width: 250px;
+    word-wrap: break-word;
+  }
+  #summary-panel {
+    bottom: 25px;
+    right: 10px;
+    padding: 10px;
+    width: 500px;
+  }
+  .panel {
+    margin-bottom: 10px;
+  }
+  .panel label, .panel select, .panel input {
+    display: block;
+    margin-bottom: 5px;
+    font-family: 'Trebuchet MS', sans-serif;
+    font-size: 1.1em;
+    font-weight: normal;
+  }
+  .panel select, .panel input {
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: white;
+    color: black;
+    box-sizing: border-box;
+    font-size: 1em;
+  }
+  .panel select:focus, .panel input:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.5);
+  }
+  .collapsible, .panel-header, .legend-category-header {
+    cursor: pointer;
+    border: none;
+    text-align: left;
+    outline: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'Trebuchet MS', sans-serif;
+    font-weight: normal;
+  }
+  .collapsible {
+    font-size: 1em;
+    background: #f0f0f0;
+    margin: 10px;
+    padding: 7px;
+    border-radius: 5px;
+  }
+  .panel-header {
+    font-size: 1.2em;
+    background: white;
+    margin-bottom: 10px;
+    padding: 10px;
+    border-radius: 5px;
+  }
+  .legend-category-header {
+    font-size: 1.1em;
+    margin-bottom: 10px;
+    padding: 3px;
+    border-radius: 3px;
+  }
+  .collapsible:after,
+  .panel-header:after,
+  .legend-category-header:after {
+    content: '\25BC';
+    font-size: 0.9em;
+    margin-left: 5px;
+  }
+  .collapsible.collapsed:after,
+  .panel-header.collapsed:after,
+  .legend-category-collapsed .legend-category-header:after {
+    content: '\25B6';
+  }
+  .collapsible-content, .legend-category-collapsed .legend-category-content {
+    display: none;
+  }
+  .collapsible-content {
+    overflow: hidden;
+    background-color: #f0f0f0;
+    padding: 10px;
+    border-radius: 5px;
+    font-size: 0.9em;
+  }
+  .collapsible-content label,
+  .collapsible-content select,
+  .collapsible-content input {
+    font-size: 0.8em;
+  }
+  .legend-category {
+    margin-bottom: 10px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 5px;
+  }
+  .legend-category:last-child {
+    border-bottom: none;
+  }
+  .legend-category-header:hover {
+    background-color: #f0f0f0;
+  }
+  .legend-category-content {
+    padding-left: 5px;
+  }
+  .noUi-target {
+    background: #f0f0f0;
+    border-radius: 5px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.1);
+    height: 0.5em;
+  }
+  .noUi-connect {
+    background: rgba(255, 255, 255, 0.0);
+    height: 0.5em;
+  }
+  .noUi-connect-dark-grey {
+    background: rgba(118, 118, 118, 1) !important;
+  }
+  .noUi-connect-gradient-right {
+    background: linear-gradient(to right, rgba(118, 118, 118, 0) 0%, rgba(118, 118, 118, 0.5) 50%, rgba(118, 118, 118, 1) 100%) !important;
+  }
+  .noUi-connect-gradient-left {
+    background: linear-gradient(to right, rgba(118, 118, 118, 1) 0%, rgba(118, 118, 118, 0.5) 50%, rgba(118, 118, 118, 0) 100%) !important;
+  }
+  .noUi-handle {
+    background: rgba(118, 118, 118, 1) !important;
+    border: none !important;
+    border-radius: 50% !important;
+    box-shadow: none !important;
+    width: 14px !important;
+    height: 14px !important;
+    cursor: pointer !important;
+    top: 50%;
+    transform: translate(-50%, 5%) !important;
+  }
+  .noUi-handle-transparent {
+    background: rgba(255, 255, 255, 0.0) !important;
+    border: 0.5px solid #767676 !important;
+  }
+  .noUi-handle::after {
+    content: attr(data-value);
+    position: absolute;
+    background: transparent;
+    color: #000000;
+    padding: 2px 5px;
+    border: none;
+    font-size: 0.8em;
+    top: -18px;
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+  }
+  .noUi-handle-lower::after {
+    left: 0;
+    transform: translateX(0);
+  }
+  .noUi-handle-upper::after {
+    right: 0;
+    left: auto;
+    transform: translateX(-150%);
+  }
+  .slider-labels {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 5px;
+  }
+  .slider-labels span {
+    font-size: 0.8em;
+  }
+  .field-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .field-container > div:first-child {
+    flex: 1.05;
+  }
+  .field-container > div:last-child {
+    flex: 0.95;
+    margin-left: 10px;
+  }
+  .button-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .button-container > button {
+    flex: 1;
+    cursor: pointer;
+    text-align: center;
+    border-radius: 5px;
+    font-family: 'Trebuchet MS', sans-serif;
+    font-weight: normal;
+  }
+  .large-button {
+    font-size: 1em;
+    padding: 8px;
+    border: 0.2px solid #767676;
+    margin: 10px;
+  }
+  .small-button {
+    font-size: 0.8em;
+    padding: 1px 5px;
+    border: 0.1px solid #767676;
+  }
+  .btn {
+    padding: 6px 12px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  .checkbox-label {
+    display: flex !important;
+    align-items: center !important;
+    font-size: 1em !important;
+  }
+  .checkbox-label input {
+    padding: 15px !important;
+    width: auto !important;
+  }
+  .checkbox-label span {
+    margin-left: 6px !important;
+  }
+  .checkbox-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+  .checkbox-container label {
+    margin: 0;
+    display: inline-block;
+    margin-right: 10px;
+  }
+  .checkbox-container input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    height: auto;
+  }
+  .dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+  }
+  .dropdown-toggle {
+    width: 100%;
+    padding: 5px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    background-color: white;
+    color: black;
+    font-size: 1em;
+    text-align: left;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .dropdown-menu {
+    display: none;
+    position: absolute;
+    background-color: white;
+    min-width: 100%;
+    max-height: 300px;
+    overflow-y: auto;
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    z-index: 1001;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+  }
+  .dropdown-menu label {
+    display: block;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .dropdown-menu input {
+    margin-right: 5px;
+  }
+  .dropdown-menu.show {
+    display: block;
+  }
+  .pin {
+    position: relative;
+    display: inline-block;
+    width: 30px;
+    height: 30px;
+    bottom: 36px;
+    background-color: white;
+    border: 3px solid grey;
+    border-radius: 50%;
+    text-align: center;
+    line-height: 30px;
+  }
+  .pin::after {
+    content: '';
+    position: absolute;
+    top: 18px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 17px solid transparent;
+    border-right: 17px solid transparent;
+    border-top: 35px solid grey;
+    z-index: -1;
+  }
+  .dot {
+    width: 5px;
+    height: 5px;
+    background-color: grey;
+    border-radius: 50%;
+  }
+  #summary-panel h4 {
+    margin-top: 0;
+  }
+  #summary-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  #summary-table th, #summary-table td {
+    border: 1px solid #ccc;
+    padding: 5px;
+    text-align: center;
+  }
+  .leaflet-popup-content {
+    font-family: 'Trebuchet MS', sans-serif;
+    font-weight: normal;
+  }
+  .infrastructure-popup {
+    max-height: 300px;
+    overflow-y: auto;
+    min-width: 250px;
+  }
+  .popup-header {
+    margin-bottom: 8px;
+    padding-bottom: 5px;
+    border-bottom: 1px solid #ccc;
+    display: flex;
+    justify-content: space-between;
+  }
+  .combined-frequency-header {
+    margin-bottom: 8px;
+    padding: 5px;
+    background-color: #f2f2f2;
+    border-radius: 3px;
+    text-align: center;
+  }
+  .popup-content {
+    margin-bottom: 10px;
+  }
+  .popup-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .popup-table th, .popup-table td {
+    padding: 4px;
+    border: 1px solid #ddd;
+    font-size: 12px;
+  }
+  .popup-table th {
+    background-color: #f2f2f2;
+    text-align: left;
+  }
+  .popup-footer {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 10px;
+  }
+  .popup-footer button {
+    padding: 4px 8px;
+    background-color: #f2f2f2;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .popup-footer button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .page-indicator {
+    font-size: 12px;
+    color: #666;
+  }
+  .file-upload-container {
+    margin-bottom: 15px;
+  }
+  .file-upload-label {
+    display: inline-block;
+    padding: 6px 12px;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  .file-upload-label input[type="file"] {
+    display: none;
+  }
+  #fileNameDisplay {
+    margin-left: 10px;
+    font-size: 0.9em;
+  }
+  .user-layers-list {
+    margin-top: 10px;
+  }
+  .user-layer-item {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    border-bottom: 1px solid #eee;
+  }
+  .user-layer-item input {
+    margin-right: 8px;
+  }
+  .user-layer-item span {
+    flex-grow: 1;
+  }
+  .layer-controls {
+    display: flex;
+  }
+  .layer-zoom-btn, .layer-remove-btn, .layer-style-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+  }
+  .layer-zoom-btn:hover, .layer-remove-btn:hover, .layer-style-btn:hover {
+    color: #4CAF50;
+  }
+  .style-section {
+    margin-bottom: 15px;
+    border: 1px solid #eee;
+    padding: 10px;
+    border-radius: 4px;
+  }
+  .style-section h4 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
+  }
+  .color-picker-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .color-picker-row label {
+    flex: 1;
+    margin-bottom: 0 !important;
+  }
+  .color-picker-row input[type="color"] {
+    width: 40px !important;
+    height: 25px;
+    padding: 0;
+    border: 1px solid #ddd;
+  }
+  .style-tabs {
+    display: flex;
+    border-bottom: 1px solid #ccc;
+    margin-bottom: 10px;
+  }
+  .style-tab {
+    padding: 5px 10px;
+    cursor: pointer;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+    border-bottom: none;
+    border-radius: 4px 4px 0 0;
+    margin-right: 5px;
+  }
+  .style-tab.active {
+    background: white;
+    border-bottom: 1px solid white;
+    margin-bottom: -1px;
+    font-weight: bold;
+  }
+  .tab-content {
+    display: none;
+  }
+  .tab-content.active {
+    display: block;
+  }
+  .show-catchment-btn {
+    margin-top: 8px;
+    padding: 5px 10px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  .show-catchment-btn:hover {
+    background-color: #45a049;
+  }
+  .legend-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    cursor: pointer;
+  }
+  h4.legend-title {
+    font-size: 1.2em; 
+    margin-top: 0;
+    margin-bottom: 0;
+    flex-grow: 1;
+  }
+  #toggle-legend {
+    display: inline-block;
+  }
+  #toggle-legend:after {
+    content: '\25BC';
+    font-size: 1.2em;
+    margin-left: 5px;
+  }
+  #legend.collapsed #toggle-legend:after {
+    content: '\25B6';
+  }
+  
+  /* Styles for User Layer Features */
+  .legend-file-upload-label {
+    display: inline-block;
+    padding: 4px 8px;
+    cursor: pointer;
+    background-color: #f0f0f0;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  
+  .legend-btn {
+    padding: 4px 8px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.9em;
+    display: block;
+    width: 100%;
+  }
+  
+  .legend-btn:disabled {
+    background-color: #ccc;
+    cursor: not-allowed;
+  }
+  
+  #userLayersContainer {
+    max-height: 150px;
+    overflow-y: auto;
+    margin-top: 5px;
+  }
+  
+  .user-layer-item {
+    padding: 3px 0;
+    font-size: 0.9em;
+  }
+  
+  .layer-controls button {
+    padding: 2px;
+    font-size: 0.85em;
+  }
+  
+  #legend {
+    max-height: 80vh;
+    overflow-y: auto;
+  }
+  
+  /* Style Dialog CSS */
+  .modal-dialog {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background-color: white;
+    border-radius: 5px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    max-width: 90%;
+    width: 400px;
+  }
+  
+  .modal-content {
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    border-bottom: 1px solid #eee;
+  }
+  
+  .modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+  }
+  
+  .modal-body {
+    padding: 15px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  
+  .modal-footer {
+    padding: 10px 15px;
+    border-top: 1px solid #eee;
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  
+  .style-option {
+    margin-bottom: 15px;
+  }
+  
+  .style-option label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+  }
+  
+  .style-option select,
+  .style-option input[type="color"] {
+    width: 100%;
+    padding: 5px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+  }
+  
+  .style-sub-option {
+    margin-top: 10px;
+    margin-left: 15px;
+  }
+  
+  .slider {
+    width: 100%;
+  }
+  
+  #apply-style,
+  #cancel-style {
+    padding: 8px 15px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  
+  #apply-style {
+    background-color: #4CAF50;
+    color: white;
+  }
+  
+  #apply-style:hover {
+    background-color: #45a049;
+  }
+  
+  #cancel-style {
+    background-color: #f44336;
+    color: white;
+  }
+  
+  #cancel-style:hover {
+    background-color: #d32f2f;
+  }
+  
+  /* Drawing Tools Styles */
+  .draw-buttons {
+    display: flex;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+
+  .draw-button {
+    flex: 1;
+    padding: 6px;
+    background-color: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .draw-button:hover {
+    background-color: #e8e8e8;
+  }
+
+  .draw-button.active {
+    background-color: #4CAF50;
+    color: white;
+  }
+
+  .leaflet-draw-tooltip {
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #000;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .leaflet-draw-actions {
+    display: none;
+  }
+  #amenities-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+  }
+
+  #amenities-table th, #amenities-table td {
+    border: 1px solid #ccc;
+    padding: 5px;
+    text-align: left;
+  }
+
+  #amenities-table th {
+    background-color: #f2f2f2;
+  }
+
+  #amenities-table .total-row {
+    background-color: #f5f5f5;
+  }
+
+  #amenities-table tr:hover {
+    background-color: #f9f9f9;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+    visibility: hidden;
+    opacity: 0;
+    transition: visibility 0s linear 0.3s, opacity 0.3s linear;
+  }
+
+  .loading-overlay.active {
+    visibility: visible;
+    opacity: 1;
+    transition-delay: 0s;
+  }
+
+  .loading-spinner {
+    width: 60px;
+    height: 60px;
+    border: 8px solid rgba(0, 0, 0, 0.1);
+    border-left-color: #3388ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-text {
+    position: absolute;
+    margin-top: 80px;
+    font-family: Arial, sans-serif;
+    font-size: 14px;
+    color: #333;
+  }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="panel-container">
+    <div id="Amenities" class="panel">
+      <button class="panel-header">Journey Time Catchments - Training Centres</button>
+      <div id="panel-content">
+        <label for="yearAmenitiesDropdown" class="large-font">Year:</label>
+        <select id="yearAmenitiesDropdown" class="medium-font">
+          <option value="Any">Any</option>
+          <option value="2122">2021/22</option>
+          <option value="2223">2022/23</option>
+          <option value="2324">2023/24</option>
+          <option value="2425">2024/25</option>
+        </select>
+        <br>
+        <label class="large-font">Subject</label>
+        <div class="dropdown">
+          <button type="button" class="dropdown-toggle" id="subjectDropdown">\u00A0</button>
+          <div class="dropdown-menu" id="subjectCheckboxesContainer">
+            <label class="checkbox-label"><input type="checkbox" value="All" checked> <span><i>Select/Deselect All</i></span></label>
+            <label class="checkbox-label"><input type="checkbox" value="Construction" checked> <span>Construction</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="Digital" checked> <span>Digital</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="Engineering" checked> <span>Engineering</span></label>
+          </div>
+        </div>
+        <div style="margin-bottom: 20px;"></div>
+        <label class="large-font">Aim Level</label>
+        <div class="dropdown">
+          <button type="button" class="dropdown-toggle" id="aimlevelDropdown">\u00A0</button>
+          <div class="dropdown-menu" id="aimlevelCheckboxesContainer">
+            <label class="checkbox-label"><input type="checkbox" value="All" checked> <span><i>Select/Deselect All</i></span></label>
+            <label class="checkbox-label"><input type="checkbox" value="E" checked> <span>E</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="1" checked> <span>1</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="2" checked> <span>2</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="3" checked> <span>3</span></label>
+            <label class="checkbox-label"><input type="checkbox" value="X" checked> <span>X</span></label>
+          </div>
+        </div>
+        <button type="button" class="collapsible">Settings</button>
+        <div class="collapsible-content">
+          <label for="opacityFieldAmenitiesDropdown" class="medium-font">Link Grid Transparency to:</label>
+          <select id="opacityFieldAmenitiesDropdown" class="small-font">
+            <option value="None">-</option>
+            <option value="pop">Population</option>
+            <option value="IMDScore">Index of Multiple Deprivation - Score</option>
+            <option value="car_availability_ts045">Car Availability</option>
+            <option value="pop_growth">Population Growth</option>
+          </select>
+          <br>
+          <div class="field-container">
+            <div>
+              <div id="opacityRangeAmenitiesSlider"></div>
+              <div class="slider-labels">
+                <span id="opacityRangeAmenitiesMin"></span>
+                <span id="opacityRangeAmenitiesMax"></span>
+              </div>
+            </div>
+          </div>
+          <div class="field-container">
+            <div class="button-container">
+              <button id="inverseOpacityScaleAmenitiesButton" class="small-button">Inverse Scale</button>
+            </div>
+          </div>
+          <br>
+          <label for="outlineFieldAmenitiesDropdown" class="medium-font">Link Grid Outline to:</label>
+          <select id="outlineFieldAmenitiesDropdown" class="small-font">
+            <option value="None">-</option>
+            <option value="IMDScore">Index of Multiple Deprivation - Score</option>
+            <option value="pop">Population</option>
+            <option value="car_availability_ts045">Car Availability</option>
+            <option value="pop_growth">Population Growth</option>
+          </select>
+          <br>
+          <div class="field-container">
+            <div>
+              <div id="outlineRangeAmenitiesSlider"></div>
+              <div class="slider-labels">
+                <span id="outlineRangeAmenitiesMin"></span>
+                <span id="outlineRangeAmenitiesMax"></span>
+              </div>
+            </div>
+          </div>
+          <div class="field-container">
+            <div class="button-container">
+              <button id="inverseOutlineScaleAmenitiesButton" class="small-button">Inverse Scale</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="legend">
+    <div class="legend-header">
+      <h4 class="legend-title">Legend</h4>
+      <span id="toggle-legend"></span>
+    </div>
+    <div id="legend-content-wrapper">
+      <div class="legend-category" id="data-layer-category">
+        <div class="legend-category-header">
+          <span>Data Layer</span>
+        </div>
+        <div class="legend-category-content">
+          <div id="legend-content"></div>
+        </div>
+      </div>
+      <div class="legend-category">
+        <div class="legend-category-header">
+          <span>Geographies</span>
+        </div>
+        <div class="legend-category-content">
+          <div>
+            <input type="checkbox" id="uaBoundariesCheckbox"> <span style="font-size: 1em;">UA Boundaries (2024)</span>
+          </div>
+          <div>
+            <input type="checkbox" id="wardBoundariesCheckbox"> <span style="font-size: 1em;">Ward Boundaries (2024)</span>
+          </div>
+        </div>
+      </div>
+      <div class="legend-category">
+        <div class="legend-category-header">
+          <span>Infrastructure</span>
+        </div>
+        <div class="legend-category-content">
+          <div>
+            <input type="checkbox" id="amenitiesCheckbox"> <span style="font-size: 1em;">Amenities</span>
+          </div>
+          <div>
+            <input type="checkbox" id="busStopsCheckbox"> <span style="font-size: 1em;">Bus Stops</span>
+          </div>
+          <div>
+            <input type="checkbox" id="busLinesCheckbox"> <span style="font-size: 1em;">Bus Lines</span>
+          </div>
+          <div>
+            <input type="checkbox" id="roadNetworkCheckbox"> <span style="font-size: 1em;">Road Network</span>
+          </div>
+        </div>
+      </div>   
+      <div class="legend-category">
+        <div class="legend-category-header">
+          <span>User Layers</span>
+        </div>
+        <div class="legend-category-content">
+          <div id="userLayersContainer" class="user-layers-list"></div>
+          
+          <div style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+            <div class="file-upload-container" style="margin-bottom: 5px;">
+              <label for="fileUpload" class="file-upload-label">
+                <span>Upload file</span>
+                <input type="file" id="fileUpload" accept=".geojson,.kml" />
+              </label>
+              <span id="fileNameDisplay"></span>
+            </div>
+            <button id="uploadButton" class="btn" disabled style="margin-bottom: 8px;">Upload</button>
+          </div>
+          
+          <div class="drawing-tools" style="margin-top: 10px; border-top: 1px solid #eee; padding-top: 10px;">
+            <div style="margin-bottom: 5px; font-weight: bold;">Draw on Map</div>
+            <div class="draw-buttons">
+              <button class="draw-button" id="drawPointBtn" title="Draw Points">
+                <i class="fas fa-map-marker-alt"></i>
+              </button>
+              <button class="draw-button" id="drawLineBtn" title="Draw Lines">
+                <i class="fas fa-route"></i>
+              </button>
+              <button class="draw-button" id="drawPolygonBtn" title="Draw Polygons">
+                <i class="fas fa-draw-polygon"></i>
+              </button>
+              <button class="draw-button" id="editLayerBtn" title="Edit Drawings">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="draw-button" id="deleteLayerBtn" title="Delete Drawing">
+                <i class="fas fa-trash-alt"></i>
+              </button>
+            </div>
+            <div style="margin-top: 5px;">
+              <div id="drawing-instructions" style="font-size: 0.85em; color: #666; margin-bottom: 5px; display: none;">
+                Click on map to place points. Press ESC to cancel.
+              </div>
+              <div id="save-drawing-container" style="display: none; margin-top: 8px;">
+                <input type="text" id="drawingNameInput" placeholder="Enter layer name" style="width: calc(100% - 65px); padding: 4px; margin-right: 5px;">
+                <button id="saveDrawingBtn" class="btn" style="width: 60px; padding: 4px;">Save</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="summary-panel">
+    <button id="toggle-summary-panel" class="panel-header summary-header">Statistics Summary</button>
+    <div id="summary-content" class="panel">
+      <div>
+        <label for="filterTypeDropdown">Area Type:</label>
+        <select id="filterTypeDropdown" class="small-font">
+          <option value="LA">Local Authority</option>
+          <option value="Ward">Ward</option>
+          <option value="Range">Range (see Legend)</option>
+        </select>
+      </div>
+      <div style="display: flex; align-items: center; margin-bottom: 5px;">
+        <div style="margin-right: 10px;">
+          <label for="filterValueDropdown">Area Name:</label>
+        </div>
+        <div style="margin-left: auto; white-space: nowrap; display: flex; align-items: center;">
+          <label for="highlightAreaCheckbox" style="font-size: 1em; font-weight: normal; font-style: italic; margin: 0; margin-right: 5px;">Highlight Area on Map</label>
+          <input type="checkbox" id="highlightAreaCheckbox" style="width: auto; margin: 0; padding: 0; height: auto;">
+        </div>
+      </div>
+      <select id="filterValueDropdown" class="small-font" style="width: 100%; margin-bottom: 10px; margin-top: 2px;"></select>  
+      <div style="margin-bottom: 15px;"></div>
+      <table id="summary-table">
+        <thead>
+          <tr style="background-color: #f2f2f2;">
+            <th id="metric-header">Metric</th>
+            <th>Average</th>
+            <th>Total</th>
+            <th>Minimum</th>
+            <th>Maximum</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Journey Time (mins)</td>
+            <td id="avg-journey-time"></td>
+            <td>-</td>
+            <td id="min-journey-time"></td>
+            <td id="max-journey-time"></td>
+          </tr>
+          <tr>
+            <td>Population</td>
+            <td>-</td>
+            <td id="total-population"></td>
+            <td id="min-population"></td>
+            <td id="max-population"></td>
+          </tr>
+          <tr>
+            <td>IMD Score</td>
+            <td id="avg-imd-score"></td>
+            <td>-</td>
+            <td id="min-imd-score"></td>
+            <td id="max-imd-score"></td>
+          </tr>
+          <tr>
+            <td>IMD Decile</td>
+            <td id="avg-imd-decile"></td>
+            <td>-</td>
+            <td id="min-imd-decile"></td>
+            <td id="max-imd-decile"></td>
+          </tr>
+          <tr>
+            <td>Car Availability</td>
+            <td id="avg-car-availability"></td>
+            <td>-</td>
+            <td id="min-car-availability"></td>
+            <td id="max-car-availability"></td>
+          </tr>
+          <tr>
+            <td>Population Growth</td>
+            <td>-</td>
+            <td id="total-growth-pop"></td>
+            <td id="min-growth-pop"></td>
+            <td id="max-growth-pop"></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div id="attribute-editor-modal" style="display:none;" class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Feature Attributes</h3>
+      </div>
+      <div class="modal-body">
+        <div id="attribute-fields-container">
+          <div class="attribute-field">
+            <div class="field-row">
+              <input type="text" class="attribute-name" value="Name" readonly>
+              <input type="text" class="attribute-value" placeholder="Enter name...">
+            </div>
+          </div>
+          <!-- Additional fields will be added here -->
+        </div>
+        <button id="add-attribute-field" class="btn" style="margin-top: 10px;">Add New Attribute</button>
+      </div>
+      <div class="modal-footer">
+        <button id="save-attributes" class="btn">Save</button>
+        <button id="cancel-attributes" class="btn">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <template id="user-layer-template">
+    <div class="user-layer-item">
+      <input type="checkbox" id="layer-check" checked>
+      <span title="Layer Name">Layer Name</span>
+      <div class="layer-controls">
+        <button class="layer-style-btn" data-id="" title="Style layer">
+          <i class="fas fa-palette"></i>
+        </button>
+        <button class="layer-zoom-btn" data-id="" title="Zoom to layer">
+          <i class="fas fa-search-plus"></i>
+        </button>
+        <button class="layer-remove-btn" data-id="" title="Remove layer">
+          <i class="fas fa-trash"></i>
+        </button>
+      </div>
+    </div>
+  </template>
+  <template id="infrastructure-popup-template">
+    <div class="infrastructure-popup">
+      <div class="popup-header">
+        <strong data-field="feature-type">Bus Stop</strong>
+        <div class="page-indicator"><span data-field="current-index">1</span> of <span data-field="total-features">1</span></div>
+      </div>
+      <div class="combined-frequency-header" data-field="frequency-container" style="display:none">
+        Combined AM Peak Frequency: <span data-field="combined-frequency">0</span> vph
+      </div>
+      <div class="popup-content" data-field="content">
+      </div>
+      <div class="popup-footer" data-field="footer" style="display:none">
+        <button id="prev-feature" data-field="prev-btn">← Previous</button>
+        <button id="next-feature" data-field="next-btn">Next →</button>
+      </div>
+    </div>
+  </template>
+  <template id="style-dialog-template">
+    <div id="style-dialog" class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="style-dialog-title">Style: Layer Name</h3>
+        </div>
+        <div class="modal-body">
+          <div class="style-option">
+            <div class="color-picker-row">
+              <label>Color:</label>
+              <input type="color" id="style-color" value="#000000">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+  <div id="loading-overlay" class="loading-overlay">
+  <div class="loading-spinner"></div>
+  <div id="loading-text" class="loading-text">Loading...</div>
+  </div>
+  <script>
+    const AmenitiesFiles = [
+      { type: 'Training Centres', path: 'https://AmFa6.github.io/TrainingCentres/trainingcentres+.geojson' }
+    ];
+    const InfrastructureFiles = [
+      { type: 'BusLines', path: 'https://AmFa6.github.io/TAF_test/lines.geojson' },
+      { type: 'BusStops', path: 'https://AmFa6.github.io/TAF_test/stops.geojson' }
+    ];
+    const ladCodes = ['E06000022', 'E06000023', 'E06000024', 'E06000025'];
+  </script>
+  <script src="main.js"></script>
+</body>
+</html>
+</body> 
+</html>
