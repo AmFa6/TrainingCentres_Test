@@ -771,89 +771,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
   initialLoadComplete = true;
 });
 
-let statisticsWorker;
-
-document.addEventListener('DOMContentLoaded', () => {
-  const workerBlob = new Blob([`
-    self.onmessage = function(e) {
-      const { features, gridTimeMap } = e.data;
-      
-      // Calculate statistics
-      const stats = calculateStatistics(features, gridTimeMap);
-      
-      // Send results back to main thread
-      self.postMessage(stats);
-    };
-    
-    function calculateStatistics(features, gridTimeMap) {
-      // Base statistics
-      let totalPopulation = 0;
-      let minPopulation = Infinity;
-      let maxPopulation = -Infinity;
-      
-      // Time statistics  
-      let totalWeightedTime = 0;
-      let minTime = Infinity;
-      let maxTime = -Infinity;
-      
-      // Process all features
-      for (let i = 0; i < features.length; i++) {
-        const props = features[i].properties;
-        if (!props) continue;
-        
-        // Population stats
-        const pop = Number(props.pop) || 0;
-        if (isFinite(pop) && pop > 0) {
-          totalPopulation += pop;
-          minPopulation = Math.min(minPopulation, pop);
-          maxPopulation = Math.max(maxPopulation, pop);
-          
-          // Time stats if applicable
-          const OriginId_tracc = props.OriginId_tracc;
-          const time = gridTimeMap[OriginId_tracc];
-          
-          if (time !== undefined) {
-            totalWeightedTime += time * pop;
-            minTime = Math.min(minTime, time);
-            maxTime = Math.max(maxTime, time);
-          }
-        }
-        
-        // Add other statistics calculations...
-      }
-      
-      // Finalize calculations
-      if (minPopulation === Infinity) minPopulation = 0;
-      if (maxPopulation === -Infinity) maxPopulation = 0;
-      
-      if (minTime === Infinity) minTime = 0;
-      if (maxTime === -Infinity) maxTime = 0;
-      
-      const avgTime = totalPopulation > 0 ? totalWeightedTime / totalPopulation : 0;
-      
-      return {
-        // Return all calculated statistics
-        totalPopulation,
-        minPopulation,
-        maxPopulation,
-        avgTime,
-        minTime,
-        maxTime
-        // Add other stats...
-      };
-    }
-  `], { type: 'application/javascript' });
-  
-  statisticsWorker = new Worker(URL.createObjectURL(workerBlob));
-  
-  statisticsWorker.onmessage = function(e) {
-    const stats = e.data;
-    updateStatisticsUI(stats);
-    isCalculatingStats = false;
-    hideLoadingOverlay();
-  };
-});
-
 map.on('zoomend', () => {
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
@@ -866,12 +783,6 @@ map.on('zoomend', () => {
     }
   }
 });
-
-map.on('moveend', debounce(() => {
-  if (AmenitiesCatchmentLayer) {
-    applyAmenitiesCatchmentLayerStyling();
-  }
-}, 300));
 
 map.on('click', function (e) {
   if (isDrawingActive) {
@@ -3332,86 +3243,90 @@ function isClassVisible(value, selectedYear) {
 }
 
 function updateLegend() {
-  if (!updateLegend.elements) {
-    updateLegend.elements = {};
-    
+    console.log('Updating legend...');
     const legendContent = document.getElementById("legend-content");
+    
+    const dataLayerCategory = document.getElementById('data-layer-category');
+    if (!dataLayerCategory) return;
+    
+    dataLayerCategory.style.display = '';
+    
+    const legendCategoryHeader = dataLayerCategory.querySelector('.legend-category-header span');
+    if (legendCategoryHeader) {
+        legendCategoryHeader.textContent = "Journey Time Catchment (minutes)";
+    }
+    
+    const wasCollapsed = dataLayerCategory.classList.contains('legend-category-collapsed');
+    
+    const checkboxStates = {};
+    const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
+    legendCheckboxes.forEach(checkbox => {
+        checkboxStates[checkbox.getAttribute('data-range')] = checkbox.checked;
+    });
+
     legendContent.innerHTML = '';
-    
-    const masterCheckboxDiv = document.createElement("div");
-    const masterCheckbox = document.createElement("input");
-    masterCheckbox.type = "checkbox";
-    masterCheckbox.id = "masterCheckbox";
-    masterCheckbox.checked = true;
-    masterCheckboxDiv.appendChild(masterCheckbox);
-    masterCheckboxDiv.appendChild(document.createTextNode(" "));
-    const emphasis = document.createElement("i");
-    emphasis.textContent = "Select/Deselect All";
-    masterCheckboxDiv.appendChild(emphasis);
-    legendContent.appendChild(masterCheckboxDiv);
-    
-    updateLegend.elements.masterCheckbox = masterCheckbox;
-    updateLegend.elements.checkboxes = [];
-    
+
     const classes = [
-      { range: "0-10", color: "#fde725", label: "0-10 min" },
-      { range: "10-20", color: "#8fd744", label: "10-20 min" },
-      { range: "20-30", color: "#35b779", label: "20-30 min" },
-      { range: "30-40", color: "#21908d", label: "30-40 min" },
-      { range: "40-50", color: "#31688e", label: "40-50 min" },
-      { range: "50-60", color: "#443a82", label: "50-60 min" },
-      { range: ">60", color: "#440154", label: ">60 min" }
+        { range: "0-10", color: "#fde725", label: "0-10 min" },
+        { range: "10-20", color: "#8fd744", label: "10-20 min" },
+        { range: "20-30", color: "#35b779", label: "20-30 min" },
+        { range: "30-40", color: "#21908d", label: "30-40 min" },
+        { range: "40-50", color: "#31688e", label: "40-50 min" },
+        { range: "50-60", color: "#443a82", label: "50-60 min" },
+        { range: ">60", color: "#440154", label: ">60 min" }
     ];
-    
+
+    const masterCheckboxDiv = document.createElement("div");
+    masterCheckboxDiv.innerHTML = `<input type="checkbox" id="masterCheckbox" checked> <i>Select/Deselect All</i>`;
+    legendContent.appendChild(masterCheckboxDiv);
+
     classes.forEach(c => {
-      const div = document.createElement("div");
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "legend-checkbox";
-      checkbox.setAttribute("data-range", c.range);
-      checkbox.checked = true;
-      
-      const colorSpan = document.createElement("span");
-      colorSpan.style.display = "inline-block";
-      colorSpan.style.width = "20px";
-      colorSpan.style.height = "20px";
-      colorSpan.style.backgroundColor = c.color;
-      
-      div.appendChild(checkbox);
-      div.appendChild(document.createTextNode(" "));
-      div.appendChild(colorSpan);
-      div.appendChild(document.createTextNode(" " + c.label));
-      legendContent.appendChild(div);
-      
-      updateLegend.elements.checkboxes.push(checkbox);
-      
-      checkbox.addEventListener('change', () => {
-        updateMasterCheckbox();
+        const div = document.createElement("div");
+        const isChecked = checkboxStates[c.range] !== undefined ? checkboxStates[c.range] : true;
+        div.innerHTML = `<input type="checkbox" class="legend-checkbox" data-range="${c.range}" ${isChecked ? 'checked' : ''}> 
+                         <span style="display: inline-block; width: 20px; height: 20px; background-color: ${c.color};"></span> ${c.label}`;
+        legendContent.appendChild(div);
+    });
+
+    function updateMasterCheckbox() {
+        const newLegendCheckboxes = document.querySelectorAll('.legend-checkbox');
+        const allChecked = Array.from(newLegendCheckboxes).every(checkbox => checkbox.checked);
+        const noneChecked = Array.from(newLegendCheckboxes).every(checkbox => !checkbox.checked);
+        const masterCheckbox = document.getElementById('masterCheckbox');
+        masterCheckbox.checked = allChecked;
+        masterCheckbox.indeterminate = !allChecked && !noneChecked;
+    }
+
+    const newLegendCheckboxes = document.querySelectorAll('.legend-checkbox');
+    newLegendCheckboxes.forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            updateMasterCheckbox();
+            if (AmenitiesCatchmentLayer) {
+                applyAmenitiesCatchmentLayerStyling();
+            }
+        });
+    });
+
+    const masterCheckbox = document.getElementById('masterCheckbox');
+    masterCheckbox.addEventListener('change', () => {
+        const isChecked = masterCheckbox.checked;
+        newLegendCheckboxes.forEach(checkbox => {
+            checkbox.checked = isChecked;
+        });
         if (AmenitiesCatchmentLayer) {
-          applyAmenitiesCatchmentLayerStyling();
+            applyAmenitiesCatchmentLayerStyling();
         }
-      });
     });
     
-    masterCheckbox.addEventListener('change', () => {
-      const isChecked = masterCheckbox.checked;
-      updateLegend.elements.checkboxes.forEach(checkbox => {
-        checkbox.checked = isChecked;
-      });
-      if (AmenitiesCatchmentLayer) {
-        applyAmenitiesCatchmentLayerStyling();
-      }
-    });
-  }
-  
-  function updateMasterCheckbox() {
-    const allChecked = updateLegend.elements.checkboxes.every(checkbox => checkbox.checked);
-    const noneChecked = updateLegend.elements.checkboxes.every(checkbox => !checkbox.checked);
-    updateLegend.elements.masterCheckbox.checked = allChecked;
-    updateLegend.elements.masterCheckbox.indeterminate = !allChecked && !noneChecked;
-  }
-  
-  updateMasterCheckbox();
+    updateMasterCheckbox();
+    
+    if (!wasCollapsed && AmenitiesCatchmentLayer) {
+        dataLayerCategory.classList.remove('legend-category-collapsed');
+    }
+    
+    if (AmenitiesCatchmentLayer) {
+      applyAmenitiesCatchmentLayerStyling();
+    }
 }
 
 function findNearbyInfrastructure(latlng, maxPixelDistance = 10, targetLayer = null) {
@@ -4137,6 +4052,85 @@ function updateAmenitiesCatchmentLayer() {
         });
 }
 
+function applyAmenitiesCatchmentLayerStyling() {
+    console.log("applyAmenitiesCatchmentLayerStyling called");
+    
+    if (!AmenitiesCatchmentLayer) {
+        console.log("No AmenitiesCatchmentLayer, returning early");
+        return;
+    }
+    
+    console.log("Processing layer styling");
+    
+    const featureCount = AmenitiesCatchmentLayer.getLayers().length;
+    console.log(`Styling ${featureCount} features`);
+    
+    try {
+        AmenitiesCatchmentLayer.eachLayer(layer => {
+            const OriginId_tracc = layer.feature.properties.OriginId_tracc;
+            const time = gridTimeMap[OriginId_tracc];
+            
+            if (layer.feature.properties._opacity === undefined) {
+                layer.feature.properties._opacity = 0.5;
+            }
+            
+            if (layer.feature.properties._weight === undefined) {
+                layer.feature.properties._weight = 0;
+            }
+            
+            let fillColor = 'transparent';
+            if (time !== undefined) {
+                if (time <= 10) fillColor = '#fde725';
+                else if (time <= 20) fillColor = '#8fd744';
+                else if (time <= 30) fillColor = '#35b779';
+                else if (time <= 40) fillColor = '#21908d';
+                else if (time <= 50) fillColor = '#31688e';
+                else if (time <= 60) fillColor = '#443a82';
+                else fillColor = '#440154';
+            }
+            
+            layer.feature.properties._fillColor = fillColor;
+            layer.feature.properties._range = time <= 10 ? "0-10" :
+                                time <= 20 ? "10-20" :
+                                time <= 30 ? "20-30" :
+                                time <= 40 ? "30-40" :
+                                time <= 50 ? "40-50" :
+                                time <= 60 ? "50-60" : ">60";
+        });
+        
+        const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
+        const visibleRanges = Array.from(legendCheckboxes)
+            .filter(checkbox => checkbox.checked)
+            .map(checkbox => checkbox.getAttribute('data-range'));
+        
+        const hasLegendCheckboxes = legendCheckboxes.length > 0;
+        const hasAnyVisibleRanges = visibleRanges.length > 0;
+        
+        console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
+        
+        AmenitiesCatchmentLayer.setStyle(function(feature) {
+            const range = feature.properties._range;
+            
+            const isVisible = !hasLegendCheckboxes || 
+                            (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
+                            (!hasAnyVisibleRanges);
+            
+            return {
+                fillColor: feature.properties._fillColor,
+                color: 'black',
+                weight: isVisible ? feature.properties._weight : 0,
+                fillOpacity: isVisible ? feature.properties._opacity : 0,
+                opacity: isVisible ? 1 : 0
+            };
+        });
+        
+        console.log("Layer styling completed successfully");
+    } catch (error) {
+        console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
+        console.error("Error stack:", error.stack);
+    }
+}
+
 function updateOpacityAndOutlineFields() {
     console.log("updateOpacityAndOutlineFields called");
     
@@ -4161,177 +4155,71 @@ function updateOpacityAndOutlineFields() {
     const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
     console.log(`Opacity range: [${opacityRange}], Outline range: [${outlineRange}]`);
     
-    const bounds = map.getBounds().pad(0.5);
-    const visibleLayers = [];
-    
-    AmenitiesCatchmentLayer.eachLayer(layer => {
-        if (layer.getBounds && !bounds.intersects(layer.getBounds())) {
-            return;
-        }
-        
-        visibleLayers.push(layer);
-        
-        let opacity = 0.5;
-        let weight = 0;
-        const props = layer.feature.properties;
-        
-        if (opacityField !== "None") {
-            const value = parseFloat(props[opacityField]);
-            if (!isNaN(value)) {
-                const min = opacityRange[0];
-                const max = opacityRange[1];
-                
-                if (value >= min && value <= max) {
-                    const normalized = (value - min) / (max - min);
-                    opacity = isInverseAmenitiesOpacity ? 
-                        0.8 - (normalized * 0.7) :
-                        0.1 + (normalized * 0.7);
-                }
-            }
-        }
-        
-        if (outlineField !== "None") {
-            const value = parseFloat(props[outlineField]);
-            if (!isNaN(value)) {
-                const min = outlineRange[0];
-                const max = outlineRange[1];
-                
-                if (value >= min && value <= max) {
-                    const normalized = (value - min) / (max - min);
-                    weight = isInverseAmenitiesOutline ? 
-                        3 - (normalized * 2.5) :
-                        0.5 + (normalized * 2.5);
-                }
-            }
-        }
-        
-        props._opacity = opacity;
-        props._weight = weight;
-    });
-    
-    console.log(`Calculated styles for ${visibleLayers.length} visible features`);
-    
-    const BATCH_SIZE = 100;
+    const features = AmenitiesCatchmentLayer.getLayers();
+    const batchSize = 100;
     let currentIndex = 0;
     
-    function applyBatch() {
-        const endIndex = Math.min(currentIndex + BATCH_SIZE, visibleLayers.length);
+    console.log(`Processing ${features.length} features in batches of ${batchSize}`);
+    
+    function processBatch() {
+        console.log(`Processing batch starting at index ${currentIndex}`);
+        const endIndex = Math.min(currentIndex + batchSize, features.length);
         
         for (let i = currentIndex; i < endIndex; i++) {
-            const layer = visibleLayers[i];
+            const layer = features[i];
+            layer.feature.properties._opacity = 0.5;
+            layer.feature.properties._weight = 0;
             
-            const currentStyle = layer.options || {};
-            layer.setStyle({
-                weight: layer.feature.properties._weight,
-                fillOpacity: layer.feature.properties._opacity
-            });
+            if (opacityField !== "None") {
+                const value = parseFloat(layer.feature.properties[opacityField]);
+                if (!isNaN(value)) {
+                    const min = opacityRange[0];
+                    const max = opacityRange[1];
+                    let opacity = 0.5;
+                    
+                    if (value >= min && value <= max) {
+                        const normalized = (value - min) / (max - min);
+                        opacity = isInverseAmenitiesOpacity ? 
+                            0.8 - (normalized * 0.7) :
+                            0.1 + (normalized * 0.7);
+                    }
+                    
+                    layer.feature.properties._opacity = opacity;
+                }
+            }
+            
+            if (outlineField !== "None") {
+                const value = parseFloat(layer.feature.properties[outlineField]);
+                if (!isNaN(value)) {
+                    const min = outlineRange[0];
+                    const max = outlineRange[1];
+                    let weight = 0;
+                    
+                    if (value >= min && value <= max) {
+                        const normalized = (value - min) / (max - min);
+                        weight = isInverseAmenitiesOutline ? 
+                            3 - (normalized * 2.5) :
+                            0.5 + (normalized * 2.5);
+                    }
+                    
+                    layer.feature.properties._weight = weight;
+                }
+            }
         }
         
         currentIndex = endIndex;
         
-        if (currentIndex < visibleLayers.length) {
-            requestAnimationFrame(applyBatch);
+        if (currentIndex < features.length) {
+            setTimeout(processBatch, 0);
         } else {
+            console.log("Finished processing all features, applying styles");
+            applyAmenitiesCatchmentLayerStyling();
             console.log("Setting isUpdatingStyles back to false");
             isUpdatingStyles = false;
         }
     }
     
-    requestAnimationFrame(applyBatch);
-}
-
-function applyAmenitiesCatchmentLayerStyling() {
-    console.log("applyAmenitiesCatchmentLayerStyling called");
-    
-    if (!AmenitiesCatchmentLayer || isUpdatingStyles) {
-        console.log("No AmenitiesCatchmentLayer or already updating, returning early");
-        return;
-    }
-    
-    const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
-    const visibleRanges = Array.from(legendCheckboxes)
-        .filter(checkbox => checkbox.checked)
-        .map(checkbox => checkbox.getAttribute('data-range'));
-    
-    const hasLegendCheckboxes = legendCheckboxes.length > 0;
-    const hasAnyVisibleRanges = visibleRanges.length > 0;
-    
-    const bounds = map.getBounds().pad(0.5);
-    const visibleLayers = [];
-    
-    AmenitiesCatchmentLayer.eachLayer(layer => {
-        if (layer.getBounds && bounds.intersects(layer.getBounds())) {
-            visibleLayers.push(layer);
-            
-            const time = gridTimeMap[layer.feature.properties.OriginId_tracc] || 0;
-            let fillColor;
-            let range;
-            
-            if (time <= 10) {
-                fillColor = "#fde725";
-                range = "0-10";
-            } else if (time <= 20) {
-                fillColor = "#8fd744";
-                range = "10-20";
-            } else if (time <= 30) {
-                fillColor = "#35b779";
-                range = "20-30";
-            } else if (time <= 40) {
-                fillColor = "#21908d";
-                range = "30-40";
-            } else if (time <= 50) {
-                fillColor = "#31688e";
-                range = "40-50";
-            } else if (time <= 60) {
-                fillColor = "#443a82";
-                range = "50-60";
-            } else {
-                fillColor = "#440154";
-                range = ">60";
-            }
-            
-            layer.feature.properties._fillColor = fillColor;
-            layer.feature.properties._range = range;
-        }
-    });
-    
-    console.log(`Applying styles to ${visibleLayers.length} visible features`);
-    
-    const BATCH_SIZE = 150;
-    let currentIndex = 0;
-    
-    isUpdatingStyles = true;
-    
-    function applyBatch() {
-        const endIndex = Math.min(currentIndex + BATCH_SIZE, visibleLayers.length);
-        
-        for (let i = currentIndex; i < endIndex; i++) {
-            const layer = visibleLayers[i];
-            const range = layer.feature.properties._range;
-            
-            const isVisible = !hasLegendCheckboxes || 
-                (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
-                (!hasAnyVisibleRanges);
-            
-            layer.setStyle({
-                fillColor: layer.feature.properties._fillColor,
-                color: 'black',
-                weight: isVisible ? layer.feature.properties._weight || 0 : 0,
-                fillOpacity: isVisible ? layer.feature.properties._opacity || 0.5 : 0,
-                opacity: isVisible ? 1 : 0
-            });
-        }
-        
-        currentIndex = endIndex;
-        
-        if (currentIndex < visibleLayers.length) {
-            requestAnimationFrame(applyBatch);
-        } else {
-            isUpdatingStyles = false;
-        }
-    }
-    
-    requestAnimationFrame(applyBatch);
+    processBatch();
 }
 
 function updateFilterDropdown() {
@@ -4625,7 +4513,7 @@ function updateFilterValues(source = 'filter') {
   }
 }
 
-function updateSummaryStatistics(features, source = 'filter') {
+async function updateSummaryStatistics(features, source = 'filter') {
   if (isCalculatingStats) return;
   isCalculatingStats = true;
   
@@ -4634,48 +4522,42 @@ function updateSummaryStatistics(features, source = 'filter') {
   try {
     if (!grid && (!features || features.length === 0)) {
       displayEmptyStatistics();
-      isCalculatingStats = false;
       return;
+    }
+    
+    const filterValueContainer = document.getElementById('filterValueContainer');
+    if (filterValueContainer) {
+      const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
+        .map(checkbox => checkbox.value);
+      
+      if (selectedValues.length === 0) {
+        displayEmptyStatistics();
+        return;
+      }
     }
     
     const filteredFeatures = applyFilters(features);
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
       displayEmptyStatistics();
-      isCalculatingStats = false;
       return;
     }
 
-    if (statisticsWorker) {
-      const simplifiedFeatures = filteredFeatures.map(f => ({
-        properties: {
-          OriginId_tracc: f.properties.OriginId_tracc,
-          pop: f.properties.pop,
-          IMDScore: f.properties.IMDScore,
-          IMD_Decile: f.properties.IMD_Decile,
-          car_availability_ts045: f.properties.car_availability_ts045,
-          pop_growth: f.properties.pop_growth
-        }
-      }));
-      
-      statisticsWorker.postMessage({
-        features: simplifiedFeatures,
-        gridTimeMap: gridTimeMap
-      });
+    const baseStats = await calculateBaseStatistics(filteredFeatures);
+    
+    if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+      const timeStats = calculateTimeStatistics(filteredFeatures);
+      const stats = {...baseStats, ...timeStats};
+      updateStatisticsUI(stats);
     } else {
-      const baseStats = calculateBaseStatistics(filteredFeatures);
-      if (AmenitiesCatchmentLayer && gridTimeMap) {
-        const timeStats = calculateTimeStatistics(filteredFeatures);
-        updateStatisticsUI({...baseStats, ...timeStats});
-      } else {
-        updateStatisticsUI(baseStats);
-      }
-      isCalculatingStats = false;
+      updateStatisticsUI(baseStats);
     }
   } catch (error) {
     console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
+  } finally {
     isCalculatingStats = false;
+    hideLoadingOverlay();
   }
 }
 
@@ -5075,16 +4957,7 @@ function calculateBaseStatistics(features) {
   });
 }
 
-const timeStatsMemo = new Map();
-
 function calculateTimeStatistics(features) {
-  const cacheKey = features.map(f => f.properties.OriginId_tracc).sort().join(',');
-  
-  if (timeStatsMemo.has(cacheKey)) {
-    console.log('Using cached time statistics');
-    return timeStatsMemo.get(cacheKey);
-  }
-  
   console.log('calculateTimeStatistics: Starting calculation with', features.length, 'features');
   
   let totalWeightedTime = 0;
@@ -5092,27 +4965,37 @@ function calculateTimeStatistics(features) {
   let minTime = Infinity;
   let maxTime = -Infinity;
   
-  const BATCH_SIZE = 1000;
+  let validFeatureCount = 0;
+  let missingTimeCount = 0;
+  let zeroPopCount = 0;
   
-  for (let i = 0; i < features.length; i += BATCH_SIZE) {
-    const batchEnd = Math.min(i + BATCH_SIZE, features.length);
-    
-    for (let j = i; j < batchEnd; j++) {
-      const props = features[j].properties;
-      if (!props) continue;
-      
-      const OriginId_tracc = props.OriginId_tracc;
-      const time = gridTimeMap[OriginId_tracc];
-      const pop = Number(props.pop) || 0;
-      
-      if (time === undefined || pop <= 0) continue;
-      
-      totalWeightedTime += time * pop;
-      totalPopulation += pop;
-      
-      minTime = Math.min(minTime, time);
-      maxTime = Math.max(maxTime, time);
+  for (let i = 0; i < features.length; i++) {
+    const props = features[i].properties;
+    if (!props) {
+      continue;
     }
+    
+    const OriginId_tracc = props.OriginId_tracc;
+    const time = gridTimeMap[OriginId_tracc];
+    const pop = Number(props.pop) || 0;
+    
+    if (time === undefined) {
+      missingTimeCount++;
+      continue;
+    }
+    
+    if (pop <= 0) {
+      zeroPopCount++;
+      continue;
+    }
+    
+    validFeatureCount++;
+    
+    totalWeightedTime += time * pop;
+    totalPopulation += pop;
+    
+    minTime = Math.min(minTime, time);
+    maxTime = Math.max(maxTime, time);
   }
   
   if (minTime === Infinity) minTime = 0;
@@ -5120,15 +5003,11 @@ function calculateTimeStatistics(features) {
   
   const avgTime = totalPopulation > 0 ? totalWeightedTime / totalPopulation : 0;
   
-  const result = {
+  return {
     avgTime: avgTime,
     minTime: minTime,
     maxTime: maxTime,
-  };
-  
-  timeStatsMemo.set(cacheKey, result);
-  
-  return result;
+  }
 }
 
 function updateStatisticsUI(stats) {
@@ -5153,105 +5032,19 @@ function updateStatisticsUI(stats) {
   document.getElementById('max-journey-time').textContent = formatValue(stats.maxTime, 1);
 }
 
-function buildGridIndex(grid) {
-  const gridIndex = {
-    byOriginId: new Map(),
-    byTime: new Map(),
-    byPopulation: {
-      ranges: [],
-      features: new Map()
-    },
-    byIMD: {
-      ranges: [],
-      features: new Map()
-    }
-  };
-  
-  const popValues = grid.features.map(f => Number(f.properties.pop) || 0).filter(v => v > 0);
-  const imdValues = grid.features.map(f => Number(f.properties.IMDScore) || 0).filter(v => v > 0);
-  
-  const popMin = Math.min(...popValues);
-  const popMax = Math.max(...popValues);
-  const popStep = (popMax - popMin) / 10;
-  
-  const imdMin = Math.min(...imdValues);
-  const imdMax = Math.max(...imdValues);
-  const imdStep = (imdMax - imdMin) / 10;
-  
-  for (let i = 0; i < 10; i++) {
-    const popRangeMin = popMin + i * popStep;
-    const popRangeMax = popMin + (i + 1) * popStep;
-    gridIndex.byPopulation.ranges.push([popRangeMin, popRangeMax]);
-    gridIndex.byPopulation.features.set(i, []);
-    
-    const imdRangeMin = imdMin + i * imdStep;
-    const imdRangeMax = imdMin + (i + 1) * imdStep;
-    gridIndex.byIMD.ranges.push([imdRangeMin, imdRangeMax]);
-    gridIndex.byIMD.features.set(i, []);
-  }
-  
-  grid.features.forEach(feature => {
-    gridIndex.byOriginId.set(feature.properties.OriginId_tracc, feature);
-    
-    const time = gridTimeMap[feature.properties.OriginId_tracc];
-    if (time !== undefined) {
-      if (!gridIndex.byTime.has(time)) {
-        gridIndex.byTime.set(time, []);
-      }
-      gridIndex.byTime.get(time).push(feature);
-    }
-    
-    const pop = Number(feature.properties.pop) || 0;
-    if (pop > 0) {
-      const popBinIndex = gridIndex.byPopulation.ranges.findIndex(([min, max]) => 
-        pop >= min && pop < max
-      );
-      if (popBinIndex >= 0) {
-        gridIndex.byPopulation.features.get(popBinIndex).push(feature);
-      }
-    }
-    
-    const imd = Number(feature.properties.IMDScore) || 0;
-    if (imd > 0) {
-      const imdBinIndex = gridIndex.byIMD.ranges.findIndex(([min, max]) => 
-        imd >= min && imd < max
-      );
-      if (imdBinIndex >= 0) {
-        gridIndex.byIMD.features.get(imdBinIndex).push(feature);
-      }
-    }
-  });
-  return gridIndex;
-}
-
-let gridIndex;
-gridIndex = buildGridIndex(grid);
-
 function filterByJourneyTime(features, filterValue) {
-  if (!gridIndex) return features;
-  
+  console.log('filterByJourneyTime');
   if (filterValue === '>60') {
     return features.filter(feature => {
-      const time = gridTimeMap[feature.properties.OriginId_tracc];
-      return time > 60;
+      const OriginId_tracc = feature.properties.OriginId_tracc;
+      const time = gridTimeMap[OriginId_tracc];
+      return time > 30;
     });
   } else {
     const [minRange, maxRange] = filterValue.split('-').map(parseFloat);
-    
-    const exactTimeMatches = [];
-    for (let time = minRange; time <= maxRange; time++) {
-      if (gridIndex.byTime.has(time)) {
-        exactTimeMatches.push(...gridIndex.byTime.get(time));
-      }
-    }
-    
-    if (exactTimeMatches.length > 0) {
-      const featureIds = new Set(features.map(f => f.properties.OriginId_tracc));
-      return exactTimeMatches.filter(f => featureIds.has(f.properties.OriginId_tracc));
-    }
-    
     return features.filter(feature => {
-      const time = gridTimeMap[feature.properties.OriginId_tracc];
+      const OriginId_tracc = feature.properties.OriginId_tracc;
+      const time = gridTimeMap[OriginId_tracc];
       return time >= minRange && (maxRange ? time <= maxRange : true);
     });
   }
@@ -5268,32 +5061,22 @@ function getCurrentFeatures() {
   const filterType = filterTypeDropdown.value;
   
   let sourceFeatures = [];
-  
   if (AmenitiesCatchmentLayer) {
-    if (filterType === 'Range') {
-      const selectedRanges = Array.from(
-        document.querySelectorAll('#filterValueContainer .filter-value-checkbox:checked')
-      ).map(cb => cb.value);
-      
-      if (selectedRanges.length > 0) {
-        sourceFeatures = [];
-        AmenitiesCatchmentLayer.eachLayer(layer => {
-          const range = layer.feature.properties._range;
-          if (selectedRanges.includes(range)) {
-            sourceFeatures.push(layer.feature);
-          }
-        });
-      } else {
-        sourceFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
-      }
-    } else {
-      sourceFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
-    }
+    sourceFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
   } else if (grid) {
     sourceFeatures = grid.features;
   }
   
-  return applyFilters(sourceFeatures);
+  if (filterType.startsWith('UserLayer_')) {
+    const layerId = filterType.split('UserLayer_')[1];
+    const userLayer = userLayers.find(l => l.id === layerId);
+    
+    if (userLayer) {
+      return applyFilters(sourceFeatures);
+    }
+  } 
+  
+  return sourceFeatures;
 }
 
 function highlightSelectedArea() {
