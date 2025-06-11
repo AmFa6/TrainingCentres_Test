@@ -2941,7 +2941,7 @@ function updateSliderRanges(type, scaleType) {
             if (scaleType === 'Opacity') {
                 console.log("ScaleType is Opacity");
                 field = AmenitiesOpacity.value;
-                console.onsole.log("Field value:", field);
+                console.log("Field value:", field);
                 rangeElement = AmenitiesOpacityRange;
                 minElement = document.getElementById('opacityRangeAmenitiesMin');
                 maxElement = document.getElementById('opacityRangeAmenitiesMax');
@@ -2949,9 +2949,9 @@ function updateSliderRanges(type, scaleType) {
                 order = opacityAmenitiesOrder;
                 isInverse = isInverseAmenitiesOpacity;
             } else if (scaleType === 'Outline') {
-                console.onsole.log("ScaleType is Outline");
+                console.log("ScaleType is Outline");
                 field = AmenitiesOutline.value;
-                console.onsole.log("Field value:", field);
+                console.log("Field value:", field);
                 rangeElement = AmenitiesOutlineRange;
                 minElement = document.getElementById('outlineRangeAmenitiesMin');
                 maxElement = document.getElementById('outlineRangeAmenitiesMax');
@@ -2961,40 +2961,40 @@ function updateSliderRanges(type, scaleType) {
             }
         }
 
-        console.onsole.log("Checking if rangeElement and noUiSlider exist");
+        console.log("Checking if rangeElement and noUiSlider exist");
         if (!rangeElement || !rangeElement.noUiSlider) {
-            console.onsole.log("rangeElement or noUiSlider missing, setting isUpdatingSliders to false and returning");
+            console.log("rangeElement or noUiSlider missing, setting isUpdatingSliders to false and returning");
             isUpdatingSliders = false;
             return;
         }
 
-        console.onsole.log("Working with grid data");
+        console.log("Working with grid data");
         if (gridData) {
-            console.onsole.log("Grid data exists");
+            console.log("Grid data exists");
             let values = [];
             if (field !== "None") {
-                console.onsole.log("Collecting values for field:", field);
+                console.log("Collecting values for field:", field);
                 for (let i = 0; i < gridData.features.length; i++) {
                     const val = gridData.features[i].properties[field];
                     if (val !== null && val !== undefined && val !== 0) {
                         values.push(Number(val));
                     }
                 }
-                console.onsole.log(`Collected ${values.length} values`);
+                console.log(`Collected ${values.length} values`);
             }
             
-            console.onsole.log("Filtering values");
+            console.log("Filtering values");
             values = values.filter(v => !isNaN(v) && isFinite(v));
-            console.onsole.log(`After filtering: ${values.length} valid values`);
+            console.log(`After filtering: ${values.length} valid values`);
             
             const minValue = values.length > 0 ? Math.min(...values) : 0;
             const maxValue = values.length > 0 ? Math.max(...values) : 100;
-            console.onsole.log(`Min value: ${minValue}, Max value: ${maxValue}`);
+            console.log(`Min value: ${minValue}, Max value: ${maxValue}`);
 
             if (values.length === 0 || minValue === maxValue) {
-                console.onsole.log("No valid values or min equals max");
+                console.log("No valid values or min equals max");
                 rangeElement.setAttribute('disabled', true);
-                console.onsole.log("Updating slider with default range 0-100");
+                console.log("Updating slider with default range 0-100");
                 rangeElement.noUiSlider.updateOptions({
                     range: {
                         'min': 0,
@@ -3002,18 +3002,18 @@ function updateSliderRanges(type, scaleType) {
                     },
                     step: 1
                 }, false);
-                console.onsole.log("Setting slider values to [0, 100]");
+                console.log("Setting slider values to [0, 100]");
                 rangeElement.noUiSlider.set([0, 100], false);
                 minElement.innerText = '0';
                 maxElement.innerText = '100';
-                console.onsole.log("Slider update complete, setting isUpdatingSliders to false");
+                console.log("Slider update complete, setting isUpdatingSliders to false");
                 isUpdatingSliders = false;
                 return;
             }
         
             let step;
             const range = maxValue - minValue;
-            console.onsole.log(`Range: ${range}`);
+            console.log(`Range: ${range}`);
             
             if (range > 10000) {
                 step = 1000;
@@ -3028,14 +3028,14 @@ function updateSliderRanges(type, scaleType) {
             } else {
                 step = 0.01;
             }
-            console.onsole.log(`Selected step size: ${step}`);
+            console.log(`Selected step size: ${step}`);
 
             const adjustedMaxValue = Math.ceil(maxValue / step) * step;
             const adjustedMinValue = Math.floor(minValue / step) * step;
-            console.onsole.log(`Adjusted min: ${adjustedMinValue}, Adjusted max: ${adjustedMaxValue}`);
+            console.log(`Adjusted min: ${adjustedMinValue}, Adjusted max: ${adjustedMaxValue}`);
         
             if (field === "None") {
-                console.onsole.log("Field is None, disabling slider");
+                console.log("Field is None, disabling slider");
                 rangeElement.setAttribute('disabled', true);
                 rangeElement.noUiSlider.updateOptions({
                     range: {
@@ -3048,9 +3048,9 @@ function updateSliderRanges(type, scaleType) {
                 minElement.innerText = '';
                 maxElement.innerText = '';
             } else {
-                console.onsole.log("Enabling slider with adjusted range");
+                console.log("Enabling slider with adjusted range");
                 rangeElement.removeAttribute('disabled');
-                console.onsole.log(`Updating slider options with min: ${adjustedMinValue}, max: ${adjustedMaxValue}, step: ${step}`);
+                console.log(`Updating slider options with min: ${adjustedMinValue}, max: ${adjustedMaxValue}, step: ${step}`);
                 rangeElement.noUiSlider.updateOptions({
                     range: {
                         'min': adjustedMinValue,
@@ -3058,29 +3058,29 @@ function updateSliderRanges(type, scaleType) {
                     },
                     step: step
                 }, false);
-                console.onsole.log(`Setting slider values to [${adjustedMinValue}, ${adjustedMaxValue}]`);
+                console.log(`Setting slider values to [${adjustedMinValue}, ${adjustedMaxValue}]`);
                 rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
                 minElement.innerText = formatValue(adjustedMinValue, step);
                 maxElement.innerText = formatValue(adjustedMaxValue, step);
             }
 
-            console.onsole.log(`About to call configureSlider with isInverse: ${isInverse}`);
+            console.log(`About to call configureSlider with isInverse: ${isInverse}`);
             configureSlider(rangeElement, isInverse);
-            console.onsole.log("configureSlider call complete");
+            console.log("configureSlider call complete");
         }
-        console.onsole.log("End of try block in updateSliderRanges");
+        console.log("End of try block in updateSliderRanges");
     } catch (error) {
         console.error("Error in updateSliderRanges:", error);
         console.error("Error stack:", error.stack);
     } finally {
-        console.onsole.log("In finally block, setting isUpdatingSliders to false");
+        console.log("In finally block, setting isUpdatingSliders to false");
         isUpdatingSliders = false;
     }
-    console.onsole.log("Exiting updateSliderRanges function");
+    console.log("Exiting updateSliderRanges function");
 }
 
 function initializeSliders(sliderElement) {
-  console.onsole.log('Initializing slider:', sliderElement.id);
+  console.log('Initializing slider:', sliderElement.id);
   if (sliderElement.noUiSlider) {
     sliderElement.noUiSlider.destroy();
   }
@@ -3115,54 +3115,54 @@ function initializeSliders(sliderElement) {
 }
 
 function toggleInverseScale(type, scaleType) {
-    console.onsole.log(`toggleInverseScale called with type: ${type}, scaleType: ${scaleType}`);
-    console.onsole.log(`Current isUpdatingSliders value: ${isUpdatingSliders}`);
+    console.log(`toggleInverseScale called with type: ${type}, scaleType: ${scaleType}`);
+    console.log(`Current isUpdatingSliders value: ${isUpdatingSliders}`);
     
     isUpdatingSliders = true;
-    console.onsole.log("Set isUpdatingSliders to true");
+    console.log("Set isUpdatingSliders to true");
 
     let isInverse, rangeElement, order;
 
     if (type === 'Amenities') {
-        console.onsole.log("Type is Amenities");
+        console.log("Type is Amenities");
         if (scaleType === 'Opacity') {
-            console.onsole.log("ScaleType is Opacity");
+            console.log("ScaleType is Opacity");
             isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
             isInverse = isInverseAmenitiesOpacity;
-            console.onsole.log(`Toggled isInverseAmenitiesOpacity to: ${isInverse}`);
+            console.log(`Toggled isInverseAmenitiesOpacity to: ${isInverse}`);
             
             rangeElement = AmenitiesOpacityRange;
             opacityAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
-            console.onsole.log(`Set opacityAmenitiesOrder to: ${opacityAmenitiesOrder}`);
+            console.log(`Set opacityAmenitiesOrder to: ${opacityAmenitiesOrder}`);
         } else if (scaleType === 'Outline') {
-            console.onsole.log("ScaleType is Outline");
+            console.log("ScaleType is Outline");
             isInverseAmenitiesOutline = !isInverseAmenitiesOutline;
             isInverse = isInverseAmenitiesOutline;
-            console.onsole.log(`Toggled isInverseAmenitiesOutline to: ${isInverse}`);
+            console.log(`Toggled isInverseAmenitiesOutline to: ${isInverse}`);
             
             rangeElement = AmenitiesOutlineRange;
             outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
-            console.onsole.log(`Set outlineAmenitiesOrder to: ${outlineAmenitiesOrder}`);
+            console.log(`Set outlineAmenitiesOrder to: ${outlineAmenitiesOrder}`);
         }
     }
 
     const currentValues = rangeElement.noUiSlider.get();
-    console.onsole.log(`Current slider values: [${currentValues}]`);
+    console.log(`Current slider values: [${currentValues}]`);
     
-    console.onsole.log(`Calling configureSlider with isInverse: ${isInverse}`);
+    console.log(`Calling configureSlider with isInverse: ${isInverse}`);
     configureSlider(rangeElement, isInverse);
     
-    console.onsole.log(`Setting slider values to: [${currentValues}]`);
+    console.log(`Setting slider values to: [${currentValues}]`);
     rangeElement.noUiSlider.set(currentValues, false);
 
-    console.onsole.log(`About to call updateSliderRanges with type: ${type}, scaleType: ${scaleType}`);
+    console.log(`About to call updateSliderRanges with type: ${type}, scaleType: ${scaleType}`);
     setTimeout(() => {
-        console.onsole.log("In setTimeout, setting isUpdatingSliders to false before calling updateSliderRanges");
+        console.log("In setTimeout, setting isUpdatingSliders to false before calling updateSliderRanges");
         isUpdatingSliders = false;
         updateSliderRanges(type, scaleType);
     }, 10);
 
-    console.onsole.log("Setting isUpdatingSliders to false");
+    console.log("Setting isUpdatingSliders to false");
     isUpdatingSliders = false;
 }
 
