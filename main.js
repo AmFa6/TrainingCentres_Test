@@ -68,7 +68,7 @@ Promise.all([
     hideLoadingOverlay();
   })
   .catch(error => {
-    //console.error("Error loading data:", error);
+    console.error("Error loading data:", error);
     hideLoadingOverlay();
     
     const loadingText = document.getElementById('loading-text');
@@ -174,7 +174,7 @@ fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_
     });
   })
   .catch(error => {
-    //console.error("Error loading boundary data:", error);
+    console.error("Error loading boundary data:", error);
   });
 
 fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
@@ -357,14 +357,13 @@ initializeSliders(AmenitiesOpacityRange);
 initializeSliders(AmenitiesOutlineRange);
 
 function debounce(func, wait) {
-    let timeout;
-    return function(...args) {
-        const context = this;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => {
-            func.apply(context, args);
-        }, wait);
-    };
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func.apply(this, args);
+    }, wait);
+  };
 }
 
 AmenitiesYear.addEventListener("change", debounce(() => {
@@ -1379,7 +1378,7 @@ function addUserLayer(data, fileName) {
             map.fitBounds(userLayer.layer.getBounds());
           }
         } catch (e) {
-          //console.error("Error zooming to layer bounds:", e);
+          console.error("Error zooming to layer bounds:", e);
         }
       });
       
@@ -1393,7 +1392,7 @@ function addUserLayer(data, fileName) {
       try {
         map.fitBounds(layer.getBounds());
       } catch (e) {
-        //console.error("Error zooming to layer bounds:", e);
+        console.error("Error zooming to layer bounds:", e);
       }
       
       updateFilterDropdown();
@@ -1402,7 +1401,7 @@ function addUserLayer(data, fileName) {
     return layer;
   } catch (error) {
     alert('Error adding layer: ' + error.message);
-    //console.error("Error details:", error);
+    console.error("Error details:", error);
     return null;
   }
 }
@@ -2824,234 +2823,347 @@ function isPanelOpen(panelName) {
   return false;
 }
 
-function updateSliderRanges(type, scaleType) {
-    console.log(`updateSliderRanges called with type: ${type}, scaleType: ${scaleType}`);
-    
-    let field, rangeElement, minElement, maxElement, gridData, isInverse;
-    
-    if (type === 'Amenities') {
-        gridData = grid;
-        if (scaleType === 'Opacity') {
-            field = AmenitiesOpacity.value;
-            rangeElement = AmenitiesOpacityRange;
-            minElement = document.getElementById('opacityRangeAmenitiesMin');
-            maxElement = document.getElementById('opacityRangeAmenitiesMax');
-            isInverse = isInverseAmenitiesOpacity;
-        } else if (scaleType === 'Outline') {
-            field = AmenitiesOutline.value;
-            rangeElement = AmenitiesOutlineRange;
-            minElement = document.getElementById('outlineRangeAmenitiesMin');
-            maxElement = document.getElementById('outlineRangeAmenitiesMax');
-            isInverse = isInverseAmenitiesOutline;
-        }
-    }
-    
-    if (!rangeElement || !rangeElement.noUiSlider) {
-        console.log("No slider found for", type, scaleType);
-        return;
-    }
-    
-    if (field === "None" || !gridData) {
-        rangeElement.setAttribute('disabled', true);
-        if (minElement) minElement.textContent = "-";
-        if (maxElement) maxElement.textContent = "-";
-        return;
-    }
-    
-    rangeElement.removeAttribute('disabled');
-    
-    let values = [];
-    for (let feature of gridData.features) {
-        if (feature.properties && feature.properties[field] != null) {
-            const val = parseFloat(feature.properties[field]);
-            if (!isNaN(val)) {
-                values.push(val);
-            }
-        }
-    }
-    
-    if (values.length === 0) {
-        console.log("No valid values found for field:", field);
-        rangeElement.setAttribute('disabled', true);
-        if (minElement) minElement.textContent = "-";
-        if (maxElement) maxElement.textContent = "-";
-        return;
-    }
-    
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
-    
-    if (minValue === maxValue) {
-        console.log("Min equals max for field:", field);
-        rangeElement.setAttribute('disabled', true);
-        if (minElement) minElement.textContent = formatValue(minValue, 0.1);
-        if (maxElement) maxElement.textContent = formatValue(maxValue, 0.1);
-        return;
-    }
-    
-    const range = maxValue - minValue;
-    let step;
-    
-    if (range > 10000) {
-        step = 1000;
-    } else if (range > 1000) {
-        step = 100;
-    } else if (range > 100) {
-        step = 10;
-    } else if (range > 10) {
-        step = 1;
-    } else if (range > 1) {
-        step = 0.1;
-    } else {
-        step = 0.01;
-    }
-    
-    const adjustedMinValue = Math.floor(minValue / step) * step;
-    const adjustedMaxValue = Math.ceil(maxValue / step) * step;
-    
-    console.log(`Setting slider range for ${field}: min=${adjustedMinValue}, max=${adjustedMaxValue}, step=${step}`);
-    
-    rangeElement.noUiSlider.updateOptions({
-        range: {
-            'min': adjustedMinValue,
-            'max': adjustedMaxValue
-        },
-        step: step
-    }, false);
-    
-    rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue]);
-    
-    if (minElement) minElement.textContent = formatValue(adjustedMinValue, step);
-    if (maxElement) maxElement.textContent = formatValue(adjustedMaxValue, step);
-}
-
-function initializeSliders(sliderElement) {
-    console.log('Initializing slider:', sliderElement.id);
-    
-    if (sliderElement.noUiSlider) {
-        sliderElement.noUiSlider.destroy();
-    }
-
-    noUiSlider.create(sliderElement, {
-        start: [0, 100],
-        connect: true,
-        range: {
-            'min': 0,
-            'max': 100
-        },
-        step: 1,
-        tooltips: true,
-        format: {
-            to: value => parseFloat(value).toFixed(1),
-            from: value => parseFloat(value)
-        }
-    });
-
-    sliderElement.noUiSlider.on('change', function() {
-        if (AmenitiesCatchmentLayer) {
-            updateOpacityAndOutlineFields();
-        }
-    });
-}
-
 function configureSlider(sliderElement, isInverse) {
+    console.log(`configureSlider called for ${sliderElement.id} with isInverse: ${isInverse}`);
+    
     if (sliderElement.noUiSlider) {
+        console.log("Slider already has noUiSlider instance, removing update event listener");
         sliderElement.noUiSlider.off('update');
+    } else {
+        console.log("WARNING: sliderElement doesn't have noUiSlider property");
+        return;
     }
 
     const handles = sliderElement.querySelectorAll('.noUi-handle');
+    console.log(`Found ${handles.length} handles`);
+    
     const connectElements = sliderElement.querySelectorAll('.noUi-connect');
+    console.log(`Found ${connectElements.length} connect elements`);
 
+    if (handles.length >= 2) {
+        console.log("Adding handle classes");
+        handles[0].classList.add('noUi-handle-lower');
+        handles[1].classList.add('noUi-handle-upper');
+    }
+    
+    console.log("Removing transparent classes from all handles");
     handles.forEach(handle => {
-        handle.classList.remove('noUi-handle-transparent', 'noUi-handle-lower', 'noUi-handle-upper');
+        handle.classList.remove('noUi-handle-transparent');
     });
     
+    console.log("Removing connect element classes");
     connectElements.forEach(connect => {
         connect.classList.remove('noUi-connect-dark-grey', 'noUi-connect-gradient-right', 'noUi-connect-gradient-left');
     });
 
-    if (handles.length >= 2) {
-        handles[0].classList.add('noUi-handle-lower');
-        handles[1].classList.add('noUi-handle-upper');
-    }
-
-    sliderElement.noUiSlider.updateOptions({
-        connect: [true, true, true]
-    }, false);
-
-    if (connectElements.length >= 3) {
-        if (isInverse) {
+    console.log(`Configuring slider for isInverse: ${isInverse}`);
+    if (isInverse) {
+        console.log("Setting up inverse slider style");
+        sliderElement.noUiSlider.updateOptions({
+            connect: [true, true, true]
+        }, false);
+        
+        if (handles.length >= 2) {
+            console.log("Making upper handle transparent in inverse mode");
+            handles[1].classList.add('noUi-handle-transparent');
+        }
+        
+        if (connectElements.length >= 3) {
+            console.log("Setting up connect elements for inverse mode");
             connectElements[0].classList.add('noUi-connect-dark-grey');
             connectElements[1].classList.add('noUi-connect-gradient-left');
-        } else {
+        }
+    } else {
+        console.log("Setting up normal slider style");
+        sliderElement.noUiSlider.updateOptions({
+            connect: [true, true, true]
+        }, false);
+        
+        if (handles.length >= 2) {
+            console.log("Making lower handle transparent in normal mode");
+            handles[0].classList.add('noUi-handle-transparent');
+        }
+        
+        if (connectElements.length >= 3) {
+            console.log("Setting up connect elements for normal mode");
             connectElements[1].classList.add('noUi-connect-gradient-right');
             connectElements[2].classList.add('noUi-connect-dark-grey');
         }
     }
 
-    sliderElement.noUiSlider.on('update', function(values, handle) {
+    console.log("Adding update event listener to slider");
+    sliderElement.noUiSlider.on('update', function (values, handle) {
+        console.log(`Slider update event fired with values: [${values}], handle: ${handle}`);
+        
         const handleElement = handles[handle];
-        const step = sliderElement.noUiSlider.options.step || 1;
+        const step = sliderElement.noUiSlider.options.step;
         const formattedValue = formatValue(values[handle], step);
+        
+        console.log(`Setting data-value=${formattedValue} on handle ${handle}`);
         handleElement.setAttribute('data-value', formattedValue);
+        
+        console.log(`isUpdatingStyles: ${isUpdatingStyles}`);
+        if (!isUpdatingStyles) {
+            console.log("Setting isUpdatingStyles to true and scheduling style update");
+            isUpdatingStyles = true;
+            requestAnimationFrame(() => {
+                console.log("Inside requestAnimationFrame, applying styles");
+                applyAmenitiesCatchmentLayerStyling();
+                console.log("Setting isUpdatingStyles back to false");
+                isUpdatingStyles = false;
+            });
+        } else {
+            console.log("Skipping style update due to isUpdatingStyles flag");
+        }
     });
     
-    sliderElement.noUiSlider.on('change', debounce(function() {
-        if (!isUpdatingStyles) {
-            applyAmenitiesCatchmentLayerStyling();
-        }
-    }, 250));
+    console.log("configureSlider completed");
 }
 
-function toggleInverseScale(type, scaleType) {
-    //console.log(`toggleInverseScale called for ${type} ${scaleType}`);
+function updateSliderRanges(type, scaleType) {
+    console.log(`updateSliderRanges called with type: ${type}, scaleType: ${scaleType}`);
+    console.log(`isUpdatingSliders at start: ${isUpdatingSliders}`);
     
     if (isUpdatingSliders) {
-        //console.log("Already updating sliders, preventing recursion in toggleInverseScale");
+        console.log("Preventing recursion: isUpdatingSliders is true, returning early from updateSliderRanges");
         return;
     }
     
+    console.log("Setting isUpdatingSliders to true");
     isUpdatingSliders = true;
-    
-    let isInverse, rangeElement;
-    
+
     try {
+        console.log("Inside try block of updateSliderRanges");
+        let field, rangeElement, minElement, maxElement, gridData, order, isInverse;
+
         if (type === 'Amenities') {
+            console.log("Type is Amenities");
             if (scaleType === 'Opacity') {
-                isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
-                isInverse = isInverseAmenitiesOpacity;
+                console.log("ScaleType is Opacity");
+                field = AmenitiesOpacity.value;
+                console.onsole.log("Field value:", field);
                 rangeElement = AmenitiesOpacityRange;
-                opacityAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+                minElement = document.getElementById('opacityRangeAmenitiesMin');
+                maxElement = document.getElementById('opacityRangeAmenitiesMax');
+                gridData = grid;
+                order = opacityAmenitiesOrder;
+                isInverse = isInverseAmenitiesOpacity;
             } else if (scaleType === 'Outline') {
-                isInverseAmenitiesOutline = !isInverseAmenitiesOutline;
-                isInverse = isInverseAmenitiesOutline;
+                console.onsole.log("ScaleType is Outline");
+                field = AmenitiesOutline.value;
+                console.onsole.log("Field value:", field);
                 rangeElement = AmenitiesOutlineRange;
-                outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+                minElement = document.getElementById('outlineRangeAmenitiesMin');
+                maxElement = document.getElementById('outlineRangeAmenitiesMax');
+                gridData = grid;
+                order = outlineAmenitiesOrder;
+                isInverse = isInverseAmenitiesOutline;
             }
         }
-        
+
+        console.onsole.log("Checking if rangeElement and noUiSlider exist");
         if (!rangeElement || !rangeElement.noUiSlider) {
-            //console.log("No slider element or noUiSlider instance in toggleInverseScale");
+            console.onsole.log("rangeElement or noUiSlider missing, setting isUpdatingSliders to false and returning");
+            isUpdatingSliders = false;
             return;
         }
+
+        console.onsole.log("Working with grid data");
+        if (gridData) {
+            console.onsole.log("Grid data exists");
+            let values = [];
+            if (field !== "None") {
+                console.onsole.log("Collecting values for field:", field);
+                for (let i = 0; i < gridData.features.length; i++) {
+                    const val = gridData.features[i].properties[field];
+                    if (val !== null && val !== undefined && val !== 0) {
+                        values.push(Number(val));
+                    }
+                }
+                console.onsole.log(`Collected ${values.length} values`);
+            }
+            
+            console.onsole.log("Filtering values");
+            values = values.filter(v => !isNaN(v) && isFinite(v));
+            console.onsole.log(`After filtering: ${values.length} valid values`);
+            
+            const minValue = values.length > 0 ? Math.min(...values) : 0;
+            const maxValue = values.length > 0 ? Math.max(...values) : 100;
+            console.onsole.log(`Min value: ${minValue}, Max value: ${maxValue}`);
+
+            if (values.length === 0 || minValue === maxValue) {
+                console.onsole.log("No valid values or min equals max");
+                rangeElement.setAttribute('disabled', true);
+                console.onsole.log("Updating slider with default range 0-100");
+                rangeElement.noUiSlider.updateOptions({
+                    range: {
+                        'min': 0,
+                        'max': 100
+                    },
+                    step: 1
+                }, false);
+                console.onsole.log("Setting slider values to [0, 100]");
+                rangeElement.noUiSlider.set([0, 100], false);
+                minElement.innerText = '0';
+                maxElement.innerText = '100';
+                console.onsole.log("Slider update complete, setting isUpdatingSliders to false");
+                isUpdatingSliders = false;
+                return;
+            }
         
-        const currentValues = rangeElement.noUiSlider.get().map(parseFloat);
+            let step;
+            const range = maxValue - minValue;
+            console.onsole.log(`Range: ${range}`);
+            
+            if (range > 10000) {
+                step = 1000;
+            } else if (range > 1000) {
+                step = 100;
+            } else if (range > 100) {
+                step = 10;
+            } else if (range > 10) {
+                step = 1;
+            } else if (range > 1) {
+                step = 0.1;
+            } else {
+                step = 0.01;
+            }
+            console.onsole.log(`Selected step size: ${step}`);
+
+            const adjustedMaxValue = Math.ceil(maxValue / step) * step;
+            const adjustedMinValue = Math.floor(minValue / step) * step;
+            console.onsole.log(`Adjusted min: ${adjustedMinValue}, Adjusted max: ${adjustedMaxValue}`);
         
-        configureSlider(rangeElement, isInverse);
-        
-        rangeElement.noUiSlider.set(currentValues);
-        
-        if (AmenitiesCatchmentLayer) {
-            setTimeout(() => {
-                updateOpacityAndOutlineFields();
-            }, 50);
+            if (field === "None") {
+                console.onsole.log("Field is None, disabling slider");
+                rangeElement.setAttribute('disabled', true);
+                rangeElement.noUiSlider.updateOptions({
+                    range: {
+                        'min': 0,
+                        'max': 0
+                    },
+                    step: 1
+                }, false);
+                rangeElement.noUiSlider.set(['', ''], false);
+                minElement.innerText = '';
+                maxElement.innerText = '';
+            } else {
+                console.onsole.log("Enabling slider with adjusted range");
+                rangeElement.removeAttribute('disabled');
+                console.onsole.log(`Updating slider options with min: ${adjustedMinValue}, max: ${adjustedMaxValue}, step: ${step}`);
+                rangeElement.noUiSlider.updateOptions({
+                    range: {
+                        'min': adjustedMinValue,
+                        'max': adjustedMaxValue
+                    },
+                    step: step
+                }, false);
+                console.onsole.log(`Setting slider values to [${adjustedMinValue}, ${adjustedMaxValue}]`);
+                rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
+                minElement.innerText = formatValue(adjustedMinValue, step);
+                maxElement.innerText = formatValue(adjustedMaxValue, step);
+            }
+
+            console.onsole.log(`About to call configureSlider with isInverse: ${isInverse}`);
+            configureSlider(rangeElement, isInverse);
+            console.onsole.log("configureSlider call complete");
         }
+        console.onsole.log("End of try block in updateSliderRanges");
     } catch (error) {
-        //console.error("Error in toggleInverseScale:", error);
-        //console.error("Error stack:", error.stack);
+        console.error("Error in updateSliderRanges:", error);
+        console.error("Error stack:", error.stack);
     } finally {
+        console.onsole.log("In finally block, setting isUpdatingSliders to false");
         isUpdatingSliders = false;
     }
+    console.onsole.log("Exiting updateSliderRanges function");
+}
+
+function initializeSliders(sliderElement) {
+  console.onsole.log('Initializing slider:', sliderElement.id);
+  if (sliderElement.noUiSlider) {
+    sliderElement.noUiSlider.destroy();
+  }
+
+  noUiSlider.create(sliderElement, {
+    start: ['', ''],
+    connect: [true, true, true],
+    range: {
+      'min': 0,
+      'max': 0
+    },
+    step: 1,
+    tooltips: false,
+    format: {
+      to: value => parseFloat(value),
+      from: value => parseFloat(value)
+    }
+  });
+
+  const handles = sliderElement.querySelectorAll('.noUi-handle');
+  if (handles.length > 0) {
+    handles[0].classList.add('noUi-handle-transparent');
+  }
+
+  const connectElements = sliderElement.querySelectorAll('.noUi-connect');
+  if (connectElements.length > 2) {
+    connectElements[1].classList.add('noUi-connect-gradient-right');
+    connectElements[2].classList.add('noUi-connect-dark-grey');
+  }
+
+  configureSlider(sliderElement, false);
+}
+
+function toggleInverseScale(type, scaleType) {
+    console.onsole.log(`toggleInverseScale called with type: ${type}, scaleType: ${scaleType}`);
+    console.onsole.log(`Current isUpdatingSliders value: ${isUpdatingSliders}`);
+    
+    isUpdatingSliders = true;
+    console.onsole.log("Set isUpdatingSliders to true");
+
+    let isInverse, rangeElement, order;
+
+    if (type === 'Amenities') {
+        console.onsole.log("Type is Amenities");
+        if (scaleType === 'Opacity') {
+            console.onsole.log("ScaleType is Opacity");
+            isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
+            isInverse = isInverseAmenitiesOpacity;
+            console.onsole.log(`Toggled isInverseAmenitiesOpacity to: ${isInverse}`);
+            
+            rangeElement = AmenitiesOpacityRange;
+            opacityAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+            console.onsole.log(`Set opacityAmenitiesOrder to: ${opacityAmenitiesOrder}`);
+        } else if (scaleType === 'Outline') {
+            console.onsole.log("ScaleType is Outline");
+            isInverseAmenitiesOutline = !isInverseAmenitiesOutline;
+            isInverse = isInverseAmenitiesOutline;
+            console.onsole.log(`Toggled isInverseAmenitiesOutline to: ${isInverse}`);
+            
+            rangeElement = AmenitiesOutlineRange;
+            outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
+            console.onsole.log(`Set outlineAmenitiesOrder to: ${outlineAmenitiesOrder}`);
+        }
+    }
+
+    const currentValues = rangeElement.noUiSlider.get();
+    console.onsole.log(`Current slider values: [${currentValues}]`);
+    
+    console.onsole.log(`Calling configureSlider with isInverse: ${isInverse}`);
+    configureSlider(rangeElement, isInverse);
+    
+    console.onsole.log(`Setting slider values to: [${currentValues}]`);
+    rangeElement.noUiSlider.set(currentValues, false);
+
+    console.onsole.log(`About to call updateSliderRanges with type: ${type}, scaleType: ${scaleType}`);
+    setTimeout(() => {
+        console.onsole.log("In setTimeout, setting isUpdatingSliders to false before calling updateSliderRanges");
+        isUpdatingSliders = false;
+        updateSliderRanges(type, scaleType);
+    }, 10);
+
+    console.onsole.log("Setting isUpdatingSliders to false");
+    isUpdatingSliders = false;
 }
 
 function scaleExp(value, minVal, maxVal, minScale, maxScale, order) {
@@ -3924,7 +4036,7 @@ function updateAmenitiesCatchmentLayer() {
             hideLoadingOverlay();
         })
         .catch(error => {
-            //console.error("Error loading journey time data:", error);
+            console.error("Error loading journey time data:", error);
             updateAmenitiesCatchmentLayer.isRunning = false;
             hideLoadingOverlay();
         });
@@ -4004,92 +4116,189 @@ function applyAmenitiesCatchmentLayerStyling() {
         
         //console.log("Layer styling completed successfully");
     } catch (error) {
-        //console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-        //console.error("Error stack:", error.stack);
+        console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
+        console.error("Error stack:", error.stack);
     }
 }
 
 function updateOpacityAndOutlineFields() {
     //console.log("updateOpacityAndOutlineFields called");
     
-    if (!AmenitiesCatchmentLayer) {
-        //console.log("No AmenitiesCatchmentLayer, returning early");
-        return;
-    }
-    
-    if (isUpdatingStyles) {
-        //console.log("Already updating styles, preventing recursion");
-        return;
-    }
+    if (!AmenitiesCatchmentLayer) return;
+    if (isUpdatingStyles) return;
     
     isUpdatingStyles = true;
     
-    try {
-        const opacityField = AmenitiesOpacity.value;
-        const outlineField = AmenitiesOutline.value;
-        
-        if (!AmenitiesOpacityRange.noUiSlider || !AmenitiesOutlineRange.noUiSlider) {
-            isUpdatingStyles = false;
-            return;
+    const opacityField = AmenitiesOpacity.value;
+    const outlineField = AmenitiesOutline.value;
+    const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
+    const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
+    
+    const needOpacity = opacityField !== "None";
+    const needOutline = outlineField !== "None";
+    const opacityMin = opacityRange[0];
+    const opacityMax = opacityRange[1];
+    const outlineMin = outlineRange[0];
+    const outlineMax = outlineRange[1];
+    
+    const opacityLookup = {};
+    const outlineLookup = {};
+    
+    if (needOpacity) {
+        const step = Math.max((opacityMax - opacityMin) / 100, 0.1);
+        for (let value = opacityMin; value <= opacityMax; value += step) {
+            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+            opacityLookup[value.toFixed(1)] = isInverseAmenitiesOpacity ? 
+                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
         }
-        
-        const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
-        const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
-        
-        const needOpacity = opacityField !== "None";
-        const needOutline = outlineField !== "None";
-        const opacityMin = opacityRange[0];
-        const opacityMax = opacityRange[1];
-        const outlineMin = outlineRange[0];
-        const outlineMax = outlineRange[1];
-        
-        const features = AmenitiesCatchmentLayer.getLayers();
-        const batchSize = 200;
-        let currentBatch = 0;
+    }
+    
+    if (needOutline) {
+        const step = Math.max((outlineMax - outlineMin) / 100, 0.1);
+        for (let value = outlineMin; value <= outlineMax; value += step) {
+            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+            outlineLookup[value.toFixed(1)] = isInverseAmenitiesOutline ? 
+                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+        }
+    }
+    
+    const features = AmenitiesCatchmentLayer.getLayers();
+    const batchSize = 500;
+    
+    if (window.Worker && features.length > 1000) {
+        processWithWorker();
+    } else {
+        processWithBatches();
+    }
+    
+    function processWithBatches() {
+        let currentIndex = 0;
         
         function processBatch() {
-            const start = currentBatch * batchSize;
-            const end = Math.min((currentBatch + 1) * batchSize, features.length);
+            const endIndex = Math.min(currentIndex + batchSize, features.length);
             
-            for (let i = start; i < end; i++) {
+            for (let i = currentIndex; i < endIndex; i++) {
                 const layer = features[i];
-                
                 layer.feature.properties._opacity = 0.5;
                 layer.feature.properties._weight = 0;
                 
                 if (needOpacity) {
                     const value = parseFloat(layer.feature.properties[opacityField]);
-                    if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
-                        const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                        layer.feature.properties._opacity = isInverseAmenitiesOpacity ? 
-                            0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (opacityLookup[key] !== undefined) {
+                            layer.feature.properties._opacity = opacityLookup[key];
+                        } else if (value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            layer.feature.properties._opacity = isInverseAmenitiesOpacity ? 
+                                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+                        }
                     }
                 }
                 
                 if (needOutline) {
                     const value = parseFloat(layer.feature.properties[outlineField]);
-                    if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
-                        const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                        layer.feature.properties._weight = isInverseAmenitiesOutline ? 
-                            3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (outlineLookup[key] !== undefined) {
+                            layer.feature.properties._weight = outlineLookup[key];
+                        } else if (value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            layer.feature.properties._weight = isInverseAmenitiesOutline ? 
+                                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+                        }
                     }
                 }
             }
             
-            currentBatch++;
+            currentIndex = endIndex;
             
-            if (currentBatch * batchSize < features.length) {
-                setTimeout(processBatch, 0);
+            if (currentIndex < features.length) {
+                requestAnimationFrame(processBatch);
             } else {
                 applyAmenitiesCatchmentLayerStyling();
                 isUpdatingStyles = false;
             }
         }
         
-        processBatch();
-    } catch (error) {
-        //console.error("Error in updateOpacityAndOutlineFields:", error);
-        isUpdatingStyles = false;
+        requestAnimationFrame(processBatch);
+    }
+    
+    function processWithWorker() {
+        const workerCode = `
+            self.onmessage = function(e) {
+                const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
+                         isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
+                
+                const needOpacity = opacityField !== "None";
+                const needOutline = outlineField !== "None";
+                const results = [];
+                
+                for (let i = 0; i < features.length; i++) {
+                    const feature = features[i];
+                    const result = {
+                        index: i,
+                        _opacity: 0.5,
+                        _weight: 0
+                    };
+                    
+                    if (needOpacity) {
+                        const value = parseFloat(feature.properties[opacityField]);
+                        if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            result._opacity = isInverseAmenitiesOpacity ? 
+                                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+                        }
+                    }
+                    
+                    if (needOutline) {
+                        const value = parseFloat(feature.properties[outlineField]);
+                        if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            result._weight = isInverseAmenitiesOutline ? 
+                                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+                        }
+                    }
+                    
+                    results.push(result);
+                }
+                
+                self.postMessage(results);
+            };
+        `;
+        
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+        
+        const featureData = features.map(layer => ({
+            properties: layer.feature.properties
+        }));
+        
+        worker.onmessage = function(e) {
+            const results = e.data;
+            
+            results.forEach(result => {
+                const layer = features[result.index];
+                layer.feature.properties._opacity = result._opacity;
+                layer.feature.properties._weight = result._weight;
+            });
+            
+            applyAmenitiesCatchmentLayerStyling();
+            isUpdatingStyles = false;
+            worker.terminate();
+        };
+        
+        worker.postMessage({
+            features: featureData,
+            opacityField,
+            outlineField,
+            opacityMin,
+            opacityMax,
+            outlineMin,
+            outlineMax,
+            isInverseAmenitiesOpacity,
+            isInverseAmenitiesOutline
+        });
     }
 }
 
@@ -4424,7 +4633,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
       updateStatisticsUI(baseStats);
     }
   } catch (error) {
-    //console.error("Error calculating statistics:", error);
+    console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
   } finally {
     isCalculatingStats = false;
