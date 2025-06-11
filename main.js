@@ -370,36 +370,26 @@ AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
-    console.log("AmenitiesOpacity change event triggered");
-    console.log("Current isUpdatingSliders value:", isUpdatingSliders);
-    
-    if (isUpdatingSliders) {
-        console.log("Preventing recursion: isUpdatingSliders is true, returning early");
-        return;
-    }
-    
-    console.log("Calling updateSliderRanges from opacity change event");
+    if (isUpdatingSliders) return;
+    isUpdatingSliders = true;
     updateSliderRanges('Amenities', 'Opacity');
-    
-    console.log("Setting timeout for updateOpacityAndOutlineFields");
+    isUpdatingSliders = false;
     setTimeout(() => {
-        console.log("Inside setTimeout callback, checking isUpdatingStyles:", isUpdatingStyles);
         if (!isUpdatingStyles) {
-            console.log("Calling updateOpacityAndOutlineFields from timeout");
             updateOpacityAndOutlineFields();
-        } else {
-            console.log("Skipping updateOpacityAndOutlineFields due to isUpdatingStyles flag");
         }
-    }, 0);
+    }, 50);
 });
 AmenitiesOutline.addEventListener("change", () => {
     if (isUpdatingSliders) return;
+    isUpdatingSliders = true;
     updateSliderRanges('Amenities', 'Outline');
+    isUpdatingSliders = false;
     setTimeout(() => {
         if (!isUpdatingStyles) {
             updateOpacityAndOutlineFields();
         }
-    }, 0);
+    }, 50);
 });
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
