@@ -232,29 +232,23 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
 document.addEventListener('DOMContentLoaded', (event) => {
   console.log('DOM fully loaded, starting application initialization...');
   
-  // Phase 1: Initialize core UI components and map
   initializeUI();
   setupMapPanes();
   
-  // Initialize sliders and UI components that don't require data
   initializeAndConfigureSlider(AmenitiesOpacityRange, isInverseAmenitiesOpacity);
   initializeAndConfigureSlider(AmenitiesOutlineRange, isInverseAmenitiesOutline);
   
   initializeFileUpload();
   setupDrawingTools();
   
-  // Set up event listeners for collapsible panels
   initializeCollapsiblePanels();
   
-  // Phase 2: Start loading base map layers
   loadBaseLayers().then(() => {
     console.log('Base layers loaded successfully');
     
-    // Show map is ready for interaction
     map.fire('baselayersloaded');
     initialLoadComplete = true;
     
-    // Phase 3: Load grid data and amenities in the background
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
@@ -270,19 +264,15 @@ document.addEventListener('DOMContentLoaded', (event) => {
 function initializeUI() {
   console.log('Initializing user interface components...');
 
-  // Create static legend controls
   createStaticLegendControls();
 
-  // Initialize legend controls (collapsible behavior)
   initializeLegendControls();
   
-  // Hide data layer category initially
   const dataLayerCategory = document.getElementById('data-layer-category');
   if (dataLayerCategory) {
     dataLayerCategory.style.display = 'none';
   }
   
-  // Set up event listeners for additional UI elements
   setupAdditionalUIListeners();
 }
 
@@ -290,7 +280,6 @@ function initializeUI() {
  * Sets up event listeners for UI elements like checkboxes and buttons
  */
 function setupAdditionalUIListeners() {
-  // Add any additional global UI element listeners here
   document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', () => {
       if (AmenitiesCatchmentLayer) {
@@ -403,7 +392,6 @@ function createStaticLegendControls() {
 function initializeLegendControls() {
   console.log('Initializing legend controls...');
   
-  // Setup legend category headers
   document.querySelectorAll('.legend-category-header').forEach(header => {
     header.addEventListener('click', function() {
       const category = this.closest('.legend-category');
@@ -411,7 +399,6 @@ function initializeLegendControls() {
     });
   });
   
-  // Setup main legend header
   const legendHeader = document.querySelector('.legend-header');
   let isLegendExpanded = true;
   
@@ -497,7 +484,6 @@ function initializeCollapsiblePanels() {
     }
   }
 
-  // Set up panel headers behavior and state tracking
   const panelHeaders = document.querySelectorAll(".panel-header");
   panelHeaders.forEach(header => {
     const content = header.nextElementSibling;
@@ -519,7 +505,6 @@ function initializeCollapsiblePanels() {
     }
   });
   
-  // Summary panel toggle behavior
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
@@ -579,7 +564,6 @@ function loadBoundaryData() {
   const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
   
   return Promise.all([
-    // Load Local Authority boundaries
     fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
       .then(response => response.json())
       .then(data => {
@@ -598,7 +582,6 @@ function loadBoundaryData() {
         });
       }),
     
-    // Load Ward boundaries
     fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
       .then(response => response.json())
       .then(data => {
@@ -637,7 +620,6 @@ function loadTransportInfrastructure() {
   console.log('Loading transport infrastructure...');
   
   return Promise.all([
-    // Load bus lines
     fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
       .then(response => response.json())
       .then(data => {
@@ -658,7 +640,6 @@ function loadTransportInfrastructure() {
         }).addTo(map);
       }),
     
-    // Load bus stops
     fetch('https://AmFa6.github.io/TAF_test/stops.geojson')
       .then(response => response.json())
       .then(data => {
@@ -681,7 +662,6 @@ function loadTransportInfrastructure() {
         }).addTo(map);
       }),
     
-    // Load road network
     fetch('https://AmFa6.github.io/TAF_test/simplified_network.geojson')
       .then(response => response.json())
       .then(data => {
@@ -716,17 +696,14 @@ function loadTransportInfrastructure() {
 function loadBackgroundData() {
   console.log('Starting background data loading...');
   
-  // Load training centers data first as it's smaller
   showBackgroundLoadingIndicator('Loading facilities data...');
   loadTrainingCentres()
     .then(() => {
       console.log('Training centers loaded successfully');
       hideBackgroundLoadingIndicator();
       
-      // Initialize training center functionality after data is loaded
       initializeTrainingCentres();
       
-      // Now load the grid data which is much larger
       loadGridData();
     })
     .catch(error => {
@@ -734,7 +711,6 @@ function loadBackgroundData() {
       hideBackgroundLoadingIndicator();
       showErrorNotification('Error loading training center data. Some features may be limited.');
       
-      // Still try to load grid data even if training centers fail
       loadGridData();
     });
 }
@@ -753,14 +729,11 @@ function loadGridData() {
     .then(([data1, data2, csvText]) => {    
       console.log("Processing grid data in background...");
       
-      // Process grid data in batches to avoid blocking the UI
       processGridData(data1, data2, csvText).then(processedGrid => {
         grid = processedGrid;
         
-        // Calculate statistics once for all important attributes
         calculateGridStatistics(grid);
         
-        // Update UI elements that depend on grid data
         updateFilterDropdown();
         updateFilterValues();
         
@@ -790,10 +763,8 @@ function processGridData(data1, data2, csvText) {
   return new Promise((resolve) => {
     console.log("Starting to process grid GeoJSON and CSV data...");
     
-    // Parse CSV immediately as it's relatively fast
     const csvData = Papa.parse(csvText, { header: true }).data;
     
-    // Create lookup table for CSV data
     const csvLookup = {};
     csvData.forEach(row => {
       if (row.OriginId_tracc) {
@@ -801,27 +772,21 @@ function processGridData(data1, data2, csvText) {
       }
     });
     
-    // Process GeoJSON data in batches
-    const batchSize = 1000;
+    const batchSize = 5000;
     let processedData1 = [], processedData2 = [];
     
-    // Process first dataset
     processFeaturesBatch(data1.features, csvLookup, 0, batchSize, processedData1, () => {
-      // After first dataset is processed, process second dataset
       processFeaturesBatch(data2.features, csvLookup, 0, batchSize, processedData2, () => {
-        // Combine processed features into final grid dataset
         const combinedData = {
           type: 'FeatureCollection',
           features: [...processedData1, ...processedData2]
         };
         
-        // Calculate centroids for each grid cell (needed for spatial operations)
         combinedData.features.forEach(feature => {
           const centroid = turf.centroid(feature);
           feature.properties._centroid = centroid.geometry.coordinates;
         });
         
-        // Create grid centroids feature collection for spatial operations
         const gridCentroidsFC = turf.featureCollection(
           combinedData.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
         );
@@ -848,9 +813,7 @@ function processFeaturesBatch(features, csvLookup, startIndex, batchSize, result
     const feature = features[i];
     const originId = feature.properties.OriginId_tracc;
     
-    // Only include features that have corresponding CSV data
     if (originId && csvLookup[originId]) {
-      // Merge CSV properties into feature properties
       Object.keys(csvLookup[originId]).forEach(key => {
         if (key !== 'OriginId_tracc') {
           feature.properties[key] = csvLookup[originId][key];
@@ -861,16 +824,13 @@ function processFeaturesBatch(features, csvLookup, startIndex, batchSize, result
     }
   }
   
-  // Progress info for debugging
   const progressPercent = Math.round((endIndex / features.length) * 100);
   
   if (endIndex < features.length) {
-    // Schedule next batch with small delay to allow UI to update
     setTimeout(() => {
       processFeaturesBatch(features, csvLookup, endIndex, batchSize, results, onComplete);
     }, 0);
   } else {
-    // All features processed
     onComplete();
   }
 }
@@ -884,7 +844,6 @@ function calculateGridStatistics(gridData) {
   
   console.log("Calculating grid statistics for optimization...");
   
-  // Reset statistics objects
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
     IMDScore: { min: Infinity, max: -Infinity },
@@ -893,7 +852,6 @@ function calculateGridStatistics(gridData) {
     IMD_Decile: { min: Infinity, max: -Infinity }
   };
   
-  // Process in batches to avoid blocking the UI
   const BATCH_SIZE = 5000;
   const features = gridData.features;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
@@ -906,7 +864,6 @@ function calculateGridStatistics(gridData) {
       const props = features[i].properties;
       if (!props) continue;
       
-      // For each field we care about
       for (const field in gridStatistics) {
         if (props[field] !== undefined && props[field] !== null) {
           const value = parseFloat(props[field]);
@@ -919,19 +876,15 @@ function calculateGridStatistics(gridData) {
     }
     
     if (batchIndex + 1 < totalBatches) {
-      // Process next batch with minimal delay to allow UI updates
       setTimeout(() => processBatch(batchIndex + 1), 0);
     } else {
-      // All batches processed
       console.log("Grid statistics calculation complete:", gridStatistics);
       
-      // Now that we have statistics, update the sliders
       updateSliderRanges('Amenities', 'Opacity');
       updateSliderRanges('Amenities', 'Outline');
     }
   }
   
-  // Start batch processing
   processBatch(0);
 }
 
@@ -975,7 +928,6 @@ function showBackgroundLoadingIndicator(message = 'Loading data...') {
 function hideBackgroundLoadingIndicator() {
   const indicator = document.getElementById('background-loading-indicator');
   if (indicator) {
-    // Fade out gradually
     indicator.style.transition = 'opacity 0.5s';
     indicator.style.opacity = '0';
     setTimeout(() => {
@@ -1495,12 +1447,9 @@ function updateAimLevelDropdownLabel() {
 function initializeTrainingCentres() {
     console.log('Initializing training centres...');
     
-    // Check if we already have loaded training center data
     if (amenityLayers['TrainingCentres']) {
-        // Skip loading again if already loaded
         setupTrainingCentersUI();
     } else {
-        // Only load if not already loaded
         loadTrainingCentres().then(() => {
             setupTrainingCentersUI();
         });
@@ -3114,12 +3063,10 @@ function isPanelOpen(panelName) {
 }
 
 function initializeAndConfigureSlider(sliderElement, isInverse = false) {
-  // Destroy any existing slider
   if (sliderElement.noUiSlider) {
     sliderElement.noUiSlider.destroy();
   }
 
-  // Create the slider with default settings
   noUiSlider.create(sliderElement, {
     start: ['', ''],
     connect: [true, true, true],
@@ -3135,10 +3082,8 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     }
   });
 
-  // Add styling to handles and connection areas
   const handles = sliderElement.querySelectorAll('.noUi-handle');
   if (handles.length > 0) {
-    // Only add the transparent class conditionally but don't add empty classes
     if (isInverse === false) {
       handles[0].classList.add('noUi-handle-transparent');
     }
@@ -3163,7 +3108,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     }
   }
 
-  // Setup event listener for value updates
   sliderElement.noUiSlider.on('update', function (values, handle) {
     const handleElement = handles[handle];
     const step = sliderElement.noUiSlider.options.step;
@@ -3197,7 +3141,6 @@ function updateSliderRanges(type, scaleType) {
     isInverse = isInverseAmenitiesOutline;
   }
 
-  // Recreate the slider with the current inverse status
   if (rangeElement.noUiSlider) {
     rangeElement.noUiSlider.destroy();
   }
@@ -3265,13 +3208,10 @@ function toggleInverseScale(type, scaleType) {
     outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
   }
 
-  // Get current values before recreating the slider
   const currentValues = rangeElement.noUiSlider ? rangeElement.noUiSlider.get() : ['', ''];
   
-  // Update the slider ranges which will recreate the slider with new inverse settings
   updateSliderRanges(type, scaleType);
   
-  // Restore the previous values
   if (rangeElement.noUiSlider) {
     rangeElement.noUiSlider.set(currentValues, false);
   }
@@ -4136,7 +4076,6 @@ function updateAmenitiesCatchmentLayer() {
                   updateFilterValues('amenities');
                 };
                 
-                // First update the ranges
                 updateSliderRanges('Amenities', 'Opacity');
                 updateSliderRanges('Amenities', 'Outline');
                 
@@ -5011,7 +4950,6 @@ function calculateBaseStatistics(gridData) {
   
   console.log("Calculating grid statistics once for optimization...");
   
-  // Reset statistics objects
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
     IMDScore: { min: Infinity, max: -Infinity },
@@ -5020,7 +4958,6 @@ function calculateBaseStatistics(gridData) {
     IMD_Decile: { min: Infinity, max: -Infinity }
   };
   
-  // Process in batches to avoid blocking the UI
   const BATCH_SIZE = 5000;
   const features = gridData.features;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
@@ -5033,7 +4970,6 @@ function calculateBaseStatistics(gridData) {
       const props = features[i].properties;
       if (!props) continue;
       
-      // For each field we care about
       for (const field in gridStatistics) {
         if (props[field] !== undefined && props[field] !== null) {
           const value = parseFloat(props[field]);
@@ -5046,15 +4982,12 @@ function calculateBaseStatistics(gridData) {
     }
     
     if (batchIndex + 1 < totalBatches) {
-      // Process next batch
       setTimeout(() => processBatch(batchIndex + 1), 0);
     } else {
-      // All batches processed
       console.log("Grid statistics calculation complete:", gridStatistics);
     }
   }
   
-  // Start batch processing
   processBatch(0);
 }
 
