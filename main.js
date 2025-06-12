@@ -514,15 +514,18 @@ function initializeCollapsiblePanels() {
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
-  if (summaryHeader && summaryContent) {
-    summaryContent.style.display = "none";
-    summaryHeader.classList.add("collapsed");
-    
+  if (summaryHeader) {
+    console.log('Summary header found');
     summaryHeader.addEventListener("click", function() {
+      console.log('Summary header clicked');
       const isCollapsed = this.classList.contains("collapsed");
+      console.log('Is collapsed:', isCollapsed);
       this.classList.toggle("collapsed");
       summaryContent.style.display = isCollapsed ? "block" : "none";
     });
+    console.log('Summary content display style:', window.getComputedStyle(summaryContent).display);
+  } else {
+    console.log('Summary header not found');
   }
 }
 
