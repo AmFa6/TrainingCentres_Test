@@ -3167,6 +3167,9 @@ function configureSlider(sliderElement, isInverse) {
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
+    requestAnimationFrame(() => {
+      updateOpacityAndOutlineFields()
+    });
   });
 }
 
@@ -3240,11 +3243,6 @@ function updateSliderRanges(type, scaleType) {
     }
     configureSlider(rangeElement, isInverse);
   }
-  isUpdatingStyles = false;
-  requestAnimationFrame(() => {
-    updateOpacityAndOutlineFields(); 
-    isUpdatingSliders = false;
-  });
 }
 
 function initializeSliders(sliderElement) {
