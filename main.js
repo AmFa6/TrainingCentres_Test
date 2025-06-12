@@ -3167,13 +3167,6 @@ function configureSlider(sliderElement, isInverse) {
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
-    if (!isUpdatingStyles) {
-      isUpdatingStyles = true;
-      requestAnimationFrame(() => {
-        updateOpacityAndOutlineFields();
-        isUpdatingStyles = false;
-      });
-    }
   });
 }
 
