@@ -527,7 +527,7 @@ function initializeCollapsiblePanels() {
       
       if (summaryContent) {
         summaryContent.style.display = isCollapsed ? "block" : "none";
-        console.log('Setting summary content display to:', isCollapsed ? "block" : "none");
+        console.log('Setting summary content display to:', summaryContent.style.display);
       } else {
         console.log('Summary content element not found when trying to display it');
       }
