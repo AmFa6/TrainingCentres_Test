@@ -523,17 +523,17 @@ function initializeCollapsiblePanels() {
     summaryHeader.classList.add("collapsed");
     
     summaryHeader.addEventListener("click", function() {
-      console.log('Summary header clicked');
-      this.classList.toggle("collapsed");
+      const wasCollapsed = this.classList.contains("collapsed");
       
-      if (summaryContent) {
-        const isNowCollapsed = this.classList.contains("collapsed");
-        console.log('Is now collapsed:', isNowCollapsed);
-        summaryContent.style.display = isNowCollapsed ? "none" : "block";
-        console.log('Set summary content display to:', summaryContent.style.display);
+      if (wasCollapsed) {
+        this.classList.remove("collapsed");
+        summaryContent.style.display = "block";
       } else {
-        console.error('Summary content element not found when trying to display it');
+        this.classList.add("collapsed");
+        summaryContent.style.display = "none";
       }
+      
+      console.log('Summary header clicked, now collapsed:', !wasCollapsed);
     });
   }
 }
