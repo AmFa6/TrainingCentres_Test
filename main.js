@@ -5004,50 +5004,153 @@ async function calculateStatistics(features) {
   return {...baseStats, ...layerStats};
 }
 
-function calculateBaseStatistics(gridData) {
-  if (!gridData || !gridData.features || gridData.features.length === 0) return;
-  
-  console.log("Calculating grid statistics once for optimization...");
-  
-  gridStatistics = {
-    pop: { min: Infinity, max: -Infinity },
-    IMDScore: { min: Infinity, max: -Infinity },
-    car_availability_ts045: { min: Infinity, max: -Infinity },
-    pop_growth: { min: Infinity, max: -Infinity },
-    IMD_Decile: { min: Infinity, max: -Infinity }
-  };
+function calculateBaseStatistics(features) {
+  if (!features || features.length === 0) {
+    return {
+      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
+      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
+      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
+      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
+      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+    };
+  }
+
+  console.log('Calculating stats for', features.length, 'features');
   
   const BATCH_SIZE = 5000;
-  const features = gridData.features;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   
-  function processBatch(batchIndex) {
-    const startIdx = batchIndex * BATCH_SIZE;
-    const endIdx = Math.min((batchIndex + 1) * BATCH_SIZE, features.length);
-    
-    for (let i = startIdx; i < endIdx; i++) {
-      const props = features[i].properties;
-      if (!props) continue;
+  return new Promise(resolve => {
+    let stats = {
+      totalPopulation: 0,
+      minPopulation: Infinity,
+      maxPopulation: -Infinity,
       
-      for (const field in gridStatistics) {
-        if (props[field] !== undefined && props[field] !== null) {
-          const value = parseFloat(props[field]);
-          if (!isNaN(value)) {
-            gridStatistics[field].min = Math.min(gridStatistics[field].min, value);
-            gridStatistics[field].max = Math.max(gridStatistics[field].max, value);
+      totalWeightedImdScore: 0,
+      minImdScore: Infinity,
+      maxImdScore: -Infinity,
+      
+      totalWeightedImdDecile: 0,
+      minImdDecile: Infinity,
+      maxImdDecile: -Infinity,
+      
+      totalWeightedCarAvailability: 0,
+      minCarAvailability: Infinity,
+      maxCarAvailability: -Infinity,
+      
+      totalPopGrowth: 0,
+      minPopGrowth: Infinity,
+      maxPopGrowth: -Infinity,
+      
+      populationWithImdScore: 0,
+      populationWithImdDecile: 0,
+      populationWithCarAvailability: 0
+    };
+    
+    let currentBatch = 0;
+    
+    function processBatch() {
+      const startIdx = currentBatch * BATCH_SIZE;
+      const endIdx = Math.min((currentBatch + 1) * BATCH_SIZE, features.length);
+      
+      for (let i = startIdx; i < endIdx; i++) {
+        const props = features[i].properties;
+        if (!props) continue;
+        
+        const pop = Number(props.pop);
+        if (isFinite(pop) && pop >= 0) {
+          stats.totalPopulation += pop;
+          stats.minPopulation = Math.min(stats.minPopulation, pop);
+          stats.maxPopulation = Math.max(stats.maxPopulation, pop);
+          
+          const imdScore = Number(props.IMDScore);
+          if (isFinite(imdScore)) {
+            stats.totalWeightedImdScore += imdScore * pop;
+            stats.minImdScore = Math.min(stats.minImdScore, imdScore);
+            stats.maxImdScore = Math.max(stats.maxImdScore, imdScore);
+            stats.populationWithImdScore += pop;
+          }
+          
+          const imdDecile = Number(props.IMD_Decile);
+          if (isFinite(imdDecile)) {
+            stats.totalWeightedImdDecile += imdDecile * pop;
+            stats.minImdDecile = Math.min(stats.minImdDecile, imdDecile);
+            stats.maxImdDecile = Math.max(stats.maxImdDecile, imdDecile);
+            stats.populationWithImdDecile += pop;
+          }
+          
+          const carAvailability = Number(props.car_availability_ts045);
+          if (isFinite(carAvailability)) {
+            stats.totalWeightedCarAvailability += carAvailability * pop;
+            stats.minCarAvailability = Math.min(stats.minCarAvailability, carAvailability);
+            stats.maxCarAvailability = Math.max(stats.maxCarAvailability, carAvailability);
+            stats.populationWithCarAvailability += pop;
           }
         }
+        
+        const popGrowth = Number(props.pop_growth);
+        if (isFinite(popGrowth) && popGrowth >= 0) {
+          stats.totalPopGrowth += popGrowth;
+          stats.minPopGrowth = Math.min(stats.minPopGrowth, popGrowth);
+          stats.maxPopGrowth = Math.max(stats.maxPopGrowth, popGrowth);
+        }
+      }
+      
+      currentBatch++;
+      
+      if (currentBatch < totalBatches) {
+        requestAnimationFrame(processBatch);
+      } else {
+        if (stats.minPopulation === Infinity) stats.minPopulation = 0;
+        if (stats.maxPopulation === -Infinity) stats.maxPopulation = 0;
+        
+        if (stats.minImdScore === Infinity) stats.minImdScore = 0;
+        if (stats.maxImdScore === -Infinity) stats.maxImdScore = 0;
+        
+        if (stats.minImdDecile === Infinity) stats.minImdDecile = 0;
+        if (stats.maxImdDecile === -Infinity) stats.maxImdDecile = 0;
+        
+        if (stats.minCarAvailability === Infinity) stats.minCarAvailability = 0;
+        if (stats.maxCarAvailability === -Infinity) stats.maxCarAvailability = 0;
+        
+        if (stats.minPopGrowth === Infinity) stats.minPopGrowth = 0;
+        if (stats.maxPopGrowth === -Infinity) stats.maxPopGrowth = 0;
+        
+        const avgImdScore = stats.populationWithImdScore > 0 ? 
+          stats.totalWeightedImdScore / stats.populationWithImdScore : 0;
+        
+        const avgImdDecile = stats.populationWithImdDecile > 0 ? 
+          stats.totalWeightedImdDecile / stats.populationWithImdDecile : 0;
+        
+        const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
+          stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
+
+        resolve({
+          totalPopulation: stats.totalPopulation,
+          minPopulation: stats.minPopulation,
+          maxPopulation: stats.maxPopulation,
+          
+          avgImdScore: avgImdScore,
+          minImdScore: stats.minImdScore,
+          maxImdScore: stats.maxImdScore,
+          
+          avgImdDecile: avgImdDecile,
+          minImdDecile: stats.minImdDecile,
+          maxImdDecile: stats.maxImdDecile,
+          
+          avgCarAvailability: avgCarAvailability,
+          minCarAvailability: stats.minCarAvailability,
+          maxCarAvailability: stats.maxCarAvailability,
+          
+          totalPopGrowth: stats.totalPopGrowth,
+          minPopGrowth: stats.minPopGrowth,
+          maxPopGrowth: stats.maxPopGrowth
+        });
       }
     }
     
-    if (batchIndex + 1 < totalBatches) {
-      setTimeout(() => processBatch(batchIndex + 1), 0);
-    } else {
-      console.log("Grid statistics calculation complete:", gridStatistics);
-    }
-  }
-  
-  processBatch(0);
+    processBatch();
+  });
 }
 
 function calculateTimeStatistics(features) {
