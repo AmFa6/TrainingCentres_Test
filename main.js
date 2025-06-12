@@ -513,19 +513,26 @@ function initializeCollapsiblePanels() {
   
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
-  
-  if (summaryHeader) {
-    console.log('Summary header found');
+
+  if (summaryHeader && summaryContent) {
+    console.log('Found summary elements correctly');
+    summaryContent.style.display = "none";
+    summaryHeader.classList.add("collapsed");
+    
     summaryHeader.addEventListener("click", function() {
       console.log('Summary header clicked');
       const isCollapsed = this.classList.contains("collapsed");
       console.log('Is collapsed:', isCollapsed);
       this.classList.toggle("collapsed");
-      summaryContent.style.display = isCollapsed ? "block" : "none";
+      
+      // This is the fix - make sure summaryContent exists before changing its style
+      if (summaryContent) {
+        summaryContent.style.display = isCollapsed ? "block" : "none";
+        console.log('Setting summary content display to:', isCollapsed ? "block" : "none");
+      } else {
+        console.log('Summary content element not found when trying to display it');
+      }
     });
-    console.log('Summary content display style:', window.getComputedStyle(summaryContent).display);
-  } else {
-    console.log('Summary header not found');
   }
 }
 
@@ -4130,14 +4137,14 @@ function updateAmenitiesCatchmentLayer() {
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
-    console.trace("applyAmenitiesCatchmentLayerStyling called");
+    console.log("applyAmenitiesCatchmentLayerStyling called");
     
     if (!AmenitiesCatchmentLayer) {
         console.log("No AmenitiesCatchmentLayer, returning early");
         return;
     }
     
-    console.trace("Processing layer styling");
+    console.log("Processing layer styling");
     
     const featureCount = AmenitiesCatchmentLayer.getLayers().length;
     console.log(`Styling ${featureCount} features`);
