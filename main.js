@@ -6,80 +6,64 @@ const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/lig
 
 const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
-showLoadingOverlay();
-
-Promise.all([
-  fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
-  fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-  fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
-])
-  .then(([data1, data2, csvText]) => {    
-    console.log("Starting to process grid GeoJSON and CSV data...");
-    const csvData = Papa.parse(csvText, { header: true }).data;
-    
-    const csvLookup = {};
-    csvData.forEach(row => {
-      if (row.OriginId_tracc) {
-        csvLookup[row.OriginId_tracc] = row;
-      }
-    });
-    
-    const filteredData1 = {
-      type: 'FeatureCollection',
-      features: data1.features.filter(feature => csvLookup[feature.properties.OriginId_tracc])
-    };
-    
-    const filteredData2 = {
-      type: 'FeatureCollection',
-      features: data2.features.filter(feature => csvLookup[feature.properties.OriginId_tracc])
-    };
-    
-    const combinedData = {
-      type: 'FeatureCollection',
-      features: [...filteredData1.features, ...filteredData2.features]
-    };
-    
-    combinedData.features.forEach(feature => {
-      const originId = feature.properties.OriginId_tracc;
-      if (originId && csvLookup[originId]) {
-        Object.keys(csvLookup[originId]).forEach(key => {
-          if (key !== 'OriginId_tracc') {
-            feature.properties[key] = csvLookup[originId][key];
-          }
-        });
-      }
-    });
-    
-    grid = combinedData;
-    console.log("Grid data loaded, filtered and combined:", grid);
-    
-    grid.features.forEach(feature => {
-      const centroid = turf.centroid(feature);
-      feature.properties._centroid = centroid.geometry.coordinates;
-    });
-
-    gridCentroidsFC = turf.featureCollection(
-      grid.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
-    );
-
-    if (initialLoadComplete) {
-      updateSummaryStatistics(grid.features);
-    } 
-    hideLoadingOverlay();
-  })
-  .catch(error => {
-    console.error("Error loading data:", error);
-    hideLoadingOverlay();
-    
-    const loadingText = document.getElementById('loading-text');
-    if (loadingText) {
-      loadingText.textContent = 'Error loading data. Please try again later.';
-      showLoadingOverlay();
-      setTimeout(() => {
-        hideLoadingOverlay();
-      }, 3000);
-    }
-  });
+let gridStatistics = {
+  pop: { min: Infinity, max: -Infinity },
+  IMDScore: { min: Infinity, max: -Infinity },
+  car_availability_ts045: { min: Infinity, max: -Infinity },
+  pop_growth: { min: Infinity, max: -Infinity },
+  IMD_Decile: { min: Infinity, max: -Infinity }
+};
+let gridCentroidsFC = null;
+let opacityAmenitiesOrder = 'low-to-high';
+let outlineAmenitiesOrder = 'low-to-high';
+let isInverseAmenitiesOpacity = false;
+let isInverseAmenitiesOutline = false;
+let uaBoundariesLayer;
+let wardBoundariesLayer;
+let AmenitiesCatchmentLayer = null;
+let gridTimeMap = {};
+let csvDataCache = {};
+let amenitiesLayerGroup = L.featureGroup();
+let selectedAmenitiesAmenities = [];
+let selectingFromMap = false;
+let selectedAmenitiesFromMap = [];
+let grid;
+let highlightLayer = null;
+let initialLoadComplete = false;
+let isUpdatingSliders = false;
+let wasAboveZoomThreshold = false;
+let gridLayer = null;
+let busLinesLayer;
+let busStopsLayer;
+let roadNetworkLayer;
+let WestLinkZonesLayer;
+let userLayers = [];
+let userLayerCount = 0;
+let drawControl;
+let currentDrawingLayer = null;
+let isDrawingActive = false;
+let currentDrawType = null;
+drawFeatureGroup = L.featureGroup({
+  pane: 'userLayers'
+}).addTo(map);
+let isCalculatingStats = false;
+let isUpdatingVisibility = false;
+let isUpdatingFilters = false;
+let isUpdatingFilterValues = false;
+let currentEditingUserLayer = null;
+let activeShapeMode = null; 
+let activeActionMode = null;
+let originalLayerState = null;
+let hasUnsavedChanges = false;
+let currentFeatureAttributes = {};
+let pendingFeature = null;
+let currentUserLayerId = null;
+let defaultAttributes = { "Name": "" };
+let previousFilterSelections = {
+  LA: null,
+  Ward: null,
+  Range: null,
+};
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
@@ -153,56 +137,6 @@ function convertMultiPolygonToPolygons(geoJson) {
   });
 }
 
-fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
-  .then(response => {
-    return response.json();
-  })
-  .then(data => {
-    return convertMultiPolygonToPolygons(data).then(convertedData => {
-      uaBoundariesLayer = L.geoJSON(convertedData, {
-        pane: 'boundaryLayers',
-        style: function (feature) {
-          return {
-            color: 'black',
-            weight: 1.5,
-            fillOpacity: 0,
-            opacity: 0
-          };
-        },
-      }).addTo(map);
-      updateFilterValues();
-    });
-  })
-  .catch(error => {
-    console.error("Error loading boundary data:", error);
-  });
-
-fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
-  .then(response => response.json())
-  .then(data => {
-    return convertMultiPolygonToPolygons(data)
-      .then(convertedData => {
-        const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
-        const wardGeoJson = {
-          type: 'FeatureCollection',
-          features: filteredFeatures
-        };
-
-        wardBoundariesLayer = L.geoJSON(wardGeoJson, {
-          pane: 'boundaryLayers',
-          style: function () {
-            return {
-              color: 'black',
-              weight: 1,
-              fillOpacity: 0,
-              opacity: 0
-            };
-          },
-        }).addTo(map);
-        console.log("Ward boundaries layer added to map.");
-      });
-  })
-
 const layers = {};
 const AmenitiesYear = document.getElementById("yearAmenitiesDropdown");
 const AmenitiesPurpose = document.querySelectorAll('.checkbox-label input[type="checkbox"]');
@@ -212,148 +146,12 @@ const AmenitiesOpacityRange = document.getElementById('opacityRangeAmenitiesSlid
 const AmenitiesOutlineRange = document.getElementById('outlineRangeAmenitiesSlider');
 const AmenitiesInverseOpacity = document.getElementById("inverseOpacityScaleAmenitiesButton");
 const AmenitiesInverseOutline = document.getElementById("inverseOutlineScaleAmenitiesButton");
-
 const amenityLayers = {};
 const filterTypeDropdown = document.getElementById('filterTypeDropdown');
 const filterValueDropdown = document.getElementById('filterValueDropdown');
 
-function showLoadingOverlay() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.classList.add('active');
-  }
-}
-
-function hideLoadingOverlay() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.classList.remove('active');
-  }
-}
-
-fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
-  .then(response => response.json())
-  .then(data => {
-    busLinesLayer = L.geoJSON(data, {
-      pane: 'busLayers',
-      style: function (feature) {
-        const frequency = parseFloat(feature.properties.am_peak_service_frequency) || 0;
-        const opacity = frequency === 0 ? 0.1 : Math.min(0.1 + (frequency / 6) * 0.4, 0.5);
-        
-        return {
-          color: 'green',
-          weight: 2,
-          fillOpacity: 0,
-          opacity: 0,
-          _calculatedOpacity: opacity
-        };
-      },
-    }).addTo(map);
-  });
-
-fetch('https://AmFa6.github.io/TAF_test/stops.geojson')
-  .then(response => response.json())
-  .then(data => {
-    busStopsLayer = L.geoJSON(data, {
-      pane: 'busLayers',
-      pointToLayer: function(feature, latlng) {
-        const frequency = parseFloat(feature.properties.am_peak_combined_frequency) || 0;
-        const fillOpacity = frequency === 0 ? 0 : Math.min(frequency / 12, 1);
-        
-        return L.circleMarker(latlng, {
-          radius: 3,
-          fillColor: 'green',
-          color: 'green',
-          weight: 0.5,
-          opacity: 0,
-          fillOpacity: 0,
-          _calculatedFillOpacity: fillOpacity
-        });
-      }
-    }).addTo(map);
-  });
-
-fetch('https://AmFa6.github.io/TAF_test/simplified_network.geojson')
-  .then(response => response.json())
-  .then(data => {
-    roadNetworkLayer = L.geoJSON(data, {
-      pane: 'roadLayers',
-      style: function (feature) {
-        const roadFunction = feature.properties.roadfunction;
-        let weight = 0;
-        
-        if (roadFunction === 'Motorway') {
-          weight = 4;
-        } else if (roadFunction === 'A Road') {
-          weight = 2;
-        }
-        
-        return {
-          color: 'white',
-          weight: weight,
-          opacity: 0,
-        };
-      },
-    }).addTo(map);
-  });
-
 AmenitiesOpacity.value = "None";
 AmenitiesOutline.value = "None";
-
-let gridCentroidsFC = null;
-let opacityAmenitiesOrder = 'low-to-high';
-let outlineAmenitiesOrder = 'low-to-high';
-let isInverseAmenitiesOpacity = false;
-let isInverseAmenitiesOutline = false;
-let uaBoundariesLayer;
-let wardBoundariesLayer;
-let AmenitiesCatchmentLayer = null;
-let gridTimeMap = {};
-let csvDataCache = {};
-let amenitiesLayerGroup = L.featureGroup();
-let selectedAmenitiesAmenities = [];
-let selectingFromMap = false;
-let selectedAmenitiesFromMap = [];
-let grid;
-let highlightLayer = null;
-let initialLoadComplete = false;
-let isUpdatingSliders = false;
-let wasAboveZoomThreshold = false;
-let gridLayer = null;
-let busLinesLayer;
-let busStopsLayer;
-let roadNetworkLayer;
-let WestLinkZonesLayer;
-let userLayers = [];
-let userLayerCount = 0;
-let drawControl;
-let currentDrawingLayer = null;
-let isDrawingActive = false;
-let currentDrawType = null;
-drawFeatureGroup = L.featureGroup({
-  pane: 'userLayers'
-}).addTo(map);
-let isCalculatingStats = false;
-let isUpdatingVisibility = false;
-let isUpdatingFilters = false;
-let isUpdatingFilterValues = false;
-let currentEditingUserLayer = null;
-let activeShapeMode = null; 
-let activeActionMode = null;
-let originalLayerState = null;
-let hasUnsavedChanges = false;
-let currentFeatureAttributes = {};
-let pendingFeature = null;
-let currentUserLayerId = null;
-let defaultAttributes = { "Name": "" };
-let previousFilterSelections = {
-  LA: null,
-  Ward: null,
-  Range: null,
-};
-
-initializeSliders(AmenitiesOpacityRange);
-initializeSliders(AmenitiesOutlineRange);
 
 function debounce(func, wait) {
   let timeout;
@@ -417,7 +215,49 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
   }
 });
 
+/**
+ * Main application initialization
+ * Using a phased loading approach to improve perceived performance
+ */
 document.addEventListener('DOMContentLoaded', (event) => {
+  console.log('DOM fully loaded, starting application initialization...');
+  
+  // Phase 1: Initialize core UI components and map
+  initializeUI();
+  setupMapPanes();
+  initializeLegendControls();
+  createStaticLegendControls();
+  
+  // Initialize sliders and UI components that don't require data
+  initializeSliders(AmenitiesOpacityRange);
+  initializeSliders(AmenitiesOutlineRange);
+  initializeFileUpload();
+  setupDrawingTools();
+  
+  // Set up event listeners for collapsible panels
+  initializeCollapsiblePanels();
+  
+  // Phase 2: Start loading base map layers
+  loadBaseLayers().then(() => {
+    console.log('Base layers loaded successfully');
+    
+    // Show map is ready for interaction
+    map.fire('baselayersloaded');
+    initialLoadComplete = true;
+    
+    // Phase 3: Load grid data and amenities in the background
+    loadBackgroundData();
+  }).catch(error => {
+    console.error('Error loading base layers:', error);
+    hideLoadingOverlay();
+    showErrorNotification('Error loading map layers. Please try refreshing the page.');
+  });
+});
+
+/**
+ * Initializes collapsible panels and their behavior
+ */
+function initializeCollapsiblePanels() {
   const collapsibleButtons = document.querySelectorAll(".collapsible");
   collapsibleButtons.forEach(button => {
     const content = button.nextElementSibling;
@@ -433,61 +273,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     }
   });
 
-  let lastAmenitiesState = {
-    selectingFromMap: false,
-    selectedAmenitiesFromMap: [],
-    selectedAmenitiesAmenities: []
-  };
-
-  function handlePanelStateChange(header, isOpen) {
-    console.log(`Panel state changed: ${header.textContent}, isOpen: ${isOpen}`);
-    const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
-    
-    if (isOpen) {
-      dataPanelHeaders.forEach(otherHeader => {
-        if (otherHeader !== header) {
-          otherHeader.classList.add("collapsed");
-          const otherContent = otherHeader.nextElementSibling;
-          if (otherContent) {
-            otherContent.style.display = "none";
-          }
-          
-          if (otherHeader.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
-            lastAmenitiesState = {
-              selectingFromMap,
-              selectedAmenitiesFromMap,
-              selectedAmenitiesAmenities
-            };
-            map.removeLayer(AmenitiesCatchmentLayer);
-            AmenitiesCatchmentLayer = null;
-          } 
-        }
-      });
-    }
-    
-    if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
-      if (lastAmenitiesState.selectingFromMap) {
-        selectingFromMap = lastAmenitiesState.selectingFromMap;
-        selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
-        
-        AmenitiesPurpose.forEach(checkbox => {
-          checkbox.checked = lastAmenitiesState.selectedAmenitiesAmenities.includes(checkbox.value);
-        });
-      }
-      
-      updateAmenitiesCatchmentLayer();
-    } else if (!isOpen && header.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
-      lastAmenitiesState = {
-        selectingFromMap,
-        selectedAmenitiesFromMap,
-        selectedAmenitiesAmenities
-      };
-      map.removeLayer(AmenitiesCatchmentLayer);
-      AmenitiesCatchmentLayer = null;
-      drawSelectedAmenities([]);
-    }
-  }
-
+  // Set up panel headers behavior and state tracking
   const panelHeaders = document.querySelectorAll(".panel-header");
   panelHeaders.forEach(header => {
     const content = header.nextElementSibling;
@@ -508,7 +294,8 @@ document.addEventListener('DOMContentLoaded', (event) => {
       });
     }
   });
-
+  
+  // Summary panel toggle behavior
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
@@ -521,225 +308,491 @@ document.addEventListener('DOMContentLoaded', (event) => {
       this.classList.toggle("collapsed");
       summaryContent.style.display = isCollapsed ? "block" : "none";
     });
-    
-    summaryHeader.addEventListener("click", function() {
-      this.classList.toggle("collapsed");
-      const isNowCollapsed = this.classList.contains("collapsed");
-      summaryContent.style.display = isNowCollapsed ? "none" : "block";
-    });
   }
+}
 
-  document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
-      checkbox.addEventListener('change', () => {
-          if (AmenitiesCatchmentLayer) {
-              applyAmenitiesCatchmentLayerStyling();
-          }
-      });
+/**
+ * Creates and sets up map panes with appropriate z-index values
+ */
+function setupMapPanes() {
+  console.log('Setting up map panes...');
+  const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
+  existingPanes.forEach(pane => {
+    if (pane.className.includes('custom-pane')) {
+      pane.parentNode.removeChild(pane);
+    }
   });
   
-  function createStaticLegendControls() {
-    console.log('Creating static legend controls...');
-    const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-    if (amenitiesCheckbox) {
-      amenitiesCheckbox.addEventListener('change', () => {
-        if (amenitiesCheckbox.checked) {
-          drawSelectedAmenities();
-          amenitiesLayerGroup.addTo(map);
-        } else {
-          map.removeLayer(amenitiesLayerGroup);
-        }
-      });
-    }
+  map.createPane('polygonLayers').style.zIndex = 300;
+  map.createPane('boundaryLayers').style.zIndex = 400;
+  map.createPane('roadLayers').style.zIndex = 500;
+  map.createPane('busLayers').style.zIndex = 600;
+  map.createPane('userLayers').style.zIndex = 700;
+}
 
-    const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
-    if (uaBoundariesCheckbox) {
-      uaBoundariesCheckbox.addEventListener('change', () => {
-        if (uaBoundariesCheckbox.checked) {
-          uaBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          uaBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      });
-    }
+/**
+ * Loads base map layers (boundaries, transport infrastructure)
+ * @returns {Promise} A promise that resolves when all base layers are loaded
+ */
+function loadBaseLayers() {
+  console.log('Loading base map layers...');
+  showBackgroundLoadingIndicator('Loading map layers...');
+  
+  return Promise.all([
+    loadBoundaryData(),
+    loadTransportInfrastructure()
+  ]).then(() => {
+    hideBackgroundLoadingIndicator();
+  });
+}
 
-    const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
-    if (wardBoundariesCheckbox) {
-      wardBoundariesCheckbox.addEventListener('change', () => {
-        if (wardBoundariesCheckbox.checked) {
-          wardBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          wardBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      });
-    }
-    
-    const busStopsCheckbox = document.getElementById('busStopsCheckbox');
-    if (busStopsCheckbox) {
-      busStopsCheckbox.addEventListener('change', () => {
-        if (busStopsCheckbox.checked) {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ 
-              opacity: 1, 
-              fillOpacity: layer.options._calculatedFillOpacity 
-            });
-          });
-        } else {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: 0, fillOpacity: 0 });
-          });
-        }
-      });
-    }
-    
-    const busLinesCheckbox = document.getElementById('busLinesCheckbox');
-    if (busLinesCheckbox) {
-      busLinesCheckbox.addEventListener('change', () => {
-        if (busLinesCheckbox.checked) {
-          busLinesLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: layer.options._calculatedOpacity });
-          });
-        } else {
-          busLinesLayer.setStyle({ opacity: 0 });
-        }
-      });
-    }
-
-    const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
-      if (roadNetworkCheckbox) {
-        roadNetworkCheckbox.addEventListener('change', () => {
-          if (roadNetworkCheckbox.checked) {
-            roadNetworkLayer.setStyle({
-                opacity: 1,
-              });
-          } else {
-            roadNetworkLayer.setStyle({
-              opacity: 0,
-            });
-          }
+/**
+ * Loads boundary data (Local Authorities, Wards)
+ * @returns {Promise} A promise that resolves when boundary data is loaded
+ */
+function loadBoundaryData() {
+  console.log('Loading boundary data...');
+  const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
+  
+  return Promise.all([
+    // Load Local Authority boundaries
+    fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
+      .then(response => response.json())
+      .then(data => {
+        return convertMultiPolygonToPolygons(data).then(convertedData => {
+          uaBoundariesLayer = L.geoJSON(convertedData, {
+            pane: 'boundaryLayers',
+            style: function (feature) {
+              return {
+                color: 'black',
+                weight: 1.5,
+                fillOpacity: 0,
+                opacity: 0
+              };
+            },
+          }).addTo(map);
         });
-      }
-  }
-  createStaticLegendControls();
+      }),
+    
+    // Load Ward boundaries
+    fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
+      .then(response => response.json())
+      .then(data => {
+        return convertMultiPolygonToPolygons(data)
+          .then(convertedData => {
+            const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
+            const wardGeoJson = {
+              type: 'FeatureCollection',
+              features: filteredFeatures
+            };
 
-  function initializeLegendControls() {
-    console.log('Initializing legend controls...');
-    document.querySelectorAll('.legend-category-header').forEach(header => {
-      header.addEventListener('click', function() {
-        const category = this.closest('.legend-category');
-        category.classList.toggle('legend-category-collapsed');
+            wardBoundariesLayer = L.geoJSON(wardGeoJson, {
+              pane: 'boundaryLayers',
+              style: function () {
+                return {
+                  color: 'black',
+                  weight: 1,
+                  fillOpacity: 0,
+                  opacity: 0
+                };
+              },
+            }).addTo(map);
+            console.log("Ward boundaries layer added to map.");
+          });
+      })
+  ]).catch(error => {
+    console.error("Error loading boundary data:", error);
+  });
+}
+
+/**
+ * Loads transport infrastructure (bus lines, stops, road network)
+ * @returns {Promise} A promise that resolves when transport infrastructure is loaded
+ */
+function loadTransportInfrastructure() {
+  console.log('Loading transport infrastructure...');
+  
+  return Promise.all([
+    // Load bus lines
+    fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
+      .then(response => response.json())
+      .then(data => {
+        busLinesLayer = L.geoJSON(data, {
+          pane: 'busLayers',
+          style: function (feature) {
+            const frequency = parseFloat(feature.properties.am_peak_service_frequency) || 0;
+            const opacity = frequency === 0 ? 0.1 : Math.min(0.1 + (frequency / 6) * 0.4, 0.5);
+            
+            return {
+              color: 'green',
+              weight: 2,
+              fillOpacity: 0,
+              opacity: 0,
+              _calculatedOpacity: opacity
+            };
+          },
+        }).addTo(map);
+      }),
+    
+    // Load bus stops
+    fetch('https://AmFa6.github.io/TAF_test/stops.geojson')
+      .then(response => response.json())
+      .then(data => {
+        busStopsLayer = L.geoJSON(data, {
+          pane: 'busLayers',
+          pointToLayer: function(feature, latlng) {
+            const frequency = parseFloat(feature.properties.am_peak_combined_frequency) || 0;
+            const fillOpacity = frequency === 0 ? 0 : Math.min(frequency / 12, 1);
+            
+            return L.circleMarker(latlng, {
+              radius: 3,
+              fillColor: 'green',
+              color: 'green',
+              weight: 0.5,
+              opacity: 0,
+              fillOpacity: 0,
+              _calculatedFillOpacity: fillOpacity
+            });
+          }
+        }).addTo(map);
+      }),
+    
+    // Load road network
+    fetch('https://AmFa6.github.io/TAF_test/simplified_network.geojson')
+      .then(response => response.json())
+      .then(data => {
+        roadNetworkLayer = L.geoJSON(data, {
+          pane: 'roadLayers',
+          style: function (feature) {
+            const roadFunction = feature.properties.roadfunction;
+            let weight = 0;
+            
+            if (roadFunction === 'Motorway') {
+              weight = 4;
+            } else if (roadFunction === 'A Road') {
+              weight = 2;
+            }
+            
+            return {
+              color: 'white',
+              weight: weight,
+              opacity: 0,
+            };
+          },
+        }).addTo(map);
+      })
+  ]).catch(error => {
+    console.error("Error loading transport infrastructure:", error);
+  });
+}
+
+/**
+ * Loads heavier data (grid, training centers) in the background
+ */
+function loadBackgroundData() {
+  console.log('Starting background data loading...');
+  
+  // Load training centers data first as it's smaller
+  showBackgroundLoadingIndicator('Loading facilities data...');
+  loadTrainingCentres()
+    .then(() => {
+      console.log('Training centers loaded successfully');
+      hideBackgroundLoadingIndicator();
+      
+      // Initialize training center functionality after data is loaded
+      initializeTrainingCentres();
+      
+      // Now load the grid data which is much larger
+      loadGridData();
+    })
+    .catch(error => {
+      console.error('Error loading training centres:', error);
+      hideBackgroundLoadingIndicator();
+      showErrorNotification('Error loading training center data. Some features may be limited.');
+      
+      // Still try to load grid data even if training centers fail
+      loadGridData();
+    });
+}
+
+/**
+ * Loads grid data in the background
+ */
+function loadGridData() {
+  showBackgroundLoadingIndicator('Loading grid data...');
+  
+  Promise.all([
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
+  ])
+    .then(([data1, data2, csvText]) => {    
+      console.log("Processing grid data in background...");
+      
+      // Process grid data in batches to avoid blocking the UI
+      processGridData(data1, data2, csvText).then(processedGrid => {
+        grid = processedGrid;
+        
+        // Calculate statistics once for all important attributes
+        calculateGridStatistics(grid);
+        
+        // Update UI elements that depend on grid data
+        updateFilterDropdown();
+        updateFilterValues();
+        
+        if (initialLoadComplete) {
+          updateSummaryStatistics(grid.features);
+        }
+        
+        hideBackgroundLoadingIndicator();
+        console.log("Grid data loading and processing complete");
+      });
+    })
+    .catch(error => {
+      console.error("Error loading grid data:", error);
+      hideBackgroundLoadingIndicator();
+      showErrorNotification("Error loading grid data. Some features may be limited.");
+    });
+}
+
+/**
+ * Processes grid data in batches to avoid UI blocking
+ * @param {Object} data1 First part of grid GeoJSON
+ * @param {Object} data2 Second part of grid GeoJSON
+ * @param {String} csvText CSV data for grid properties
+ * @returns {Promise} Promise that resolves with the processed grid data
+ */
+function processGridData(data1, data2, csvText) {
+  return new Promise((resolve) => {
+    console.log("Starting to process grid GeoJSON and CSV data...");
+    
+    // Parse CSV immediately as it's relatively fast
+    const csvData = Papa.parse(csvText, { header: true }).data;
+    
+    // Create lookup table for CSV data
+    const csvLookup = {};
+    csvData.forEach(row => {
+      if (row.OriginId_tracc) {
+        csvLookup[row.OriginId_tracc] = row;
+      }
+    });
+    
+    // Process GeoJSON data in batches
+    const batchSize = 1000;
+    let processedData1 = [], processedData2 = [];
+    
+    // Process first dataset
+    processFeaturesBatch(data1.features, csvLookup, 0, batchSize, processedData1, () => {
+      // After first dataset is processed, process second dataset
+      processFeaturesBatch(data2.features, csvLookup, 0, batchSize, processedData2, () => {
+        // Combine processed features into final grid dataset
+        const combinedData = {
+          type: 'FeatureCollection',
+          features: [...processedData1, ...processedData2]
+        };
+        
+        // Calculate centroids for each grid cell (needed for spatial operations)
+        combinedData.features.forEach(feature => {
+          const centroid = turf.centroid(feature);
+          feature.properties._centroid = centroid.geometry.coordinates;
+        });
+        
+        // Create grid centroids feature collection for spatial operations
+        const gridCentroidsFC = turf.featureCollection(
+          combinedData.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
+        );
+        
+        resolve(combinedData);
       });
     });
+  });
+}
+
+/**
+ * Process features in batches to prevent UI blocking
+ * @param {Array} features Array of GeoJSON features to process
+ * @param {Object} csvLookup Lookup table of CSV data
+ * @param {Number} startIndex Starting index for the batch
+ * @param {Number} batchSize Number of features to process in each batch
+ * @param {Array} results Array to store processed features
+ * @param {Function} onComplete Callback when all batches are complete
+ */
+function processFeaturesBatch(features, csvLookup, startIndex, batchSize, results, onComplete) {
+  const endIndex = Math.min(startIndex + batchSize, features.length);
+  
+  for (let i = startIndex; i < endIndex; i++) {
+    const feature = features[i];
+    const originId = feature.properties.OriginId_tracc;
     
-    const legendHeader = document.querySelector('.legend-header');
-    let isLegendExpanded = true;
+    // Only include features that have corresponding CSV data
+    if (originId && csvLookup[originId]) {
+      // Merge CSV properties into feature properties
+      Object.keys(csvLookup[originId]).forEach(key => {
+        if (key !== 'OriginId_tracc') {
+          feature.properties[key] = csvLookup[originId][key];
+        }
+      });
+      
+      results.push(feature);
+    }
+  }
+  
+  // Progress info for debugging
+  const progressPercent = Math.round((endIndex / features.length) * 100);
+  
+  if (endIndex < features.length) {
+    // Schedule next batch with small delay to allow UI to update
+    setTimeout(() => {
+      processFeaturesBatch(features, csvLookup, endIndex, batchSize, results, onComplete);
+    }, 0);
+  } else {
+    // All features processed
+    onComplete();
+  }
+}
+
+/**
+ * Calculates and stores min/max values for important grid attributes
+ * @param {Object} gridData The grid GeoJSON data
+ */
+function calculateGridStatistics(gridData) {
+  if (!gridData || !gridData.features || gridData.features.length === 0) return;
+  
+  console.log("Calculating grid statistics for optimization...");
+  
+  // Reset statistics objects
+  gridStatistics = {
+    pop: { min: Infinity, max: -Infinity },
+    IMDScore: { min: Infinity, max: -Infinity },
+    car_availability_ts045: { min: Infinity, max: -Infinity },
+    pop_growth: { min: Infinity, max: -Infinity },
+    IMD_Decile: { min: Infinity, max: -Infinity }
+  };
+  
+  // Process in batches to avoid blocking the UI
+  const BATCH_SIZE = 5000;
+  const features = gridData.features;
+  const totalBatches = Math.ceil(features.length / BATCH_SIZE);
+  
+  function processBatch(batchIndex) {
+    const startIdx = batchIndex * BATCH_SIZE;
+    const endIdx = Math.min((batchIndex + 1) * BATCH_SIZE, features.length);
     
-    legendHeader.addEventListener('click', function() {
-      isLegendExpanded = !isLegendExpanded;
+    for (let i = startIdx; i < endIdx; i++) {
+      const props = features[i].properties;
+      if (!props) continue;
       
-      const legend = document.getElementById('legend');
-      legend.classList.toggle('collapsed', !isLegendExpanded);
-      
-      const legendContent = document.getElementById('legend-content-wrapper');
-      if (legendContent) {
-        legendContent.style.display = isLegendExpanded ? 'block' : 'none';
+      // For each field we care about
+      for (const field in gridStatistics) {
+        if (props[field] !== undefined && props[field] !== null) {
+          const value = parseFloat(props[field]);
+          if (!isNaN(value)) {
+            gridStatistics[field].min = Math.min(gridStatistics[field].min, value);
+            gridStatistics[field].max = Math.max(gridStatistics[field].max, value);
+          }
+        }
       }
-    });
-  }
-  
-  initializeLegendControls();
-
-  const dataLayerCategory = document.getElementById('data-layer-category');
-  if (dataLayerCategory) {
-    dataLayerCategory.style.display = 'none';
-  }
-
-  const fileInput = document.getElementById('fileUpload');
-  const fileNameDisplay = document.getElementById('fileNameDisplay');
-  const uploadButton = document.getElementById('uploadButton');
-  
-  fileInput.addEventListener('change', function() {
-    if (this.files.length > 0) {
-      fileNameDisplay.textContent = this.files[0].name;
-      uploadButton.disabled = false;
+    }
+    
+    if (batchIndex + 1 < totalBatches) {
+      // Process next batch with minimal delay to allow UI updates
+      setTimeout(() => processBatch(batchIndex + 1), 0);
     } else {
-      fileNameDisplay.textContent = '';
-      uploadButton.disabled = true;
+      // All batches processed
+      console.log("Grid statistics calculation complete:", gridStatistics);
+      
+      // Now that we have statistics, update the sliders
+      updateSliderRanges('Amenities', 'Opacity');
+      updateSliderRanges('Amenities', 'Outline');
     }
-  });
-  
-  uploadButton.addEventListener('click', function() {
-    const file = fileInput.files[0];
-    if (!file) return;
-    
-    const fileExtension = file.name.split('.').pop().toLowerCase();
-    
-    if (fileExtension === 'geojson' || fileExtension === 'json') {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const layerData = JSON.parse(e.target.result);
-          addUserLayer(layerData, file.name);
-        } catch (error) {
-          alert('Error processing file: ' + error.message);
-        }
-      };
-      reader.readAsText(file);
-    } else if (fileExtension === 'kml') {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        try {
-          const kml = new DOMParser().parseFromString(e.target.result, 'text/xml');
-          const layerData = toGeoJSON.kml(kml);
-          addUserLayer(layerData, file.name);
-        } catch (error) {
-          alert('Error processing file: ' + error.message);
-        }
-      };
-      reader.readAsText(file);
-    }
-    
-    fileInput.value = '';
-    fileNameDisplay.textContent = '';
-    uploadButton.disabled = true;
-  });
-
-  initializeFileUpload();
-  initializeTrainingCentres();
-
-  document.getElementById('add-attribute-field').addEventListener('click', function() {
-    addAttributeField();
-  });
-  
-  document.getElementById('save-attributes').addEventListener('click', function() {
-    saveAttributes();
-  });
-  
-  document.getElementById('cancel-attributes').addEventListener('click', function() {
-    cancelAttributeEditing();
-  });
-
-  setupDrawingTools();
-
-  function setupMapPanes() {
-    console.log('Setting up map panes...');
-    const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
-    existingPanes.forEach(pane => {
-      if (pane.className.includes('custom-pane')) {
-        pane.parentNode.removeChild(pane);
-      }
-    });
-    
-    map.createPane('polygonLayers').style.zIndex = 300;
-    map.createPane('boundaryLayers').style.zIndex = 400;
-    map.createPane('roadLayers').style.zIndex = 500;
-    map.createPane('busLayers').style.zIndex = 600;
-    map.createPane('userLayers').style.zIndex = 700;
   }
   
-  setupMapPanes();
+  // Start batch processing
+  processBatch(0);
+}
 
-  initialLoadComplete = true;
-});
+/**
+ * Shows a subtle loading indicator for background processes
+ * @param {String} message The message to display in the indicator
+ */
+function showBackgroundLoadingIndicator(message = 'Loading data...') {
+  let indicator = document.getElementById('background-loading-indicator');
+  
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = 'background-loading-indicator';
+    indicator.style.cssText = 'position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,0.8);padding:5px 10px;border-radius:3px;font-size:12px;z-index:1000;display:flex;align-items:center;';
+    
+    const spinner = document.createElement('div');
+    spinner.className = 'mini-spinner';
+    spinner.style.cssText = 'width:12px;height:12px;border:2px solid #ccc;border-top-color:#3388ff;border-radius:50%;margin-right:8px;animation:spin 1s linear infinite;';
+    
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+    
+    const text = document.createElement('span');
+    text.id = 'background-loading-text';
+    
+    indicator.appendChild(spinner);
+    indicator.appendChild(text);
+    document.body.appendChild(indicator);
+  }
+  
+  const textElement = document.getElementById('background-loading-text');
+  if (textElement) textElement.textContent = message;
+  
+  indicator.style.display = 'flex';
+}
+
+/**
+ * Hides the background loading indicator
+ */
+function hideBackgroundLoadingIndicator() {
+  const indicator = document.getElementById('background-loading-indicator');
+  if (indicator) {
+    // Fade out gradually
+    indicator.style.transition = 'opacity 0.5s';
+    indicator.style.opacity = '0';
+    setTimeout(() => {
+      indicator.style.display = 'none';
+      indicator.style.opacity = '1';
+    }, 500);
+  }
+}
+
+/**
+ * Shows an error notification to the user
+ * @param {String} message The error message to display
+ */
+function showErrorNotification(message) {
+  const notification = document.createElement('div');
+  notification.className = 'error-notification';
+  notification.style.cssText = 'position:fixed;top:20px;right:20px;background:#f44336;color:white;padding:10px 20px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9999;max-width:80%;';
+  notification.textContent = message;
+  
+  const closeBtn = document.createElement('span');
+  closeBtn.style.cssText = 'margin-left:10px;cursor:pointer;font-weight:bold;';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = function() {
+    document.body.removeChild(notification);
+  };
+  
+  notification.appendChild(closeBtn);
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    if (document.body.contains(notification)) {
+      notification.style.transition = 'opacity 0.5s';
+      notification.style.opacity = '0';
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 500);
+    }
+  }, 5000);
+}
 
 map.on('zoomend', () => {
   const currentZoom = map.getZoom();
@@ -2861,23 +2914,20 @@ function configureSlider(sliderElement, isInverse) {
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
-    requestAnimationFrame(() => {
-      updateOpacityAndOutlineFields();
-    });
+    updateOpacityAndOutlineFields();
   });
 }
 
 function updateSliderRanges(type, scaleType) {
   console.log('Updating slider ranges...');
 
-  let field, rangeElement, minElement, maxElement, gridData, order, isInverse;
+  let field, rangeElement, minElement, maxElement, order, isInverse;
 
   if (scaleType === 'Opacity') {
     field = AmenitiesOpacity.value;
     rangeElement = AmenitiesOpacityRange;
     minElement = document.getElementById('opacityRangeAmenitiesMin');
     maxElement = document.getElementById('opacityRangeAmenitiesMax');
-    gridData = grid;
     order = opacityAmenitiesOrder;
     isInverse = isInverseAmenitiesOpacity;
   } else if (scaleType === 'Outline') {
@@ -2885,7 +2935,6 @@ function updateSliderRanges(type, scaleType) {
     rangeElement = AmenitiesOutlineRange;
     minElement = document.getElementById('outlineRangeAmenitiesMin');
     maxElement = document.getElementById('outlineRangeAmenitiesMax');
-    gridData = grid;
     order = outlineAmenitiesOrder;
     isInverse = isInverseAmenitiesOutline;
   }
@@ -2895,12 +2944,9 @@ function updateSliderRanges(type, scaleType) {
     return;
   }
   
-  if (gridData) {
-    const values = field !== "None" ? 
-      gridData.features.map(feature => feature.properties[field]).filter(value => value !== null && value !== 0) : [];
-    
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
+  if (field !== "None" && gridStatistics && gridStatistics[field]) {
+    const minValue = gridStatistics[field].min;
+    const maxValue = gridStatistics[field].max;
     
     const roundedMaxValue = Math.pow(10, Math.ceil(Math.log10(maxValue)));
     let step = roundedMaxValue / 100;
@@ -2937,7 +2983,7 @@ function updateSliderRanges(type, scaleType) {
       minElement.innerText = formatValue(adjustedMinValue, step);
       maxElement.innerText = formatValue(adjustedMaxValue, step);
     }
-    configureSlider(rangeElement, isInverse);   
+    configureSlider(rangeElement, isInverse);
   }
 }
 
@@ -4717,153 +4763,56 @@ async function calculateStatistics(features) {
   return {...baseStats, ...layerStats};
 }
 
-function calculateBaseStatistics(features) {
-  if (!features || features.length === 0) {
-    return {
-      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
-      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
-      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
-      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
-      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
-    };
-  }
-
-  console.log('Calculating stats for', features.length, 'features');
+function calculateBaseStatistics(gridData) {
+  if (!gridData || !gridData.features || gridData.features.length === 0) return;
   
+  console.log("Calculating grid statistics once for optimization...");
+  
+  // Reset statistics objects
+  gridStatistics = {
+    pop: { min: Infinity, max: -Infinity },
+    IMDScore: { min: Infinity, max: -Infinity },
+    car_availability_ts045: { min: Infinity, max: -Infinity },
+    pop_growth: { min: Infinity, max: -Infinity },
+    IMD_Decile: { min: Infinity, max: -Infinity }
+  };
+  
+  // Process in batches to avoid blocking the UI
   const BATCH_SIZE = 5000;
+  const features = gridData.features;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   
-  return new Promise(resolve => {
-    let stats = {
-      totalPopulation: 0,
-      minPopulation: Infinity,
-      maxPopulation: -Infinity,
-      
-      totalWeightedImdScore: 0,
-      minImdScore: Infinity,
-      maxImdScore: -Infinity,
-      
-      totalWeightedImdDecile: 0,
-      minImdDecile: Infinity,
-      maxImdDecile: -Infinity,
-      
-      totalWeightedCarAvailability: 0,
-      minCarAvailability: Infinity,
-      maxCarAvailability: -Infinity,
-      
-      totalPopGrowth: 0,
-      minPopGrowth: Infinity,
-      maxPopGrowth: -Infinity,
-      
-      populationWithImdScore: 0,
-      populationWithImdDecile: 0,
-      populationWithCarAvailability: 0
-    };
+  function processBatch(batchIndex) {
+    const startIdx = batchIndex * BATCH_SIZE;
+    const endIdx = Math.min((batchIndex + 1) * BATCH_SIZE, features.length);
     
-    let currentBatch = 0;
-    
-    function processBatch() {
-      const startIdx = currentBatch * BATCH_SIZE;
-      const endIdx = Math.min((currentBatch + 1) * BATCH_SIZE, features.length);
+    for (let i = startIdx; i < endIdx; i++) {
+      const props = features[i].properties;
+      if (!props) continue;
       
-      for (let i = startIdx; i < endIdx; i++) {
-        const props = features[i].properties;
-        if (!props) continue;
-        
-        const pop = Number(props.pop);
-        if (isFinite(pop) && pop >= 0) {
-          stats.totalPopulation += pop;
-          stats.minPopulation = Math.min(stats.minPopulation, pop);
-          stats.maxPopulation = Math.max(stats.maxPopulation, pop);
-          
-          const imdScore = Number(props.IMDScore);
-          if (isFinite(imdScore)) {
-            stats.totalWeightedImdScore += imdScore * pop;
-            stats.minImdScore = Math.min(stats.minImdScore, imdScore);
-            stats.maxImdScore = Math.max(stats.maxImdScore, imdScore);
-            stats.populationWithImdScore += pop;
-          }
-          
-          const imdDecile = Number(props.IMD_Decile);
-          if (isFinite(imdDecile)) {
-            stats.totalWeightedImdDecile += imdDecile * pop;
-            stats.minImdDecile = Math.min(stats.minImdDecile, imdDecile);
-            stats.maxImdDecile = Math.max(stats.maxImdDecile, imdDecile);
-            stats.populationWithImdDecile += pop;
-          }
-          
-          const carAvailability = Number(props.car_availability_ts045);
-          if (isFinite(carAvailability)) {
-            stats.totalWeightedCarAvailability += carAvailability * pop;
-            stats.minCarAvailability = Math.min(stats.minCarAvailability, carAvailability);
-            stats.maxCarAvailability = Math.max(stats.maxCarAvailability, carAvailability);
-            stats.populationWithCarAvailability += pop;
+      // For each field we care about
+      for (const field in gridStatistics) {
+        if (props[field] !== undefined && props[field] !== null) {
+          const value = parseFloat(props[field]);
+          if (!isNaN(value)) {
+            gridStatistics[field].min = Math.min(gridStatistics[field].min, value);
+            gridStatistics[field].max = Math.max(gridStatistics[field].max, value);
           }
         }
-        
-        const popGrowth = Number(props.pop_growth);
-        if (isFinite(popGrowth) && popGrowth >= 0) {
-          stats.totalPopGrowth += popGrowth;
-          stats.minPopGrowth = Math.min(stats.minPopGrowth, popGrowth);
-          stats.maxPopGrowth = Math.max(stats.maxPopGrowth, popGrowth);
-        }
-      }
-      
-      currentBatch++;
-      
-      if (currentBatch < totalBatches) {
-        requestAnimationFrame(processBatch);
-      } else {
-        if (stats.minPopulation === Infinity) stats.minPopulation = 0;
-        if (stats.maxPopulation === -Infinity) stats.maxPopulation = 0;
-        
-        if (stats.minImdScore === Infinity) stats.minImdScore = 0;
-        if (stats.maxImdScore === -Infinity) stats.maxImdScore = 0;
-        
-        if (stats.minImdDecile === Infinity) stats.minImdDecile = 0;
-        if (stats.maxImdDecile === -Infinity) stats.maxImdDecile = 0;
-        
-        if (stats.minCarAvailability === Infinity) stats.minCarAvailability = 0;
-        if (stats.maxCarAvailability === -Infinity) stats.maxCarAvailability = 0;
-        
-        if (stats.minPopGrowth === Infinity) stats.minPopGrowth = 0;
-        if (stats.maxPopGrowth === -Infinity) stats.maxPopGrowth = 0;
-        
-        const avgImdScore = stats.populationWithImdScore > 0 ? 
-          stats.totalWeightedImdScore / stats.populationWithImdScore : 0;
-        
-        const avgImdDecile = stats.populationWithImdDecile > 0 ? 
-          stats.totalWeightedImdDecile / stats.populationWithImdDecile : 0;
-        
-        const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
-          stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
-
-        resolve({
-          totalPopulation: stats.totalPopulation,
-          minPopulation: stats.minPopulation,
-          maxPopulation: stats.maxPopulation,
-          
-          avgImdScore: avgImdScore,
-          minImdScore: stats.minImdScore,
-          maxImdScore: stats.maxImdScore,
-          
-          avgImdDecile: avgImdDecile,
-          minImdDecile: stats.minImdDecile,
-          maxImdDecile: stats.maxImdDecile,
-          
-          avgCarAvailability: avgCarAvailability,
-          minCarAvailability: stats.minCarAvailability,
-          maxCarAvailability: stats.maxCarAvailability,
-          
-          totalPopGrowth: stats.totalPopGrowth,
-          minPopGrowth: stats.minPopGrowth,
-          maxPopGrowth: stats.maxPopGrowth
-        });
       }
     }
     
-    processBatch();
-  });
+    if (batchIndex + 1 < totalBatches) {
+      // Process next batch
+      setTimeout(() => processBatch(batchIndex + 1), 0);
+    } else {
+      // All batches processed
+      console.log("Grid statistics calculation complete:", gridStatistics);
+    }
+  }
+  
+  // Start batch processing
+  processBatch(0);
 }
 
 function calculateTimeStatistics(features) {
