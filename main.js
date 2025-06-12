@@ -174,17 +174,12 @@ function debounce(func, wait) {
 AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
-AmenitiesOpacity.addEventListener("change", debounce(() => {
+AmenitiesOpacity.addEventListener("change", () => {
   updateSliderRanges('Amenities', 'Opacity');
-  updateOpacityAndOutlineFields();
-  applyAmenitiesCatchmentLayerStyling();
-}, 500));
-
-AmenitiesOutline.addEventListener("change", debounce(() => {
+});
+AmenitiesOutline.addEventListener("change", () => {
   updateSliderRanges('Amenities', 'Outline');
-  updateOpacityAndOutlineFields();
-  applyAmenitiesCatchmentLayerStyling();
-}, 500));
+});
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
 });
