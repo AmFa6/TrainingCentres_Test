@@ -3135,9 +3135,15 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
   // Add styling to handles and connection areas
   const handles = sliderElement.querySelectorAll('.noUi-handle');
   if (handles.length > 0) {
-    handles[0].classList.add(isInverse ? '' : 'noUi-handle-transparent');
+    // Only add the transparent class conditionally but don't add empty classes
+    if (isInverse === false) {
+      handles[0].classList.add('noUi-handle-transparent');
+    }
+    
     if (handles.length > 1) {
-      handles[1].classList.add(isInverse ? 'noUi-handle-transparent' : '');
+      if (isInverse === true) {
+        handles[1].classList.add('noUi-handle-transparent');
+      }
       handles[0].classList.add('noUi-handle-lower');
       handles[1].classList.add('noUi-handle-upper');
     }
