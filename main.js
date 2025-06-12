@@ -157,6 +157,7 @@ const AmenitiesInverseOutline = document.getElementById("inverseOutlineScaleAmen
 const amenityLayers = {};
 const filterTypeDropdown = document.getElementById('filterTypeDropdown');
 const filterValueDropdown = document.getElementById('filterValueDropdown');
+const debouncedUpdateOpacityOutlineFields = debounce(updateOpacityAndOutlineFields, 1000);
 
 AmenitiesOpacity.value = "None";
 AmenitiesOutline.value = "None";
@@ -3120,7 +3121,7 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     
     if (sliderElement._isInitialized) {
       requestAnimationFrame(() => {
-        updateOpacityAndOutlineFields();
+        debouncedUpdateOpacityOutlineFields();
       });
     }
   });
@@ -3206,7 +3207,7 @@ function updateSliderRanges(type, scaleType) {
   if (wasInitialized && field !== "None") {
     setTimeout(() => {
       rangeElement._isInitialized = true;
-      updateOpacityAndOutlineFields();
+      debouncedUpdateOpacityOutlineFields();
     }, 200);
   } else {
     setTimeout(() => {
