@@ -71,6 +71,7 @@ let lastAmenitiesState = {
   selectedAmenitiesAmenities: []
 };
 let isUpdatingStyles = false;
+let isUpdatingOpacityOutlineFields = false;
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
@@ -173,18 +174,14 @@ function debounce(func, wait) {
 AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
-AmenitiesOpacity.addEventListener("change", () => {
+AmenitiesOpacity.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Opacity');
-  setTimeout(() => {
-    updateOpacityAndOutlineFields();
-  }, 500);
-});
-AmenitiesOutline.addEventListener("change", () => {
+  updateOpacityAndOutlineFields();
+}, 500));
+AmenitiesOutline.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Outline');
-  setTimeout(() => {
-    updateOpacityAndOutlineFields();
-  }, 500);
-});
+  updateOpacityAndOutlineFields();
+}, 500));
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
 });
@@ -4132,18 +4129,24 @@ function updateAmenitiesCatchmentLayer() {
                     layer.feature.properties._weight = undefined;
                 });
                 
+                const updatesComplete = () => {
+                  drawSelectedAmenities();
+                  updateLegend();
+                  updateFilterDropdown();
+                  updateFilterValues('amenities');
+                };
+                
+                // First update the ranges
                 updateSliderRanges('Amenities', 'Opacity');
                 updateSliderRanges('Amenities', 'Outline');
-                drawSelectedAmenities();
-                updateLegend();
-                updateFilterDropdown();
-                updateFilterValues('amenities');
-            } else {
-                applyAmenitiesCatchmentLayerStyling();
-                updateSummaryStatistics(getCurrentFeatures());
-            }
-            isUpdatingCatchmentLayer = false;
-            hideLoadingOverlay();
+                
+                setTimeout(updatesComplete, 50);
+              } else {
+                  applyAmenitiesCatchmentLayerStyling();
+                  updateSummaryStatistics(getCurrentFeatures());
+              }
+              isUpdatingCatchmentLayer = false;
+              hideLoadingOverlay();
         })
         .catch(error => {
             console.error("Error loading journey time data:", error);
@@ -4232,6 +4235,9 @@ function applyAmenitiesCatchmentLayerStyling() {
 }
 
 function updateOpacityAndOutlineFields() {
+    if (isUpdatingOpacityOutlineFields) return;
+    isUpdatingOpacityOutlineFields = true;
+
     console.log("updateOpacityAndOutlineFields called");
     
     if (!AmenitiesCatchmentLayer) return;
@@ -4410,6 +4416,8 @@ function updateOpacityAndOutlineFields() {
             isInverseAmenitiesOutline
         });
     }
+  isUpdatingOpacityOutlineFields = false;
+
 }
 
 function updateFilterDropdown() {
