@@ -65,6 +65,11 @@ let previousFilterSelections = {
   Range: null,
 };
 let isUpdatingCatchmentLayer = false;
+let lastAmenitiesState = {
+  selectingFromMap: false,
+  selectedAmenitiesFromMap: [],
+  selectedAmenitiesAmenities: []
+};
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
