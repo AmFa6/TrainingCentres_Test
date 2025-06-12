@@ -255,6 +255,173 @@ document.addEventListener('DOMContentLoaded', (event) => {
 });
 
 /**
+ * Initializes the basic UI components
+ * This is the first function called during application initialization
+ */
+function initializeUI() {
+  console.log('Initializing user interface components...');
+
+  // Create static legend controls
+  createStaticLegendControls();
+
+  // Initialize legend controls (collapsible behavior)
+  initializeLegendControls();
+  
+  // Hide data layer category initially
+  const dataLayerCategory = document.getElementById('data-layer-category');
+  if (dataLayerCategory) {
+    dataLayerCategory.style.display = 'none';
+  }
+  
+  // Set up event listeners for additional UI elements
+  setupAdditionalUIListeners();
+}
+
+/**
+ * Sets up event listeners for UI elements like checkboxes and buttons
+ */
+function setupAdditionalUIListeners() {
+  // Add any additional global UI element listeners here
+  document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      if (AmenitiesCatchmentLayer) {
+        applyAmenitiesCatchmentLayerStyling();
+      }
+    });
+  });
+}
+
+/**
+ * Creates and sets up event listeners for static legend controls
+ */
+function createStaticLegendControls() {
+  console.log('Creating static legend controls...');
+  
+  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
+  if (amenitiesCheckbox) {
+    amenitiesCheckbox.addEventListener('change', () => {
+      if (amenitiesCheckbox.checked) {
+        drawSelectedAmenities();
+        amenitiesLayerGroup.addTo(map);
+      } else {
+        map.removeLayer(amenitiesLayerGroup);
+      }
+    });
+  }
+
+  const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
+  if (uaBoundariesCheckbox) {
+    uaBoundariesCheckbox.addEventListener('change', () => {
+      if (uaBoundariesLayer) {
+        if (uaBoundariesCheckbox.checked) {
+          uaBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          uaBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
+  if (wardBoundariesCheckbox) {
+    wardBoundariesCheckbox.addEventListener('change', () => {
+      if (wardBoundariesLayer) {
+        if (wardBoundariesCheckbox.checked) {
+          wardBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          wardBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+  
+  const busStopsCheckbox = document.getElementById('busStopsCheckbox');
+  if (busStopsCheckbox) {
+    busStopsCheckbox.addEventListener('change', () => {
+      if (busStopsLayer) {
+        if (busStopsCheckbox.checked) {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ 
+              opacity: 1, 
+              fillOpacity: layer.options._calculatedFillOpacity 
+            });
+          });
+        } else {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: 0, fillOpacity: 0 });
+          });
+        }
+      }
+    });
+  }
+  
+  const busLinesCheckbox = document.getElementById('busLinesCheckbox');
+  if (busLinesCheckbox) {
+    busLinesCheckbox.addEventListener('change', () => {
+      if (busLinesLayer) {
+        if (busLinesCheckbox.checked) {
+          busLinesLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: layer.options._calculatedOpacity });
+          });
+        } else {
+          busLinesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
+  if (roadNetworkCheckbox) {
+    roadNetworkCheckbox.addEventListener('change', () => {
+      if (roadNetworkLayer) {
+        if (roadNetworkCheckbox.checked) {
+          roadNetworkLayer.setStyle({
+            opacity: 1,
+          });
+        } else {
+          roadNetworkLayer.setStyle({
+            opacity: 0,
+          });
+        }
+      }
+    });
+  }
+}
+
+/**
+ * Initializes collapsible legend controls
+ */
+function initializeLegendControls() {
+  console.log('Initializing legend controls...');
+  
+  // Setup legend category headers
+  document.querySelectorAll('.legend-category-header').forEach(header => {
+    header.addEventListener('click', function() {
+      const category = this.closest('.legend-category');
+      category.classList.toggle('legend-category-collapsed');
+    });
+  });
+  
+  // Setup main legend header
+  const legendHeader = document.querySelector('.legend-header');
+  let isLegendExpanded = true;
+  
+  if (legendHeader) {
+    legendHeader.addEventListener('click', function() {
+      isLegendExpanded = !isLegendExpanded;
+      
+      const legend = document.getElementById('legend');
+      legend.classList.toggle('collapsed', !isLegendExpanded);
+      
+      const legendContent = document.getElementById('legend-content-wrapper');
+      if (legendContent) {
+        legendContent.style.display = isLegendExpanded ? 'block' : 'none';
+      }
+    });
+  }
+}
+
+/**
  * Initializes collapsible panels and their behavior
  */
 function initializeCollapsiblePanels() {
@@ -792,6 +959,26 @@ function showErrorNotification(message) {
       }, 500);
     }
   }, 5000);
+}
+
+/**
+ * Shows a loading overlay during important operations
+ */
+function showLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.classList.add('active');
+  }
+}
+
+/**
+ * Hides the loading overlay when operations complete
+ */
+function hideLoadingOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+  }
 }
 
 map.on('zoomend', () => {
