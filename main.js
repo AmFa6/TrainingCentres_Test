@@ -2885,7 +2885,7 @@ function updateSliderRanges(type, scaleType) {
     rangeElement = AmenitiesOpacityRange;
     minElement = document.getElementById('opacityRangeAmenitiesMin');
     maxElement = document.getElementById('opacityRangeAmenitiesMax');
-    gridData = gridLayer;
+    gridData = grid;
     order = opacityAmenitiesOrder;
     isInverse = isInverseAmenitiesOpacity;
   } else if (scaleType === 'Outline') {
@@ -2893,7 +2893,7 @@ function updateSliderRanges(type, scaleType) {
     rangeElement = AmenitiesOutlineRange;
     minElement = document.getElementById('outlineRangeAmenitiesMin');
     maxElement = document.getElementById('outlineRangeAmenitiesMax');
-    gridData = gridLayer;
+    gridData = grid;
     order = outlineAmenitiesOrder;
     isInverse = isInverseAmenitiesOutline;
   }
