@@ -234,8 +234,9 @@ document.addEventListener('DOMContentLoaded', (event) => {
   setupMapPanes();
   
   // Initialize sliders and UI components that don't require data
-  initializeSliders(AmenitiesOpacityRange);
-  initializeSliders(AmenitiesOutlineRange);
+  initializeAndConfigureSlider(AmenitiesOpacityRange, isInverseAmenitiesOpacity);
+  initializeAndConfigureSlider(AmenitiesOutlineRange, isInverseAmenitiesOutline);
+  
   initializeFileUpload();
   setupDrawingTools();
   
@@ -3109,66 +3110,58 @@ function isPanelOpen(panelName) {
   return false;
 }
 
-function configureSlider(sliderElement, isInverse) {
+function initializeAndConfigureSlider(sliderElement, isInverse = false) {
+  // Destroy any existing slider
   if (sliderElement.noUiSlider) {
-    sliderElement.noUiSlider.off('update');
+    sliderElement.noUiSlider.destroy();
   }
-  
-  const handles = sliderElement.querySelectorAll('.noUi-handle');
-  const connectElements = sliderElement.querySelectorAll('.noUi-connect');
 
-  if (handles.length >= 2) {
-    handles[0].classList.add('noUi-handle-lower');
-    handles[1].classList.add('noUi-handle-upper');
-  }
-  
-  handles.forEach(handle => {
-    handle.classList.remove('noUi-handle-transparent');
-  });
-  
-  connectElements.forEach(connect => {
-    connect.classList.remove('noUi-connect-dark-grey', 'noUi-connect-gradient-right', 'noUi-connect-gradient-left');
-  });
-
-  if (isInverse) {
-    sliderElement.noUiSlider.updateOptions({
-      connect: [true, true, true]
-    }, false);
-    
-    if (handles.length >= 2) {
-      handles[1].classList.add('noUi-handle-transparent');
-      handles[0].classList.remove('noUi-handle-transparent');
+  // Create the slider with default settings
+  noUiSlider.create(sliderElement, {
+    start: ['', ''],
+    connect: [true, true, true],
+    range: {
+      'min': 0,
+      'max': 0
+    },
+    step: 1,
+    tooltips: false,
+    format: {
+      to: value => parseFloat(value),
+      from: value => parseFloat(value)
     }
-    
-    if (connectElements.length >= 3) {
+  });
+
+  // Add styling to handles and connection areas
+  const handles = sliderElement.querySelectorAll('.noUi-handle');
+  if (handles.length > 0) {
+    handles[0].classList.add(isInverse ? '' : 'noUi-handle-transparent');
+    if (handles.length > 1) {
+      handles[1].classList.add(isInverse ? 'noUi-handle-transparent' : '');
+      handles[0].classList.add('noUi-handle-lower');
+      handles[1].classList.add('noUi-handle-upper');
+    }
+  }
+
+  const connectElements = sliderElement.querySelectorAll('.noUi-connect');
+  if (connectElements.length > 2) {
+    if (isInverse) {
       connectElements[0].classList.add('noUi-connect-dark-grey');
       connectElements[1].classList.add('noUi-connect-gradient-left');
-      connectElements[2].classList.remove('noUi-connect-dark-grey');
-    }
-  } else {
-    sliderElement.noUiSlider.updateOptions({
-      connect: [true, true, true]
-    }, false);
-    
-    if (handles.length >= 2) {
-      handles[0].classList.add('noUi-handle-transparent');
-      handles[1].classList.remove('noUi-handle-transparent');
-    }
-    
-    if (connectElements.length >= 3) {
-      connectElements[0].classList.remove('noUi-connect-dark-grey');
+    } else {
       connectElements[1].classList.add('noUi-connect-gradient-right');
       connectElements[2].classList.add('noUi-connect-dark-grey');
     }
   }
 
+  // Setup event listener for value updates
   sliderElement.noUiSlider.on('update', function (values, handle) {
     const handleElement = handles[handle];
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
     requestAnimationFrame(() => {
-      updateOpacityAndOutlineFields()
+      updateOpacityAndOutlineFields();
     });
   });
 }
@@ -3179,28 +3172,28 @@ function updateSliderRanges(type, scaleType) {
   if (isUpdatingSliders) return;
   isUpdatingSliders = true;
 
-  let field, rangeElement, minElement, maxElement, order, isInverse;
+  let field, rangeElement, minElement, maxElement, isInverse;
 
   if (scaleType === 'Opacity') {
     field = AmenitiesOpacity.value;
     rangeElement = AmenitiesOpacityRange;
     minElement = document.getElementById('opacityRangeAmenitiesMin');
     maxElement = document.getElementById('opacityRangeAmenitiesMax');
-    order = opacityAmenitiesOrder;
     isInverse = isInverseAmenitiesOpacity;
   } else if (scaleType === 'Outline') {
     field = AmenitiesOutline.value;
     rangeElement = AmenitiesOutlineRange;
     minElement = document.getElementById('outlineRangeAmenitiesMin');
     maxElement = document.getElementById('outlineRangeAmenitiesMax');
-    order = outlineAmenitiesOrder;
     isInverse = isInverseAmenitiesOutline;
   }
 
-  if (!rangeElement || !rangeElement.noUiSlider) {
-    isUpdatingSliders = false;
-    return;
+  // Recreate the slider with the current inverse status
+  if (rangeElement.noUiSlider) {
+    rangeElement.noUiSlider.destroy();
   }
+  
+  initializeAndConfigureSlider(rangeElement, isInverse);
   
   if (field !== "None" && gridStatistics && gridStatistics[field]) {
     const minValue = gridStatistics[field].min;
@@ -3241,49 +3234,15 @@ function updateSliderRanges(type, scaleType) {
       minElement.innerText = formatValue(adjustedMinValue, step);
       maxElement.innerText = formatValue(adjustedMaxValue, step);
     }
-    configureSlider(rangeElement, isInverse);
   }
-}
-
-function initializeSliders(sliderElement) {
-  if (sliderElement.noUiSlider) {
-    sliderElement.noUiSlider.destroy();
-  }
-
-  noUiSlider.create(sliderElement, {
-    start: ['', ''],
-    connect: [true, true, true],
-    range: {
-      'min': 0,
-      'max': 0
-    },
-    step: 1,
-    tooltips: false,
-    format: {
-      to: value => parseFloat(value),
-      from: value => parseFloat(value)
-    }
-  });
-
-  const handles = sliderElement.querySelectorAll('.noUi-handle');
-  if (handles.length > 0) {
-    handles[0].classList.add('noUi-handle-transparent');
-  }
-
-  const connectElements = sliderElement.querySelectorAll('.noUi-connect');
-  if (connectElements.length > 2) {
-    connectElements[1].classList.add('noUi-connect-gradient-right');
-    connectElements[2].classList.add('noUi-connect-dark-grey');
-  }
-
-  configureSlider(sliderElement, false);
+  
+  isUpdatingSliders = false;
 }
 
 function toggleInverseScale(type, scaleType) {
   console.log('Toggling inverse scale...');
-  isUpdatingSliders = true;
-
-  let isInverse, rangeElement, order;
+  
+  let isInverse, rangeElement;
 
   if (scaleType === 'Opacity') {
     isInverseAmenitiesOpacity = !isInverseAmenitiesOpacity;
@@ -3297,14 +3256,16 @@ function toggleInverseScale(type, scaleType) {
     outlineAmenitiesOrder = isInverse ? 'high-to-low' : 'low-to-high';
   }
 
-  const currentValues = rangeElement.noUiSlider.get();
+  // Get current values before recreating the slider
+  const currentValues = rangeElement.noUiSlider ? rangeElement.noUiSlider.get() : ['', ''];
   
-  configureSlider(rangeElement, isInverse);
-  rangeElement.noUiSlider.set(currentValues, false);
-
+  // Update the slider ranges which will recreate the slider with new inverse settings
   updateSliderRanges(type, scaleType);
-
-  isUpdatingSliders = false;
+  
+  // Restore the previous values
+  if (rangeElement.noUiSlider) {
+    rangeElement.noUiSlider.set(currentValues, false);
+  }
 }
 
 function scaleExp(value, minVal, maxVal, minScale, maxScale, order) {
