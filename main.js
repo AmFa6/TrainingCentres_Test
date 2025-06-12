@@ -14,7 +14,7 @@ Promise.all([
   fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
 ])
   .then(([data1, data2, csvText]) => {    
-    //console.log("Starting to process grid GeoJSON and CSV data...");
+    console.log("Starting to process grid GeoJSON and CSV data...");
     const csvData = Papa.parse(csvText, { header: true }).data;
     
     const csvLookup = {};
@@ -51,7 +51,7 @@ Promise.all([
     });
     
     grid = combinedData;
-    //console.log("Grid data loaded, filtered and combined:", grid);
+    console.log("Grid data loaded, filtered and combined:", grid);
     
     grid.features.forEach(feature => {
       const centroid = turf.centroid(feature);
@@ -82,7 +82,7 @@ Promise.all([
   });
 
 function convertMultiPolygonToPolygons(geoJson) {
-  //console.log('Converting MultiPolygon to Polygon...');
+  console.log('Converting MultiPolygon to Polygon...');
   return new Promise((resolve) => {
     const features = [];
     const featureCounts = {};
@@ -199,7 +199,7 @@ fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_
             };
           },
         }).addTo(map);
-        //console.log("Ward boundaries layer added to map.");
+        console.log("Ward boundaries layer added to map.");
       });
   })
 
@@ -440,7 +440,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   };
 
   function handlePanelStateChange(header, isOpen) {
-    //console.log(`Panel state changed: ${header.textContent}, isOpen: ${isOpen}`);
+    console.log(`Panel state changed: ${header.textContent}, isOpen: ${isOpen}`);
     const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
     if (isOpen) {
@@ -538,7 +538,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   });
   
   function createStaticLegendControls() {
-    //console.log('Creating static legend controls...');
+    console.log('Creating static legend controls...');
     const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
     if (amenitiesCheckbox) {
       amenitiesCheckbox.addEventListener('change', () => {
@@ -622,7 +622,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   createStaticLegendControls();
 
   function initializeLegendControls() {
-    //console.log('Initializing legend controls...');
+    console.log('Initializing legend controls...');
     document.querySelectorAll('.legend-category-header').forEach(header => {
       header.addEventListener('click', function() {
         const category = this.closest('.legend-category');
@@ -721,7 +721,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   setupDrawingTools();
 
   function setupMapPanes() {
-    //console.log('Setting up map panes...');
+    console.log('Setting up map panes...');
     const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
     existingPanes.forEach(pane => {
       if (pane.className.includes('custom-pane')) {
@@ -917,7 +917,7 @@ map.on('click', function (e) {
 });
 
 function initializeFileUpload() {
-  //console.log('Initializing file upload...');
+  console.log('Initializing file upload...');
   const fileInput = document.getElementById('fileUpload');
   const fileNameDisplay = document.getElementById('fileNameDisplay');
   const uploadButton = document.getElementById('uploadButton');
@@ -972,7 +972,7 @@ function initializeFileUpload() {
 }
 
 function loadTrainingCentres() {
-  //console.log('Loading training centres...');
+  console.log('Loading training centres...');
   return fetch(AmenitiesFiles[0].path)
     .then(response => response.json())
     .then(data => {
@@ -982,7 +982,7 @@ function loadTrainingCentres() {
 }
 
 function setupSubjectAndAimLevelCheckboxes() {
-  //console.log('Setting up subject and aim level checkboxes...');
+  console.log('Setting up subject and aim level checkboxes...');
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   
@@ -1039,7 +1039,7 @@ function setupSubjectAndAimLevelCheckboxes() {
 }
 
 function filterTrainingCentres() {
-  //console.log('Filtering training centres...');
+  console.log('Filtering training centres...');
   if (!amenityLayers['TrainingCentres']) return [];
   
   const selectedYear = AmenitiesYear.value;
@@ -1099,7 +1099,7 @@ function filterTrainingCentres() {
 }
 
 function getTrainingCenterPopupContent(properties) {
-  //console.log('Generating popup content for training center...');
+  console.log('Generating popup content for training center...');
   let content = `
     <div>
       <h4>${properties.Provider || 'Unknown Provider'}</h4>
@@ -1136,7 +1136,7 @@ function getTrainingCenterPopupContent(properties) {
 }
 
 function setupTrainingCenterFilters() {
-    //console.log('Setting up training center filters...');
+    console.log('Setting up training center filters...');
     
     const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
     subjectCheckboxes.forEach(checkbox => {
@@ -1159,7 +1159,7 @@ function setupTrainingCenterFilters() {
 }
 
 function updateSubjectDropdownLabel() {
-  //console.log('Updating subject dropdown label...');
+  console.log('Updating subject dropdown label...');
   const subjectDropdown = document.getElementById('subjectDropdown');
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   const allCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
@@ -1177,7 +1177,7 @@ function updateSubjectDropdownLabel() {
 }
 
 function updateAimLevelDropdownLabel() {
-  //console.log('Updating aim level dropdown label...');
+  console.log('Updating aim level dropdown label...');
   const aimLevelDropdown = document.getElementById('aimlevelDropdown');
   const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   const allCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
@@ -1195,7 +1195,7 @@ function updateAimLevelDropdownLabel() {
 }
 
 function initializeTrainingCentres() {
-    //console.log('Initializing training centres...');
+    console.log('Initializing training centres...');
     loadTrainingCentres().then(() => {
         const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
         const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
@@ -1240,7 +1240,7 @@ function initializeTrainingCentres() {
 }
 
 function addUserLayer(data, fileName) {
-  //console.log('Adding user layer from file:', fileName);
+  console.log('Adding user layer from file:', fileName);
   
   try {
     const layerId = `userLayer_${userLayerCount++}`;
@@ -1387,7 +1387,7 @@ function addUserLayer(data, fileName) {
 }
 
 function applySimpleStyle(layerId, color) {
-  //console.log('Applying simple style to layer:', layerId, 'with color:', color);
+  console.log('Applying simple style to layer:', layerId, 'with color:', color);
   const userLayer = userLayers.find(l => l.id === layerId);
   if (!userLayer) return;
   
@@ -1437,7 +1437,7 @@ function applySimpleStyle(layerId, color) {
 }
 
 function openStyleDialog(layerId) {
-  //console.log('Opening style dialog for layer:', layerId);
+  console.log('Opening style dialog for layer:', layerId);
   const userLayer = userLayers.find(l => l.id === layerId);
   if (!userLayer) return;
 
@@ -1477,7 +1477,7 @@ function openStyleDialog(layerId) {
 }
 
 function setupDrawingTools() {
-  //console.log('Setting up drawing tools...');
+  console.log('Setting up drawing tools...');
   
   const drawPointBtn = document.getElementById('drawPointBtn');
   const drawLineBtn = document.getElementById('drawLineBtn');
@@ -2554,7 +2554,7 @@ function continueDrawing() {
 }
 
 function populateUserLayerFilterValues(userLayer, fieldName) {
-  //console.log('populateUserLayerFilterValues');
+  console.log('populateUserLayerFilterValues');
   const filterValueContainer = document.getElementById('filterValueContainer');
   const filterCheckboxesSection = document.createElement('div');
   filterCheckboxesSection.className = 'filter-checkboxes-section';
@@ -3070,7 +3070,7 @@ function isClassVisible(value, selectedYear) {
 }
 
 function updateLegend() {
-    //console.log('Updating legend...');
+    console.log('Updating legend...');
     const legendContent = document.getElementById("legend-content");
     
     const dataLayerCategory = document.getElementById('data-layer-category');
@@ -3157,7 +3157,7 @@ function updateLegend() {
 }
 
 function findNearbyInfrastructure(latlng, maxPixelDistance = 10, targetLayer = null) {
-  //console.log('Finding nearby infrastructure...');
+  console.log('Finding nearby infrastructure...');
   const results = {
     busStops: [],
     busLines: [],
@@ -3391,7 +3391,7 @@ function findNearbyInfrastructure(latlng, maxPixelDistance = 10, targetLayer = n
 }
 
 function formatFeatureProperties(feature, featureType) {
-  //console.log('Formatting feature properties...');
+  console.log('Formatting feature properties...');
   if (!feature || !feature.properties) return '<p>No data available</p>';
   
   let html = '<table class="popup-table">';
@@ -3578,7 +3578,7 @@ function showInfrastructurePopup(latlng, nearbyFeatures) {
 }
 
 function showAmenityCatchment(amenityType, amenityId) {
-  //console.log('showAmenityCatchment called');
+  console.log('showAmenityCatchment called');
   const panelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
   panelHeaders.forEach(header => {
@@ -3620,7 +3620,7 @@ function showAmenityCatchment(amenityType, amenityId) {
 }
 
 function drawSelectedAmenities() {
-  //console.log('drawSelectedAmenities called');
+  console.log('drawSelectedAmenities called');
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   amenitiesLayerGroup.clearLayers();
 
@@ -3685,10 +3685,10 @@ function drawSelectedAmenities() {
 }
 
 function updateAmenitiesCatchmentLayer() {
-    //console.log("updateAmenitiesCatchmentLayer called");
+    console.log("updateAmenitiesCatchmentLayer called");
     
     if (updateAmenitiesCatchmentLayer.isRunning) {
-        //console.log("Already updating catchment layer, skipping duplicate call");
+        console.log("Already updating catchment layer, skipping duplicate call");
         return;
     }
     
@@ -3879,17 +3879,17 @@ function updateAmenitiesCatchmentLayer() {
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
-    //console.log("applyAmenitiesCatchmentLayerStyling called");
+    console.log("applyAmenitiesCatchmentLayerStyling called");
     
     if (!AmenitiesCatchmentLayer) {
-        //console.log("No AmenitiesCatchmentLayer, returning early");
+        console.log("No AmenitiesCatchmentLayer, returning early");
         return;
     }
     
-    //console.log("Processing layer styling");
+    console.log("Processing layer styling");
     
     const featureCount = AmenitiesCatchmentLayer.getLayers().length;
-    //console.log(`Styling ${featureCount} features`);
+    console.log(`Styling ${featureCount} features`);
     
     try {
         AmenitiesCatchmentLayer.eachLayer(layer => {
@@ -3932,7 +3932,7 @@ function applyAmenitiesCatchmentLayerStyling() {
         const hasLegendCheckboxes = legendCheckboxes.length > 0;
         const hasAnyVisibleRanges = visibleRanges.length > 0;
         
-        //console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
+        console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
         
         AmenitiesCatchmentLayer.setStyle(function(feature) {
             const range = feature.properties._range;
@@ -3950,7 +3950,7 @@ function applyAmenitiesCatchmentLayerStyling() {
             };
         });
         
-        //console.log("Layer styling completed successfully");
+        console.log("Layer styling completed successfully");
     } catch (error) {
         console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
         console.error("Error stack:", error.stack);
@@ -3958,7 +3958,7 @@ function applyAmenitiesCatchmentLayerStyling() {
 }
 
 function updateOpacityAndOutlineFields() {
-    //console.log("updateOpacityAndOutlineFields called");
+    console.log("updateOpacityAndOutlineFields called");
     if (!AmenitiesCatchmentLayer) return;    
     const opacityField = AmenitiesOpacity.value;
     const outlineField = AmenitiesOutline.value;
@@ -4139,7 +4139,7 @@ function updateFilterDropdown() {
     isUpdatingFilters = false;
     return;
   }
-  //console.log('updateFilterDropdown');
+  console.log('updateFilterDropdown');
 
   const currentValue = filterTypeDropdown.value;
   
@@ -4182,7 +4182,7 @@ function updateFilterDropdown() {
 
 function updateFilterValues(source = 'filter') {
   if (isUpdatingFilterValues) return;
-  //console.log('updateFilterValues called from:', source);
+  console.log('updateFilterValues called from:', source);
   isUpdatingFilterValues = true;
 
   try {
@@ -4426,7 +4426,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
   if (isCalculatingStats) return;
   isCalculatingStats = true;
   
-  //console.log('updateSummaryStatistics called from:', source);  
+  console.log('updateSummaryStatistics called from:', source);  
     
   try {
     if (!grid && (!features || features.length === 0)) {
@@ -4471,7 +4471,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
 }
 
 function displayEmptyStatistics() {
-  //console.log('displayEmptyStatistics');
+  console.log('displayEmptyStatistics');
   const statisticIds = [
     'total-population', 'min-population', 'max-population',
     'avg-imd-score', 'min-imd-score', 'max-imd-score',
@@ -4487,7 +4487,7 @@ function displayEmptyStatistics() {
 }
 
 function applyFilters(features) {
-  //console.log('applyFilters');
+  console.log('applyFilters');
   const filterType = filterTypeDropdown.value;
   
   let filteredFeatures = features && features.length ? features : (grid ? grid.features : []);
@@ -4674,7 +4674,7 @@ function applyFilters(features) {
 }
 
 function applyGeographicFilter(features, filterType, filterValue) {
-  //console.log('applyGeographicFilter', filterType, filterValue);
+  console.log('applyGeographicFilter', filterType, filterValue);
   if (filterType === 'LA') {
     if (filterValue === 'MCA') {
       return features.filter(f =>
@@ -4696,7 +4696,7 @@ function applyGeographicFilter(features, filterType, filterValue) {
 }
 
 function applyRangeFilter(features, filterValue) {
-  //console.log('applyRangeFilter');
+  console.log('applyRangeFilter');
   if (AmenitiesCatchmentLayer) {
     return filterByJourneyTime(features, filterValue);
   }
@@ -4704,7 +4704,7 @@ function applyRangeFilter(features, filterValue) {
 }
 
 async function calculateStatistics(features) {
-  //console.log(`Calculating statistics for ${features.length} features`);
+  console.log(`Calculating statistics for ${features.length} features`);
   
   const baseStats = await calculateBaseStatistics(features);
   
@@ -4728,7 +4728,7 @@ function calculateBaseStatistics(features) {
     };
   }
 
-  //console.log('Calculating stats for', features.length, 'features');
+  console.log('Calculating stats for', features.length, 'features');
   
   const BATCH_SIZE = 5000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
@@ -4867,7 +4867,7 @@ function calculateBaseStatistics(features) {
 }
 
 function calculateTimeStatistics(features) {
-  //console.log('calculateTimeStatistics: Starting calculation with', features.length, 'features');
+  console.log('calculateTimeStatistics: Starting calculation with', features.length, 'features');
   
   let totalWeightedTime = 0;
   let totalPopulation = 0;
@@ -4920,7 +4920,7 @@ function calculateTimeStatistics(features) {
 }
 
 function updateStatisticsUI(stats) {
-  //console.log('updateStatisticsUI');
+  console.log('updateStatisticsUI');
   document.getElementById('total-population').textContent = formatValue(stats.totalPopulation, 10);
   document.getElementById('min-population').textContent = formatValue(stats.minPopulation, 10);
   document.getElementById('max-population').textContent = formatValue(stats.maxPopulation, 10);
@@ -4942,7 +4942,7 @@ function updateStatisticsUI(stats) {
 }
 
 function filterByJourneyTime(features, filterValue) {
-  //console.log('filterByJourneyTime');
+  console.log('filterByJourneyTime');
   if (filterValue === '>60') {
     return features.filter(feature => {
       const OriginId_tracc = feature.properties.OriginId_tracc;
@@ -4966,7 +4966,7 @@ function calculateWeightedAverage(values, weights) {
 }
 
 function getCurrentFeatures() {
-  //console.log('getCurrentFeatures');
+  console.log('getCurrentFeatures');
   const filterType = filterTypeDropdown.value;
   
   let sourceFeatures = [];
