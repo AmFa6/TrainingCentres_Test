@@ -2875,8 +2875,6 @@ function configureSlider(sliderElement, isInverse) {
 
 function updateSliderRanges(type, scaleType) {
   console.log('Updating slider ranges...');
-  if (isUpdatingSliders) return;
-  isUpdatingSliders = true;
 
   let field, rangeElement, minElement, maxElement, gridData, order, isInverse;
 
@@ -2949,8 +2947,6 @@ function updateSliderRanges(type, scaleType) {
   }
 
   isUpdatingSliders = false;
-
-  updateOpacityAndOutlineFields();
 }
 
 function initializeSliders(sliderElement) {
