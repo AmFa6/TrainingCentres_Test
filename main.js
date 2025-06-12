@@ -439,6 +439,54 @@ function initializeCollapsiblePanels() {
     }
   });
 
+    function handlePanelStateChange(header, isOpen) {
+    const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
+    
+    if (isOpen) {
+      dataPanelHeaders.forEach(otherHeader => {
+        if (otherHeader !== header) {
+          otherHeader.classList.add("collapsed");
+          const otherContent = otherHeader.nextElementSibling;
+          if (otherContent) {
+            otherContent.style.display = "none";
+          }
+          
+          if (otherHeader.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
+            lastAmenitiesState = {
+              selectingFromMap,
+              selectedAmenitiesFromMap,
+              selectedAmenitiesAmenities
+            };
+            map.removeLayer(AmenitiesCatchmentLayer);
+            AmenitiesCatchmentLayer = null;
+          } 
+        }
+      });
+    }
+    
+    if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
+      if (lastAmenitiesState.selectingFromMap) {
+        selectingFromMap = lastAmenitiesState.selectingFromMap;
+        selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
+        
+        AmenitiesPurpose.forEach(checkbox => {
+          checkbox.checked = lastAmenitiesState.selectedAmenitiesAmenities.includes(checkbox.value);
+        });
+      }
+      
+      updateAmenitiesCatchmentLayer();
+    } else if (!isOpen && header.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
+      lastAmenitiesState = {
+        selectingFromMap,
+        selectedAmenitiesFromMap,
+        selectedAmenitiesAmenities
+      };
+      map.removeLayer(AmenitiesCatchmentLayer);
+      AmenitiesCatchmentLayer = null;
+      drawSelectedAmenities([]);
+    }
+  }
+
   // Set up panel headers behavior and state tracking
   const panelHeaders = document.querySelectorAll(".panel-header");
   panelHeaders.forEach(header => {
