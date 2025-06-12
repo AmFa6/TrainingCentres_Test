@@ -4124,14 +4124,14 @@ function updateAmenitiesCatchmentLayer() {
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
-    console.log("applyAmenitiesCatchmentLayerStyling called");
+    console.trace("applyAmenitiesCatchmentLayerStyling called");
     
     if (!AmenitiesCatchmentLayer) {
         console.log("No AmenitiesCatchmentLayer, returning early");
         return;
     }
     
-    console.log("Processing layer styling");
+    console.trace("Processing layer styling");
     
     const featureCount = AmenitiesCatchmentLayer.getLayers().length;
     console.log(`Styling ${featureCount} features`);
