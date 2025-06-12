@@ -3240,8 +3240,9 @@ function updateSliderRanges(type, scaleType) {
     }
     configureSlider(rangeElement, isInverse);
   }
+  isUpdatingStyles = false;
   requestAnimationFrame(() => {
-      updateOpacityAndOutlineFields() 
+    updateOpacityAndOutlineFields(); 
     isUpdatingSliders = false;
   });
 }
