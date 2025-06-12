@@ -3207,7 +3207,6 @@ function updateSliderRanges(type, scaleType) {
     setTimeout(() => {
       rangeElement._isInitialized = true;
       updateOpacityAndOutlineFields();
-      applyAmenitiesCatchmentLayerStyling();
     }, 200);
   } else {
     setTimeout(() => {
