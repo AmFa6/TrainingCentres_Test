@@ -177,10 +177,13 @@ AmenitiesYear.addEventListener("change", debounce(() => {
 AmenitiesOpacity.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Opacity');
   updateOpacityAndOutlineFields();
+  applyAmenitiesCatchmentLayerStyling();
 }, 500));
+
 AmenitiesOutline.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Outline');
   updateOpacityAndOutlineFields();
+  applyAmenitiesCatchmentLayerStyling();
 }, 500));
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
@@ -3067,6 +3070,8 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     sliderElement.noUiSlider.destroy();
   }
 
+  const isInitialSetup = true;
+
   noUiSlider.create(sliderElement, {
     start: ['', ''],
     connect: [true, true, true],
@@ -3108,15 +3113,24 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     }
   }
 
+  sliderElement._isInitialized = false;
+
   sliderElement.noUiSlider.on('update', function (values, handle) {
     const handleElement = handles[handle];
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
-    requestAnimationFrame(() => {
-      updateOpacityAndOutlineFields();
-    });
+    
+    if (sliderElement._isInitialized) {
+      requestAnimationFrame(() => {
+        updateOpacityAndOutlineFields();
+      });
+    }
   });
+
+  setTimeout(() => {
+    sliderElement._isInitialized = true;
+  }, 100);
 }
 
 function updateSliderRanges(type, scaleType) {
@@ -3141,9 +3155,13 @@ function updateSliderRanges(type, scaleType) {
     isInverse = isInverseAmenitiesOutline;
   }
 
+  const wasInitialized = rangeElement._isInitialized;
+
   if (rangeElement.noUiSlider) {
     rangeElement.noUiSlider.destroy();
   }
+  
+  rangeElement._isInitialized = false;
   
   initializeAndConfigureSlider(rangeElement, isInverse);
   
@@ -3186,6 +3204,18 @@ function updateSliderRanges(type, scaleType) {
       minElement.innerText = formatValue(adjustedMinValue, step);
       maxElement.innerText = formatValue(adjustedMaxValue, step);
     }
+  }
+  
+  if (wasInitialized && field !== "None") {
+    setTimeout(() => {
+      rangeElement._isInitialized = true;
+      updateOpacityAndOutlineFields();
+      applyAmenitiesCatchmentLayerStyling();
+    }, 200);
+  } else {
+    setTimeout(() => {
+      rangeElement._isInitialized = true;
+    }, 200);
   }
   
   isUpdatingSliders = false;
@@ -4276,7 +4306,7 @@ function updateOpacityAndOutlineFields() {
             }
         }
         
-        requestAnimationFrame(processBatch);
+      isUpdatingOpacityOutlineFields = false;
     }
     
     function processWithWorker() {
