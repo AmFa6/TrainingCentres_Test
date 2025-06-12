@@ -3868,7 +3868,6 @@ function updateAmenitiesCatchmentLayer() {
                 
                 updateSliderRanges('Amenities', 'Opacity');
                 updateSliderRanges('Amenities', 'Outline');
-                updateOpacityAndOutlineFields();
                 drawSelectedAmenities();
                 updateLegend();
                 updateFilterDropdown();
