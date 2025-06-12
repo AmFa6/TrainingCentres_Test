@@ -333,7 +333,6 @@ let currentDrawType = null;
 drawFeatureGroup = L.featureGroup({
   pane: 'userLayers'
 }).addTo(map);
-let isUpdatingStyles = false;
 let isCalculatingStats = false;
 let isUpdatingVisibility = false;
 let isUpdatingFilters = false;
@@ -2862,14 +2861,9 @@ function configureSlider(sliderElement, isInverse) {
     const step = sliderElement.noUiSlider.options.step;
     const formattedValue = formatValue(values[handle], step);
     handleElement.setAttribute('data-value', formattedValue);
-    
-    if (!isUpdatingStyles) {
-      isUpdatingStyles = true;
-      requestAnimationFrame(() => {
-        updateOpacityAndOutlineFields();
-        isUpdatingStyles = false;
-      });
-    }
+    requestAnimationFrame(() => {
+      updateOpacityAndOutlineFields();
+    });
   });
 }
 
@@ -2945,8 +2939,6 @@ function updateSliderRanges(type, scaleType) {
     }
     configureSlider(rangeElement, isInverse);   
   }
-
-  isUpdatingSliders = false;
 }
 
 function initializeSliders(sliderElement) {
@@ -3967,12 +3959,7 @@ function applyAmenitiesCatchmentLayerStyling() {
 
 function updateOpacityAndOutlineFields() {
     //console.log("updateOpacityAndOutlineFields called");
-    
-    if (!AmenitiesCatchmentLayer) return;
-    if (isUpdatingStyles) return;
-    
-    isUpdatingStyles = true;
-    
+    if (!AmenitiesCatchmentLayer) return;    
     const opacityField = AmenitiesOpacity.value;
     const outlineField = AmenitiesOutline.value;
     const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
@@ -4061,7 +4048,6 @@ function updateOpacityAndOutlineFields() {
                 requestAnimationFrame(processBatch);
             } else {
                 applyAmenitiesCatchmentLayerStyling();
-                isUpdatingStyles = false;
             }
         }
         
@@ -4128,7 +4114,6 @@ function updateOpacityAndOutlineFields() {
             });
             
             applyAmenitiesCatchmentLayerStyling();
-            isUpdatingStyles = false;
             worker.terminate();
         };
         
