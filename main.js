@@ -73,6 +73,7 @@ let lastAmenitiesState = {
 let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
 
+
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
   return new Promise((resolve) => {
@@ -4213,7 +4214,15 @@ function updateOpacityAndOutlineFields() {
         return;
     }
     
+    const currentUpdateTime = Date.now();
+    updateOpacityAndOutlineFields.lastUpdateTime = currentUpdateTime;
+    
     if (isUpdatingStyles) {
+        setTimeout(() => {
+            if (updateOpacityAndOutlineFields.lastUpdateTime === currentUpdateTime) {
+                updateOpacityAndOutlineFields();
+            }
+        }, 250);
         isUpdatingOpacityOutlineFields = false;
         return;
     }
