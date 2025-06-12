@@ -174,12 +174,16 @@ function debounce(func, wait) {
 AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
-AmenitiesOpacity.addEventListener("change", () => {
+AmenitiesOpacity.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Opacity');
-});
-AmenitiesOutline.addEventListener("change", () => {
+  updateOpacityAndOutlineFields();
+  applyAmenitiesCatchmentLayerStyling();
+}, 500));
+AmenitiesOutline.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Outline');
-});
+  updateOpacityAndOutlineFields();
+  applyAmenitiesCatchmentLayerStyling();
+}, 500));
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
 });
@@ -3160,19 +3164,7 @@ function updateSliderRanges(type, scaleType) {
   
   initializeAndConfigureSlider(rangeElement, isInverse);
   
-  if (field === "None") {
-    rangeElement.setAttribute('disabled', true);
-    rangeElement.noUiSlider.updateOptions({
-      range: {
-        'min': 0,
-        'max': 0
-      },
-      step: 1
-    }, false);
-    rangeElement.noUiSlider.set(['', ''], false);
-    minElement.innerText = '';
-    maxElement.innerText = '';
-  } else if (gridStatistics && gridStatistics[field]) {
+  if (field !== "None" && gridStatistics && gridStatistics[field]) {
     const minValue = gridStatistics[field].min;
     const maxValue = gridStatistics[field].max;
     
@@ -3186,20 +3178,34 @@ function updateSliderRanges(type, scaleType) {
     const adjustedMaxValue = Math.ceil(maxValue / step) * step;
     const adjustedMinValue = Math.floor(minValue / step) * step;
     
-    rangeElement.removeAttribute('disabled');
-    rangeElement.noUiSlider.updateOptions({
-      range: {
-        'min': adjustedMinValue,
-        'max': adjustedMaxValue
-      },
-      step: step
-    }, false);
-    rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
-    minElement.innerText = formatValue(adjustedMinValue, step);
-    maxElement.innerText = formatValue(adjustedMaxValue, step);
+    if (field === "None") {
+      rangeElement.setAttribute('disabled', true);
+      rangeElement.noUiSlider.updateOptions({
+        range: {
+          'min': 0,
+          'max': 0
+        },
+        step: 1
+      }, false);
+      rangeElement.noUiSlider.set(['', ''], false);
+      minElement.innerText = '';
+      maxElement.innerText = '';
+    } else {
+      rangeElement.removeAttribute('disabled');
+      rangeElement.noUiSlider.updateOptions({
+        range: {
+          'min': adjustedMinValue,
+          'max': adjustedMaxValue
+        },
+        step: step
+      }, false);
+      rangeElement.noUiSlider.set([adjustedMinValue, adjustedMaxValue], false);
+      minElement.innerText = formatValue(adjustedMinValue, step);
+      maxElement.innerText = formatValue(adjustedMaxValue, step);
+    }
   }
   
-  if (wasInitialized) {
+  if (wasInitialized && field !== "None") {
     setTimeout(() => {
       rangeElement._isInitialized = true;
       updateOpacityAndOutlineFields();
@@ -4223,62 +4229,176 @@ function updateOpacityAndOutlineFields() {
     
     const needOpacity = opacityField !== "None";
     const needOutline = outlineField !== "None";
+    const opacityMin = opacityRange[0];
+    const opacityMax = opacityRange[1];
+    const outlineMin = outlineRange[0];
+    const outlineMax = outlineRange[1];
     
-    const features = AmenitiesCatchmentLayer.getLayers();
-    const batchSize = 500;
-    let currentIndex = 0;
+    const opacityLookup = {};
+    const outlineLookup = {};
     
-    function processBatch() {
-        const endIndex = Math.min(currentIndex + batchSize, features.length);
-        
-        for (let i = currentIndex; i < endIndex; i++) {
-            const layer = features[i];
-            
-            if (!needOpacity) {
-                layer.feature.properties._opacity = 0.5;
-            }
-            
-            if (!needOutline) {
-                layer.feature.properties._weight = 0;
-            }
-            
-            if (needOpacity) {
-                const opacityMin = opacityRange[0];
-                const opacityMax = opacityRange[1];
-                const value = parseFloat(layer.feature.properties[opacityField]);
-                
-                if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
-                    const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                    const scaledValue = isInverseAmenitiesOpacity ? (1 - normalized) : normalized;
-                    layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
-                }
-            }
-            
-            if (needOutline) {
-                const outlineMin = outlineRange[0];
-                const outlineMax = outlineRange[1];
-                const value = parseFloat(layer.feature.properties[outlineField]);
-                
-                if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
-                    const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                    const scaledValue = isInverseAmenitiesOutline ? (1 - normalized) : normalized;
-                    layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
-                }
-            }
-        }
-        
-        currentIndex = endIndex;
-        
-        if (currentIndex < features.length) {
-            requestAnimationFrame(processBatch);
-        } else {
-            applyAmenitiesCatchmentLayerStyling();
-            isUpdatingStyles = false;
-            isUpdatingOpacityOutlineFields = false;
+    if (needOpacity) {
+        const step = Math.max((opacityMax - opacityMin) / 100, 0.1);
+        for (let value = opacityMin; value <= opacityMax; value += step) {
+            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+            opacityLookup[value.toFixed(1)] = isInverseAmenitiesOpacity ? 
+                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
         }
     }
     
-    processBatch();
+    if (needOutline) {
+        const step = Math.max((outlineMax - outlineMin) / 100, 0.1);
+        for (let value = outlineMin; value <= outlineMax; value += step) {
+            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+            outlineLookup[value.toFixed(1)] = isInverseAmenitiesOutline ? 
+                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+        }
+    }
+    
+    const features = AmenitiesCatchmentLayer.getLayers();
+    const batchSize = 500;
+    
+    if (window.Worker && features.length > 1000) {
+        processWithWorker();
+    } else {
+        processWithBatches();
+    }
+    
+    function processWithBatches() {
+        let currentIndex = 0;
+        
+        function processBatch() {
+            const endIndex = Math.min(currentIndex + batchSize, features.length);
+            
+            for (let i = currentIndex; i < endIndex; i++) {
+                const layer = features[i];
+                layer.feature.properties._opacity = 0.5;
+                layer.feature.properties._weight = 0;
+                
+                if (needOpacity) {
+                    const value = parseFloat(layer.feature.properties[opacityField]);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (opacityLookup[key] !== undefined) {
+                            layer.feature.properties._opacity = opacityLookup[key];
+                        } else if (value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
+                        }
+                    }
+                }
+                
+                if (needOutline) {
+                    const value = parseFloat(layer.feature.properties[outlineField]);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (outlineLookup[key] !== undefined) {
+                            layer.feature.properties._weight = outlineLookup[key];
+                        } else if (value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
+                        }
+                    }
+                }
+            }
+            
+            currentIndex = endIndex;
+            
+            if (currentIndex < features.length) {
+                requestAnimationFrame(processBatch);
+            } else {
+                applyAmenitiesCatchmentLayerStyling();
+                isUpdatingStyles = false;
+                isUpdatingOpacityOutlineFields = false;
+            }
+        }
+        
+        processBatch();
+    }
+    
+    function processWithWorker() {
+        const workerCode = `
+            self.onmessage = function(e) {
+                const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
+                          isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
+                
+                const needOpacity = opacityField !== "None";
+                const needOutline = outlineField !== "None";
+                const results = [];
+                
+                for (let i = 0; i < features.length; i++) {
+                    const feature = features[i];
+                    const result = {
+                        index: i,
+                        _opacity: 0.5,
+                        _weight: 0
+                    };
+                    
+                    if (needOpacity) {
+                        const value = parseFloat(feature.properties[opacityField]);
+                        if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            result._opacity = 0.1 + (scaledValue * 0.7);
+                        }
+                    }
+                    
+                    if (needOutline) {
+                        const value = parseFloat(feature.properties[outlineField]);
+                        if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            result._weight = 0.5 + (scaledValue * 2.5);
+                        }
+                    }
+                    
+                    results.push(result);
+                }
+                
+                self.postMessage(results);
+            };
+        `;
+        
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+        
+        const featureData = features.map(layer => ({
+            properties: layer.feature.properties
+        }));
+        
+        worker.onmessage = function(e) {
+            const results = e.data;
+            
+            results.forEach(result => {
+                const layer = features[result.index];
+                layer.feature.properties._opacity = result._opacity;
+                layer.feature.properties._weight = result._weight;
+            });
+            
+            applyAmenitiesCatchmentLayerStyling();
+            isUpdatingStyles = false;
+            isUpdatingOpacityOutlineFields = false;
+            worker.terminate();
+        };
+        
+        worker.postMessage({
+            features: featureData,
+            opacityField,
+            outlineField,
+            opacityMin,
+            opacityMax,
+            outlineMin,
+            outlineMax,
+            isInverseAmenitiesOpacity,
+            isInverseAmenitiesOutline
+        });
+    }
 }
 
 function updateFilterDropdown() {
