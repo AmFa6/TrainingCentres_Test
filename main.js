@@ -3173,6 +3173,9 @@ function configureSlider(sliderElement, isInverse) {
 function updateSliderRanges(type, scaleType) {
   console.log('Updating slider ranges...');
 
+  if (isUpdatingSliders) return;
+  isUpdatingSliders = true;
+
   let field, rangeElement, minElement, maxElement, order, isInverse;
 
   if (scaleType === 'Opacity') {
@@ -3237,6 +3240,12 @@ function updateSliderRanges(type, scaleType) {
     }
     configureSlider(rangeElement, isInverse);
   }
+  requestAnimationFrame(() => {
+    debounce(function() {
+      updateOpacityAndOutlineFields();
+    }, 300);
+    isUpdatingSliders = false;
+  });
 }
 
 function initializeSliders(sliderElement) {
@@ -4254,7 +4263,12 @@ function applyAmenitiesCatchmentLayerStyling() {
 
 function updateOpacityAndOutlineFields() {
     console.log("updateOpacityAndOutlineFields called");
-    if (!AmenitiesCatchmentLayer) return;    
+    
+    if (!AmenitiesCatchmentLayer) return;
+    if (isUpdatingStyles) return;
+    
+    isUpdatingStyles = true;
+    
     const opacityField = AmenitiesOpacity.value;
     const outlineField = AmenitiesOutline.value;
     const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
@@ -4343,6 +4357,7 @@ function updateOpacityAndOutlineFields() {
                 requestAnimationFrame(processBatch);
             } else {
                 applyAmenitiesCatchmentLayerStyling();
+                isUpdatingStyles = false;
             }
         }
         
@@ -4409,6 +4424,7 @@ function updateOpacityAndOutlineFields() {
             });
             
             applyAmenitiesCatchmentLayerStyling();
+            isUpdatingStyles = false;
             worker.terminate();
         };
         
