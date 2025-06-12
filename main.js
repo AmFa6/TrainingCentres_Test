@@ -177,12 +177,10 @@ AmenitiesYear.addEventListener("change", debounce(() => {
 AmenitiesOpacity.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Opacity');
   updateOpacityAndOutlineFields();
-  applyAmenitiesCatchmentLayerStyling();
 }, 500));
 AmenitiesOutline.addEventListener("change", debounce(() => {
   updateSliderRanges('Amenities', 'Outline');
   updateOpacityAndOutlineFields();
-  applyAmenitiesCatchmentLayerStyling();
 }, 500));
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
