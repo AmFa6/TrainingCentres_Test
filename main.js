@@ -1436,7 +1436,19 @@ function updateAimLevelDropdownLabel() {
 
 function initializeTrainingCentres() {
     console.log('Initializing training centres...');
-    loadTrainingCentres().then(() => {
+    
+    // Check if we already have loaded training center data
+    if (amenityLayers['TrainingCentres']) {
+        // Skip loading again if already loaded
+        setupTrainingCentersUI();
+    } else {
+        // Only load if not already loaded
+        loadTrainingCentres().then(() => {
+            setupTrainingCentersUI();
+        });
+    }
+    
+    function setupTrainingCentersUI() {
         const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
         const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
         
@@ -1476,7 +1488,7 @@ function initializeTrainingCentres() {
                 aimLevelCheckboxesContainer.classList.remove('show');
             }
         });
-    });
+    }
 }
 
 function addUserLayer(data, fileName) {
