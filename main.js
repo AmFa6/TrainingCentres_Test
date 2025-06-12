@@ -64,6 +64,7 @@ let previousFilterSelections = {
   Ward: null,
   Range: null,
 };
+let isUpdatingCatchmentLayer = false;
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
@@ -225,8 +226,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
   // Phase 1: Initialize core UI components and map
   initializeUI();
   setupMapPanes();
-  initializeLegendControls();
-  createStaticLegendControls();
   
   // Initialize sliders and UI components that don't require data
   initializeSliders(AmenitiesOpacityRange);
@@ -1378,20 +1377,21 @@ function getTrainingCenterPopupContent(properties) {
 function setupTrainingCenterFilters() {
     console.log('Setting up training center filters...');
     
+    const debouncedHandler = debounce(() => {
+        drawSelectedAmenities();
+        updateAmenitiesCatchmentLayer();
+    }, 2000);
+    
     const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
     subjectCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', debounce(() => {
-            drawSelectedAmenities();
-            updateAmenitiesCatchmentLayer();
-        }, 2000));
+        checkbox.removeEventListener('change', debouncedHandler);
+        checkbox.addEventListener('change', debouncedHandler);
     });
     
     const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]');
     aimLevelCheckboxes.forEach(checkbox => {
-        checkbox.addEventListener('change', debounce(() => {
-            drawSelectedAmenities();
-            updateAmenitiesCatchmentLayer();
-        }, 2000));
+        checkbox.removeEventListener('change', debouncedHandler);
+        checkbox.addEventListener('change', debouncedHandler);
     });
     
     updateSubjectDropdownLabel();
@@ -3920,12 +3920,12 @@ function drawSelectedAmenities() {
 function updateAmenitiesCatchmentLayer() {
     console.log("updateAmenitiesCatchmentLayer called");
     
-    if (updateAmenitiesCatchmentLayer.isRunning) {
+    if (isUpdatingCatchmentLayer) {
         console.log("Already updating catchment layer, skipping duplicate call");
         return;
     }
     
-    updateAmenitiesCatchmentLayer.isRunning = true;
+    isUpdatingCatchmentLayer = true;
     
     if (!initialLoadComplete || !grid) {
         updateAmenitiesCatchmentLayer.isRunning = false;
@@ -3953,9 +3953,6 @@ function updateAmenitiesCatchmentLayer() {
     const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
     const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-    
-    const selectedOpacityField = AmenitiesOpacity.value;
-    const selectedOutlineField = AmenitiesOutline.value;
     
     const filteredTrainingCentres = filterTrainingCentres();
     
@@ -4101,12 +4098,12 @@ function updateAmenitiesCatchmentLayer() {
                 applyAmenitiesCatchmentLayerStyling();
                 updateSummaryStatistics(getCurrentFeatures());
             }
-            updateAmenitiesCatchmentLayer.isRunning = false;
+            isUpdatingCatchmentLayer = false;
             hideLoadingOverlay();
         })
         .catch(error => {
             console.error("Error loading journey time data:", error);
-            updateAmenitiesCatchmentLayer.isRunning = false;
+            isUpdatingCatchmentLayer = false;
             hideLoadingOverlay();
         });
 }
