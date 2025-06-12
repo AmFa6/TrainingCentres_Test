@@ -4204,13 +4204,22 @@ function applyAmenitiesCatchmentLayerStyling() {
 }
 
 function updateOpacityAndOutlineFields() {
-    if (isUpdatingOpacityOutlineFields) return;
+    if (isUpdatingOpacityOutlineFields) {
+        return;
+    }
+    
     isUpdatingOpacityOutlineFields = true;
-
     console.log("updateOpacityAndOutlineFields called");
     
-    if (!AmenitiesCatchmentLayer) return;
-    if (isUpdatingStyles) return;
+    if (!AmenitiesCatchmentLayer) {
+        isUpdatingOpacityOutlineFields = false;
+        return;
+    }
+    
+    if (isUpdatingStyles) {
+        isUpdatingOpacityOutlineFields = false;
+        return;
+    }
     
     isUpdatingStyles = true;
     
@@ -4275,8 +4284,9 @@ function updateOpacityAndOutlineFields() {
                             layer.feature.properties._opacity = opacityLookup[key];
                         } else if (value >= opacityMin && value <= opacityMax) {
                             const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                            layer.feature.properties._opacity = isInverseAmenitiesOpacity ? 
-                                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
                         }
                     }
                 }
@@ -4289,8 +4299,9 @@ function updateOpacityAndOutlineFields() {
                             layer.feature.properties._weight = outlineLookup[key];
                         } else if (value >= outlineMin && value <= outlineMax) {
                             const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                            layer.feature.properties._weight = isInverseAmenitiesOutline ? 
-                                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
                         }
                     }
                 }
@@ -4303,17 +4314,18 @@ function updateOpacityAndOutlineFields() {
             } else {
                 applyAmenitiesCatchmentLayerStyling();
                 isUpdatingStyles = false;
+                isUpdatingOpacityOutlineFields = false;
             }
         }
         
-      isUpdatingOpacityOutlineFields = false;
+        processBatch();
     }
     
     function processWithWorker() {
         const workerCode = `
             self.onmessage = function(e) {
                 const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
-                         isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
+                          isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
                 
                 const needOpacity = opacityField !== "None";
                 const needOutline = outlineField !== "None";
@@ -4331,8 +4343,9 @@ function updateOpacityAndOutlineFields() {
                         const value = parseFloat(feature.properties[opacityField]);
                         if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
                             const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                            result._opacity = isInverseAmenitiesOpacity ? 
-                                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            result._opacity = 0.1 + (scaledValue * 0.7);
                         }
                     }
                     
@@ -4340,8 +4353,9 @@ function updateOpacityAndOutlineFields() {
                         const value = parseFloat(feature.properties[outlineField]);
                         if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
                             const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                            result._weight = isInverseAmenitiesOutline ? 
-                                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            result._weight = 0.5 + (scaledValue * 2.5);
                         }
                     }
                     
@@ -4370,6 +4384,7 @@ function updateOpacityAndOutlineFields() {
             
             applyAmenitiesCatchmentLayerStyling();
             isUpdatingStyles = false;
+            isUpdatingOpacityOutlineFields = false;
             worker.terminate();
         };
         
@@ -4385,8 +4400,6 @@ function updateOpacityAndOutlineFields() {
             isInverseAmenitiesOutline
         });
     }
-  isUpdatingOpacityOutlineFields = false;
-
 }
 
 function updateFilterDropdown() {
