@@ -3241,9 +3241,7 @@ function updateSliderRanges(type, scaleType) {
     configureSlider(rangeElement, isInverse);
   }
   requestAnimationFrame(() => {
-    debounce(function() {
-      updateOpacityAndOutlineFields();
-    }, 300);
+      updateOpacityAndOutlineFields() 
     isUpdatingSliders = false;
   });
 }
