@@ -525,7 +525,6 @@ function initializeCollapsiblePanels() {
       console.log('Is collapsed:', isCollapsed);
       this.classList.toggle("collapsed");
       
-      // This is the fix - make sure summaryContent exists before changing its style
       if (summaryContent) {
         summaryContent.style.display = isCollapsed ? "block" : "none";
         console.log('Setting summary content display to:', isCollapsed ? "block" : "none");
