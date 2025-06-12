@@ -72,6 +72,7 @@ let lastAmenitiesState = {
 };
 let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
+let isApplyingStyles = false;
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
@@ -4124,8 +4125,16 @@ function updateAmenitiesCatchmentLayer() {
 function applyAmenitiesCatchmentLayerStyling() {
     console.trace("applyAmenitiesCatchmentLayerStyling called");
     
+    if (isApplyingStyles) {
+        console.log("Already applying styles, skipping duplicate call");
+        return;
+    }
+    
+    isApplyingStyles = true;
+    
     if (!AmenitiesCatchmentLayer) {
         console.log("No AmenitiesCatchmentLayer, returning early");
+        isApplyingStyles = false;
         return;
     }
     
@@ -4198,6 +4207,8 @@ function applyAmenitiesCatchmentLayerStyling() {
         console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
         console.error("Error stack:", error.stack);
     }
+    console.log("Layer styling completed successfully");
+    isApplyingStyles = false;
 }
 
 function updateOpacityAndOutlineFields() {
