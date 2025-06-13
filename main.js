@@ -1084,8 +1084,8 @@ function processGridData(data1, data2, csvText) {
               const percent = Math.floor((end / totalFeatures) * 100);
               self.postMessage({
                 type: 'progress',
-                percent: percent,
-                message: `Processed ${end}/${totalFeatures} features (${percent}%)`
+                percent: Math.round((processedFeatures / totalFeatures) * 100),
+                message: 'Processed ' + processedFeatures + ' of ' + totalFeatures + ' features'
               });
               
               // Send the actual data chunk
