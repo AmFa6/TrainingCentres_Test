@@ -4841,10 +4841,25 @@ function displayEmptyStatistics() {
 function applyFilters(features) {
   const filterType = filterTypeDropdown.value;
   
-  let filteredFeatures = features && features.length ? features : (grid ? grid.features : []);
+  // This is where the error occurs - need to properly initialize filteredFeatures
+  // even when no features are passed in
+  let filteredFeatures = [];
   
-  if ((AmenitiesCatchmentLayer) && (!features || features.length === 0)) {
+  // First check if we have features passed in
+  if (features && Array.isArray(features) && features.length > 0) {
+    filteredFeatures = features;
+  }
+  // Otherwise check if we can use grid features
+  else if (grid && grid.features) {
+    filteredFeatures = grid.features;
+  }
+  // If we have the catchment layer, use that as source
+  else if (AmenitiesCatchmentLayer) {
     filteredFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
+  }
+  // If we reach here with no features, return empty array to prevent errors
+  else {
+    return [];
   }
   
   if (filterType.startsWith('UserLayer_')) {
@@ -4901,6 +4916,9 @@ function applyFilters(features) {
         
         return combinedFeatures;
       }
+      
+      // If no field is selected, return all features
+      return filteredFeatures;
     }
   }
   else if (filterType === 'Range') {
@@ -4922,7 +4940,7 @@ function applyFilters(features) {
       });
     });
     
-    filteredFeatures = combinedFeatures; 
+    return combinedFeatures; 
   } else if (filterType === 'LA' || filterType === 'Ward') {
     const filterValueContainer = document.getElementById('filterValueContainer');
     if (!filterValueContainer) return filteredFeatures;
@@ -4940,15 +4958,15 @@ function applyFilters(features) {
       }
       if (selectedSet.has('MCA')) {
         return filteredFeatures.filter(f =>
-          f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
+          f.properties && f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
         );
       }
       return filteredFeatures.filter(f =>
-        f.properties.LAD24NM && selectedSet.has(f.properties.LAD24NM)
+        f.properties && f.properties.LAD24NM && selectedSet.has(f.properties.LAD24NM)
       );
     } else if (filterType === 'Ward') {
       return filteredFeatures.filter(f =>
-        f.properties.WD24NM && selectedSet.has(f.properties.WD24NM)
+        f.properties && f.properties.WD24NM && selectedSet.has(f.properties.WD24NM)
       );
     }
   }
