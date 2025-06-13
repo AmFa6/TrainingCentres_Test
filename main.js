@@ -1050,6 +1050,28 @@ function processGridData(data1, data2, csvText) {
             
             console.log("Combined features count:", combinedData.features.length);
             self.postMessage(combinedData);
+
+            // With these lines to chunk the data transfer:
+            const CHUNK_SIZE = 10000;
+            const totalFeatures = combinedData.features.length;
+            let start = 0;
+
+            while (start < totalFeatures) {
+              const end = Math.min(start + CHUNK_SIZE, totalFeatures);
+              const chunk = {
+                type: 'FeatureCollection',
+                features: combinedData.features.slice(start, end),
+                chunkInfo: {
+                  current: Math.floor(start / CHUNK_SIZE) + 1,
+                  total: Math.ceil(totalFeatures / CHUNK_SIZE),
+                  start: start,
+                  end: end,
+                  isLast: end >= totalFeatures
+                }
+              };
+              self.postMessage(chunk);
+              start = end;
+            }
           } catch (error) {
             console.error("Error in worker:", error);
             self.postMessage({
@@ -1064,20 +1086,55 @@ function processGridData(data1, data2, csvText) {
       const workerUrl = URL.createObjectURL(blob);
       const worker = new Worker(workerUrl);
       
+      // In the worker.onmessage handler (around line 1068):
+      const allFeatures = [];
+      let processedChunks = 0;
+      let totalChunks = 0;
+
       worker.onmessage = function(e) {
-        console.log(`Worker processing complete, received ${e.data.features ? e.data.features.length : 0} features`);
+        const chunk = e.data;
+        processedChunks++;
+        totalChunks = chunk.chunkInfo?.total || 1;
         
-        // Create a shallow copy to ensure we have a new object
-        const processedGrid = Object.assign({}, e.data);
-        
-        if (!processedGrid.features || processedGrid.features.length === 0) {
-          console.error("Worker returned no features - trying fallback processing method");
-          // Implement fallback processing here if needed
+        if (chunk.features && Array.isArray(chunk.features)) {
+          allFeatures.push(...chunk.features);
         }
         
-        worker.terminate();
-        URL.revokeObjectURL(workerUrl);
-        resolve(processedGrid);
+        // Show progress
+        console.log(`Processed chunk ${chunk.chunkInfo?.current}/${totalChunks}, features: ${chunk.features.length}`);
+        
+        // If this is the last chunk or we've received all expected chunks
+        if (chunk.chunkInfo?.isLast || processedChunks >= totalChunks) {
+          const processedGrid = {
+            type: 'FeatureCollection',
+            features: allFeatures
+          };
+          
+          console.log(`Processing complete, total features: ${allFeatures.length}`);
+          
+          // Continue with normal processing
+          grid = processedGrid;
+          
+          if (db) {
+            try {
+              const tx = db.transaction('grid', 'readwrite');
+              const store = tx.objectStore('grid');
+              store.put({ id: 'gridData', data: grid });
+              console.log("Grid data cached successfully");
+            } catch (err) {
+              console.error("Error caching grid data:", err);
+            }
+          }
+          
+          calculateGridStatistics(grid);
+          updateFilterDropdown();
+          updateFilterValues();
+          updateSummaryStatistics(grid.features);
+          
+          hideBackgroundLoadingIndicator();
+          worker.terminate();
+          URL.revokeObjectURL(workerUrl);
+        }
       };
       
       worker.onerror = function(error) {
