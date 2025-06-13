@@ -834,10 +834,14 @@ function loadGridData() {
     const getRequest = store.get('gridData');
     
     getRequest.onsuccess = function() {
-      if (getRequest.result) {
+      if (getRequest.result && getRequest.result.data && 
+          getRequest.result.data.features && 
+          Array.isArray(getRequest.result.data.features)) {
         console.log('Loading grid data from cache...');
         const cachedData = getRequest.result.data;
         grid = cachedData;
+        
+        console.log("Loaded grid from cache, features count:", grid.features.length);
         
         // Load cached statistics
         const statsTx = db.transaction('statistics', 'readonly');
@@ -857,7 +861,7 @@ function loadGridData() {
           }
         };
       } else {
-        // Fetch from server if not cached
+        console.log("Cached grid data invalid or incomplete, fetching from server");
         fetchGridDataFromServer(db);
       }
     };
@@ -881,7 +885,9 @@ function fetchGridDataFromServer(db) {
   ])
     .then(([data1, data2, csvText]) => {    
       processGridData(data1, data2, csvText).then(processedGrid => {
+        // Make sure grid is properly set here
         grid = processedGrid;
+        console.log("Grid data loaded, features count:", grid.features ? grid.features.length : 0);
         
         // Cache the processed data
         if (db) {
@@ -4130,9 +4136,19 @@ function updateAmenitiesCatchmentLayer() {
   isUpdatingCatchmentLayer = true;
   showLoadingOverlay();
 
-  if (!initialLoadComplete || !grid) {
-    isUpdatingCatchmentLayer = false;
-    hideLoadingOverlay();
+  // Add check for grid data validity
+  if (!initialLoadComplete || !grid || !grid.features || !Array.isArray(grid.features)) {
+    console.log("Grid data not fully loaded yet, waiting...");
+    // Set up a retry mechanism
+    setTimeout(() => {
+      isUpdatingCatchmentLayer = false;
+      hideLoadingOverlay();
+      if (grid && grid.features && Array.isArray(grid.features)) {
+        updateAmenitiesCatchmentLayer();
+      } else {
+        showErrorNotification("Grid data not available. Please try refreshing the page.");
+      }
+    }, 2000);
     return;
   }
   
