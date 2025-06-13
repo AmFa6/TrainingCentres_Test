@@ -1059,7 +1059,7 @@ function processGridData(data1, data2, csvText) {
             self.postMessage({
               type: 'progress',
               percent: 0,
-              message: `Starting to transfer ${totalFeatures} features in chunks`
+              message: 'Starting to transfer ' + totalFeatures + ' features in chunks'
             });
             
             // Then send the chunks
