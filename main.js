@@ -4263,11 +4263,12 @@ function updateAmenitiesCatchmentLayer() {
               applyAmenitiesCatchmentLayerStyling();
               updateSummaryStatistics(getCurrentFeatures());
             }
+            
             worker.terminate();
             isUpdatingCatchmentLayer = false;
             hideLoadingOverlay();
           };
-      
+          
       // Calculate eligible destinations based on selected filters
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
