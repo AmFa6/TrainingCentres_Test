@@ -1052,15 +1052,25 @@ function processGridData(data1, data2, csvText) {
             self.postMessage(combinedData);
 
             // With these lines to chunk the data transfer:
-            const CHUNK_SIZE = 10000;
+            const CHUNK_SIZE = 5000; // Use a smaller chunk size
             const totalFeatures = combinedData.features.length;
-            let start = 0;
-
-            while (start < totalFeatures) {
+            
+            // First send a message about how many chunks to expect
+            self.postMessage({
+              type: 'progress',
+              percent: 0,
+              message: `Starting to transfer ${totalFeatures} features in chunks`
+            });
+            
+            // Then send the chunks
+            for (let start = 0; start < totalFeatures; start += CHUNK_SIZE) {
               const end = Math.min(start + CHUNK_SIZE, totalFeatures);
+              const chunkFeatures = combinedData.features.slice(start, end);
+              
+              // Create a clean chunk object with only the necessary data
               const chunk = {
                 type: 'FeatureCollection',
-                features: combinedData.features.slice(start, end),
+                features: chunkFeatures,
                 chunkInfo: {
                   current: Math.floor(start / CHUNK_SIZE) + 1,
                   total: Math.ceil(totalFeatures / CHUNK_SIZE),
@@ -1069,71 +1079,97 @@ function processGridData(data1, data2, csvText) {
                   isLast: end >= totalFeatures
                 }
               };
+              
+              // Report progress
+              const percent = Math.floor((end / totalFeatures) * 100);
+              self.postMessage({
+                type: 'progress',
+                percent: percent,
+                message: `Processed ${end}/${totalFeatures} features (${percent}%)`
+              });
+              
+              // Send the actual data chunk
               self.postMessage(chunk);
-              start = end;
+              
+              // Add a small delay to prevent stack overflow
+              if (end < totalFeatures) {
+                // In a web worker, we can use setTimeout
+                setTimeout(() => {}, 0);
+              }
             }
-          } catch (error) {
-            console.error("Error in worker:", error);
-            self.postMessage({
-              type: 'FeatureCollection',
-              features: []
-            });
-          }
-        };
+          };
         `
       ], { type: 'application/javascript' });
       
       const workerUrl = URL.createObjectURL(blob);
       const worker = new Worker(workerUrl);
       
-      // In the worker.onmessage handler (around line 1068):
-      const allFeatures = [];
+      let allFeatures = [];
       let processedChunks = 0;
       let totalChunks = 0;
+      let dbInstance = db;
 
       worker.onmessage = function(e) {
         const chunk = e.data;
-        processedChunks++;
-        totalChunks = chunk.chunkInfo?.total || 1;
         
-        if (chunk.features && Array.isArray(chunk.features)) {
-          allFeatures.push(...chunk.features);
+        // Check if we have valid data
+        if (!chunk || typeof chunk !== 'object') {
+          console.error("Received invalid data from worker:", chunk);
+          return;
         }
         
-        // Show progress
-        console.log(`Processed chunk ${chunk.chunkInfo?.current}/${totalChunks}, features: ${chunk.features.length}`);
+        // Handle progress updates
+        if (chunk.type === 'progress') {
+          console.log(`Progress: ${chunk.percent}%`);
+          return;
+        }
         
-        // If this is the last chunk or we've received all expected chunks
-        if (chunk.chunkInfo?.isLast || processedChunks >= totalChunks) {
-          const processedGrid = {
-            type: 'FeatureCollection',
-            features: allFeatures
-          };
+        // Handle actual data chunks
+        if (chunk.type === 'FeatureCollection' && Array.isArray(chunk.features)) {
+          processedChunks++;
           
-          console.log(`Processing complete, total features: ${allFeatures.length}`);
-          
-          // Continue with normal processing
-          grid = processedGrid;
-          
-          if (db) {
-            try {
-              const tx = db.transaction('grid', 'readwrite');
-              const store = tx.objectStore('grid');
-              store.put({ id: 'gridData', data: grid });
-              console.log("Grid data cached successfully");
-            } catch (err) {
-              console.error("Error caching grid data:", err);
-            }
+          if (chunk.chunkInfo) {
+            totalChunks = chunk.chunkInfo.total;
+            console.log(`Received chunk ${chunk.chunkInfo.current}/${totalChunks}, features: ${chunk.features.length}`);
           }
           
-          calculateGridStatistics(grid);
-          updateFilterDropdown();
-          updateFilterValues();
-          updateSummaryStatistics(grid.features);
+          // Safely add features to our collection
+          allFeatures = allFeatures.concat(chunk.features);
           
-          hideBackgroundLoadingIndicator();
-          worker.terminate();
-          URL.revokeObjectURL(workerUrl);
+          // Check if this is the final chunk
+          const isLastChunk = chunk.chunkInfo?.isLast || processedChunks >= totalChunks;
+          
+          if (isLastChunk) {
+            console.log(`Processing complete, total features: ${allFeatures.length}`);
+            
+            const processedGrid = {
+              type: 'FeatureCollection',
+              features: allFeatures
+            };
+            
+            grid = processedGrid;
+            
+            // Cache the data if we have a database connection
+            if (dbInstance) {
+              try {
+                const tx = dbInstance.transaction('gridData', 'readwrite');
+                const store = tx.objectStore('gridData');
+                store.put({ id: 'gridData', data: grid });
+                console.log("Grid data cached successfully");
+              } catch (err) {
+                console.error("Error caching grid data:", err);
+              }
+            }
+            
+            calculateGridStatistics(grid);
+            updateFilterDropdown();
+            updateFilterValues();
+            updateSummaryStatistics(grid.features);
+            
+            hideBackgroundLoadingIndicator();
+            worker.terminate();
+            URL.revokeObjectURL(workerUrl);
+          }
         }
       };
       
