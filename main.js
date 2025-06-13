@@ -878,6 +878,8 @@ function loadGridData() {
 }
 
 function fetchGridDataFromServer(db) {
+  console.log("Fetching grid data from server...");
+  
   Promise.all([
     fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
     fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
@@ -887,13 +889,19 @@ function fetchGridDataFromServer(db) {
       processGridData(data1, data2, csvText).then(processedGrid => {
         // Make sure grid is properly set here
         grid = processedGrid;
-        console.log("Grid data loaded, features count:", grid.features ? grid.features.length : 0);
+        console.log("Grid data successfully loaded:", 
+                    grid ? `${grid.features ? grid.features.length : 0} features` : "No data");
         
         // Cache the processed data
         if (db) {
-          const tx = db.transaction('grid', 'readwrite');
-          const store = tx.objectStore('grid');
-          store.put({ id: 'gridData', data: grid });
+          try {
+            const tx = db.transaction('grid', 'readwrite');
+            const store = tx.objectStore('grid');
+            store.put({ id: 'gridData', data: grid });
+            console.log("Grid data cached successfully");
+          } catch (err) {
+            console.error("Error caching grid data:", err);
+          }
         }
         
         calculateGridStatistics(grid);
@@ -915,42 +923,61 @@ function fetchGridDataFromServer(db) {
 function processGridData(data1, data2, csvText) {
   return new Promise((resolve) => {
     // Create a worker for heavy processing
-    const workerCode = `
-      self.onmessage = function(e) {
-        const { data1, data2, csvText } = e.data;
-        const csvData = self.Papa.parse(csvText, { header: true }).data;
+// Inside the processGridData function, modify the worker code to ensure it returns a valid structure:
+  const workerCode = `
+    self.onmessage = function(e) {
+      const { data1, data2, csvText } = e.data;
+      const csvData = self.Papa.parse(csvText, { header: true }).data;
+      
+      const csvLookup = {};
+      csvData.forEach(row => {
+        if (row.OriginId_tracc) {
+          csvLookup[row.OriginId_tracc] = row;
+        }
+      });
+      
+      const processFeatures = (features) => {
+        if (!features || !Array.isArray(features)) {
+          console.error("Invalid features data:", features);
+          return [];
+        }
         
-        const csvLookup = {};
-        csvData.forEach(row => {
-          if (row.OriginId_tracc) {
-            csvLookup[row.OriginId_tracc] = row;
+        return features.map(feature => {
+          if (!feature || !feature.properties || !feature.geometry) return null;
+          
+          const originId = feature.properties.OriginId_tracc;
+          
+          if (originId && csvLookup[originId]) {
+            Object.keys(csvLookup[originId]).forEach(key => {
+              if (key !== 'OriginId_tracc') {
+                feature.properties[key] = csvLookup[originId][key];
+              }
+            });
           }
-        });
-        
-        const processFeatures = (features) => {
-          return features.map(feature => {
-            const originId = feature.properties.OriginId_tracc;
-            
-            if (originId && csvLookup[originId]) {
-              Object.keys(csvLookup[originId]).forEach(key => {
-                if (key !== 'OriginId_tracc') {
-                  feature.properties[key] = csvLookup[originId][key];
-                }
-              });
-            }
-            
-            // Precompute centroid
+          
+          // Precompute centroid
+          if (feature.geometry.coordinates && feature.geometry.coordinates[0]) {
             const coordinates = feature.geometry.coordinates[0];
             const lng = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
             const lat = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
             feature.properties._centroid = [lng, lat];
-            
-            return feature;
-          }).filter(f => f.properties.OriginId_tracc && csvLookup[f.properties.OriginId_tracc]);
-        };
+          }
+          
+          return feature;
+        }).filter(f => f && f.properties && f.properties.OriginId_tracc && csvLookup[f.properties.OriginId_tracc]);
+      };
+      
+      let processedData1 = [];
+      let processedData2 = [];
+      
+      try {
+        if (data1 && data1.features) {
+          processedData1 = processFeatures(data1.features);
+        }
         
-        const processedData1 = processFeatures(data1.features);
-        const processedData2 = processFeatures(data2.features);
+        if (data2 && data2.features) {
+          processedData2 = processFeatures(data2.features);
+        }
         
         const combinedData = {
           type: 'FeatureCollection',
@@ -958,8 +985,15 @@ function processGridData(data1, data2, csvText) {
         };
         
         self.postMessage(combinedData);
-      };
-    `;
+      } catch (error) {
+        console.error("Error processing grid data:", error);
+        self.postMessage({
+          type: 'FeatureCollection',
+          features: []
+        });
+      }
+    };
+  `;
     
     // Include PapaParse in the worker
     const papaScript = document.querySelector('script[src*="papaparse"]').src;
@@ -4344,6 +4378,12 @@ function updateAmenitiesCatchmentLayer() {
 
 function applyAmenitiesCatchmentLayerStyling() {
   if (!AmenitiesCatchmentLayer) return;
+  
+  // Check if there are any actual layers
+  if (AmenitiesCatchmentLayer.getLayers().length === 0) {
+    console.warn("No layers in AmenitiesCatchmentLayer to style");
+    return;
+  }
   
   // Only update visible features based on map bounds
   const bounds = map.getBounds();
