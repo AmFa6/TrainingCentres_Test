@@ -1473,7 +1473,13 @@ function setupSubjectAndAimLevelCheckboxes() {
 
 function filterTrainingCentres() {
   console.log('Filtering training centres...');
-  if (!amenityLayers['TrainingCentres']) return [];
+  if (!amenityLayers['TrainingCentres'] || !amenityLayers['TrainingCentres'].features) {
+    console.warn('Training centers data not available or invalid');
+    return {
+      type: "FeatureCollection",
+      features: []
+    };
+  }
   
   const selectedYear = AmenitiesYear.value;
   const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
@@ -1523,7 +1529,7 @@ function filterTrainingCentres() {
       const columnName = `${yearPrefix}_${subject}`;
       return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
     });
-  });
+  }) || [];
   
   return {
     type: "FeatureCollection",
@@ -4207,41 +4213,60 @@ function updateAmenitiesCatchmentLayer() {
             map.removeLayer(AmenitiesCatchmentLayer);
           }
           
-          AmenitiesCatchmentLayer = L.geoJSON(grid, {
-            pane: 'polygonLayers',
-            style: function() {
-              return {
-                weight: 0,
-                fillOpacity: 0,
-                opacity: 0
-              };
-            }
-          }).addTo(map);
+          worker.onmessage = function(e) {
+            gridTimeMap = e.data;
+            
+            // Update the catchment layer with the calculated time data
+            let needToCreateNewLayer = !AmenitiesCatchmentLayer;
+            
+            if (needToCreateNewLayer) {
+              if (AmenitiesCatchmentLayer) {
+                map.removeLayer(AmenitiesCatchmentLayer);
+              }
+              
+              // Check if grid is valid before creating a GeoJSON layer
+              if (grid && grid.features && Array.isArray(grid.features)) {
+                AmenitiesCatchmentLayer = L.geoJSON(grid, {
+                  pane: 'polygonLayers',
+                  style: function() {
+                    return {
+                      weight: 0,
+                      fillOpacity: 0,
+                      opacity: 0
+                    };
+                  }
+                }).addTo(map);
+                      
+                AmenitiesCatchmentLayer.eachLayer(layer => {
+                  layer.feature.properties._opacity = undefined;
+                  layer.feature.properties._weight = undefined;
+                });
                 
-          AmenitiesCatchmentLayer.eachLayer(layer => {
-              layer.feature.properties._opacity = undefined;
-              layer.feature.properties._weight = undefined;
-          });
-          
-          const updatesComplete = () => {
-            drawSelectedAmenities();
-            updateLegend();
-            updateFilterDropdown();
-            updateFilterValues('amenities');
+                const updatesComplete = () => {
+                  drawSelectedAmenities();
+                  updateLegend();
+                  updateFilterDropdown();
+                  updateFilterValues('amenities');
+                };
+                
+                updateSliderRanges('Amenities', 'Opacity');
+                updateSliderRanges('Amenities', 'Outline');
+                
+                setTimeout(updatesComplete, 50);
+              } else {
+                console.error("Grid data is invalid or missing features array");
+                isUpdatingCatchmentLayer = false;
+                hideLoadingOverlay();
+                return;
+              }
+            } else {
+              applyAmenitiesCatchmentLayerStyling();
+              updateSummaryStatistics(getCurrentFeatures());
+            }
+            worker.terminate();
+            isUpdatingCatchmentLayer = false;
+            hideLoadingOverlay();
           };
-          
-          updateSliderRanges('Amenities', 'Opacity');
-          updateSliderRanges('Amenities', 'Outline');
-          
-          setTimeout(updatesComplete, 50);
-        } else {
-            applyAmenitiesCatchmentLayerStyling();
-            updateSummaryStatistics(getCurrentFeatures());
-        }
-        worker.terminate();
-        isUpdatingCatchmentLayer = false;
-        hideLoadingOverlay();
-      };
       
       // Calculate eligible destinations based on selected filters
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
