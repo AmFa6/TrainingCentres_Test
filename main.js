@@ -967,94 +967,150 @@ function fetchGridDataFromServer(db) {
 }
 
 function processGridData(data1, data2, csvText) {
+  console.log("Processing grid data...");
+  
+  // Log input data details before processing
+  console.log("Input data1:", data1 ? `${data1.features ? data1.features.length : 0} features` : "No data");
+  console.log("Input data2:", data2 ? `${data2.features ? data2.features.length : 0} features` : "No data");
+  console.log("CSV text length:", csvText ? csvText.length : 0);
+
   return new Promise((resolve) => {
-    // Create a worker for heavy processing
-// Inside the processGridData function, modify the worker code to ensure it returns a valid structure:
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { data1, data2, csvText } = e.data;
-      const csvData = self.Papa.parse(csvText, { header: true }).data;
-      
-      const csvLookup = {};
-      csvData.forEach(row => {
-        if (row.OriginId_tracc) {
-          csvLookup[row.OriginId_tracc] = row;
-        }
-      });
-      
-      const processFeatures = (features) => {
-        if (!features || !Array.isArray(features)) {
-          console.error("Invalid features data:", features);
-          return [];
-        }
-        
-        return features.map(feature => {
-          if (!feature || !feature.properties || !feature.geometry) return null;
+    // First try the worker approach
+    try {
+      const blob = new Blob([
+        `importScripts('https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js');`,
+        `
+        self.onmessage = function(e) {
+          console.log("Worker received data");
           
-          const originId = feature.properties.OriginId_tracc;
+          const { data1, data2, csvText } = e.data;
           
-          if (originId && csvLookup[originId]) {
-            Object.keys(csvLookup[originId]).forEach(key => {
-              if (key !== 'OriginId_tracc') {
-                feature.properties[key] = csvLookup[originId][key];
+          // Verify input data
+          console.log("Worker data1:", data1 ? (data1.features ? data1.features.length : "No features") : "No data");
+          console.log("Worker data2:", data2 ? (data2.features ? data2.features.length : "No features") : "No data");
+          console.log("Worker CSV length:", csvText ? csvText.length : 0);
+          
+          try {
+            const csvData = self.Papa.parse(csvText, { header: true }).data;
+            console.log("CSV parsed successfully, rows:", csvData.length);
+            
+            const csvLookup = {};
+            let validRows = 0;
+            
+            csvData.forEach(row => {
+              if (row.OriginId_tracc) {
+                csvLookup[row.OriginId_tracc] = row;
+                validRows++;
               }
             });
+            
+            console.log("Valid CSV rows with OriginId_tracc:", validRows);
+            
+            const processFeatures = (features) => {
+              if (!features || !Array.isArray(features)) {
+                console.error("Invalid features data");
+                return [];
+              }
+              
+              let validFeatures = 0;
+              let matchedFeatures = 0;
+              
+              const result = features.map(feature => {
+                if (!feature || !feature.properties) {
+                  return null;
+                }
+                
+                validFeatures++;
+                const originId = feature.properties.OriginId_tracc;
+                
+                if (originId && csvLookup[originId]) {
+                  matchedFeatures++;
+                  Object.keys(csvLookup[originId]).forEach(key => {
+                    if (key !== 'OriginId_tracc') {
+                      feature.properties[key] = csvLookup[originId][key];
+                    }
+                  });
+                }
+                return feature;
+              }).filter(f => f !== null);
+              
+              console.log("Features processed:", features.length, "valid:", validFeatures, "matched:", matchedFeatures, "final:", result.length);
+              return result;
+            };
+            
+            let features1 = data1 && data1.features ? processFeatures(data1.features) : [];
+            let features2 = data2 && data2.features ? processFeatures(data2.features) : [];
+            
+            console.log("Processed features count - data1:", features1.length, "data2:", features2.length);
+            
+            const combinedData = {
+              type: 'FeatureCollection',
+              features: [...features1, ...features2]
+            };
+            
+            console.log("Combined features count:", combinedData.features.length);
+            self.postMessage(combinedData);
+          } catch (error) {
+            console.error("Error in worker:", error);
+            self.postMessage({
+              type: 'FeatureCollection',
+              features: []
+            });
           }
-          
-          // Precompute centroid
-          if (feature.geometry.coordinates && feature.geometry.coordinates[0]) {
-            const coordinates = feature.geometry.coordinates[0];
-            const lng = coordinates.reduce((sum, coord) => sum + coord[0], 0) / coordinates.length;
-            const lat = coordinates.reduce((sum, coord) => sum + coord[1], 0) / coordinates.length;
-            feature.properties._centroid = [lng, lat];
-          }
-          
-          return feature;
-        }).filter(f => f && f.properties && f.properties.OriginId_tracc && csvLookup[f.properties.OriginId_tracc]);
+        };
+        `
+      ], { type: 'application/javascript' });
+      
+      const workerUrl = URL.createObjectURL(blob);
+      const worker = new Worker(workerUrl);
+      
+      worker.onmessage = function(e) {
+        console.log(`Worker processing complete, received ${e.data.features ? e.data.features.length : 0} features`);
+        
+        // Create a shallow copy to ensure we have a new object
+        const processedGrid = Object.assign({}, e.data);
+        
+        if (!processedGrid.features || processedGrid.features.length === 0) {
+          console.error("Worker returned no features - trying fallback processing method");
+          // Implement fallback processing here if needed
+        }
+        
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
+        resolve(processedGrid);
       };
       
-      let processedData1 = [];
-      let processedData2 = [];
-      
-      try {
-        if (data1 && data1.features) {
-          processedData1 = processFeatures(data1.features);
-        }
+      worker.onerror = function(error) {
+        console.error("Worker error:", error);
+        worker.terminate();
+        URL.revokeObjectURL(workerUrl);
         
-        if (data2 && data2.features) {
-          processedData2 = processFeatures(data2.features);
-        }
-        
-        const combinedData = {
+        // Try fallback approach
+        console.log("Trying fallback data processing approach");
+        const fallbackData = {
           type: 'FeatureCollection',
-          features: [...processedData1, ...processedData2]
+          features: [...(data1.features || []), ...(data2.features || [])]
         };
-        
-        self.postMessage(combinedData);
-      } catch (error) {
-        console.error("Error processing grid data:", error);
-        self.postMessage({
-          type: 'FeatureCollection',
-          features: []
-        });
-      }
-    };
-  `;
-    
-    // Include PapaParse in the worker
-    const papaScript = document.querySelector('script[src*="papaparse"]').src;
-    
-    const blob = new Blob([
-      `importScripts('${papaScript}');\n` + workerCode
-    ], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-    
-    worker.onmessage = function(e) {
-      resolve(e.data);
-      worker.terminate();
-    };
-    
-    worker.postMessage({ data1, data2, csvText });
+        resolve(fallbackData);
+      };
+      
+      // Send a deep copy of the data to the worker
+      worker.postMessage({
+        data1: JSON.parse(JSON.stringify(data1)),
+        data2: JSON.parse(JSON.stringify(data2)),
+        csvText: csvText
+      });
+    } catch (error) {
+      console.error("Error setting up worker:", error);
+      
+      // Fallback to direct processing
+      console.log("Falling back to direct processing");
+      const fallbackData = {
+        type: 'FeatureCollection',
+        features: [...(data1.features || []), ...(data2.features || [])]
+      };
+      resolve(fallbackData);
+    }
   });
 }
 
