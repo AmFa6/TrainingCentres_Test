@@ -4147,39 +4147,15 @@ function updateAmenitiesCatchmentLayer() {
     .filter(id => id !== undefined);
     
   if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-    // Handle empty case...
+    if (AmenitiesCatchmentLayer) {
+      map.removeLayer(AmenitiesCatchmentLayer);
+      AmenitiesCatchmentLayer = null;
+    }
     isUpdatingCatchmentLayer = false;
     hideLoadingOverlay();
     return;
   }
 
-  // Use a web worker to compute time maps
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { csvData, filteredTrainingCenterIds, eligibleDestinations } = e.data;
-      
-      const gridTimeMap = {};
-      
-      csvData.forEach(row => {
-        const originId = row.origin;
-        const destinationId = row.destination;
-        const totalTime = parseFloat(row.totaltime);
-        
-        if (!originId || !destinationId || isNaN(totalTime)) {
-          return;
-        }
-        
-        if (eligibleDestinations.includes(destinationId)) {
-          if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-            gridTimeMap[originId] = totalTime;
-          }
-        }
-      });
-      
-      self.postMessage(gridTimeMap);
-    };
-  `;
-  
   const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
 
   fetch(csvPath)
@@ -4192,56 +4168,6 @@ function updateAmenitiesCatchmentLayer() {
         hideLoadingOverlay();
         return;
       }
-      
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      const worker = new Worker(URL.createObjectURL(blob));
-      
-      worker.onmessage = function(e) {
-        gridTimeMap = e.data;
-        
-        // Update the catchment layer with the calculated time data
-        let needToCreateNewLayer = !AmenitiesCatchmentLayer;
-        
-        if (needToCreateNewLayer) {
-          if (AmenitiesCatchmentLayer) {
-            map.removeLayer(AmenitiesCatchmentLayer);
-          }
-          
-          AmenitiesCatchmentLayer = L.geoJSON(grid, {
-            pane: 'polygonLayers',
-            style: function() {
-              return {
-                weight: 0,
-                fillOpacity: 0,
-                opacity: 0
-              };
-            }
-          }).addTo(map);
-                
-          AmenitiesCatchmentLayer.eachLayer(layer => {
-              layer.feature.properties._opacity = undefined;
-              layer.feature.properties._weight = undefined;
-          });
-          
-          const updatesComplete = () => {
-            drawSelectedAmenities();
-            updateLegend();
-            updateFilterDropdown();
-            updateFilterValues('amenities');
-          };
-          
-          updateSliderRanges('Amenities', 'Opacity');
-          updateSliderRanges('Amenities', 'Outline');
-          
-          setTimeout(updatesComplete, 50);
-        } else {
-            applyAmenitiesCatchmentLayerStyling();
-            updateSummaryStatistics(getCurrentFeatures());
-        }
-        worker.terminate();
-        isUpdatingCatchmentLayer = false;
-        hideLoadingOverlay();
-      };
       
       // Calculate eligible destinations based on selected filters
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
@@ -4298,11 +4224,99 @@ function updateAmenitiesCatchmentLayer() {
         });
       }
       
-      worker.postMessage({
-        csvData,
-        filteredTrainingCenterIds,
-        eligibleDestinations: Array.from(eligibleDestinations)
+      // Process grid time map without using a worker to avoid serialization issues
+      gridTimeMap = {}; // Reset the time map
+      
+      csvData.forEach(row => {
+        const originId = row.origin;
+        const destinationId = row.destination;
+        const totalTime = parseFloat(row.totaltime);
+        
+        if (!originId || !destinationId || isNaN(totalTime)) {
+          return;
+        }
+        
+        if (Array.from(eligibleDestinations).includes(destinationId)) {
+          if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
+            gridTimeMap[originId] = totalTime;
+          }
+        }
       });
+      
+      // Update the catchment layer with the calculated time data
+      // First check if we need to remove the old layer
+      if (AmenitiesCatchmentLayer) {
+        map.removeLayer(AmenitiesCatchmentLayer);
+        AmenitiesCatchmentLayer = null;
+      }
+      
+      // Check if grid is valid before creating a new GeoJSON layer
+      if (!grid || !grid.features || !Array.isArray(grid.features)) {
+        console.error("Invalid grid data:", grid);
+        isUpdatingCatchmentLayer = false;
+        hideLoadingOverlay();
+        return;
+      }
+      
+      // Ensure each feature has proper geometry
+      const validFeatures = grid.features.filter(feature => 
+        feature && 
+        feature.geometry && 
+        feature.geometry.type && 
+        feature.geometry.coordinates && 
+        Array.isArray(feature.geometry.coordinates)
+      );
+      
+      const validGrid = {
+        type: 'FeatureCollection',
+        features: validFeatures
+      };
+      
+      // Now create a new layer with valid GeoJSON
+      AmenitiesCatchmentLayer = L.geoJSON(validGrid, {
+        pane: 'polygonLayers',
+        style: function() {
+          return {
+            weight: 0,
+            fillOpacity: 0,
+            opacity: 0
+          };
+        }
+      }).addTo(map);
+      
+      // Update layer properties
+      AmenitiesCatchmentLayer.eachLayer(layer => {
+        if (layer.feature && layer.feature.properties) {
+          layer.feature.properties._opacity = undefined;
+          layer.feature.properties._weight = undefined;
+          
+          // Add time property from gridTimeMap
+          const originId = layer.feature.properties.OriginId_tracc;
+          if (originId && gridTimeMap[originId]) {
+            layer.feature.properties.time = gridTimeMap[originId];
+          }
+        }
+      });
+      
+      const updatesComplete = () => {
+        drawSelectedAmenities();
+        updateLegend();
+        updateFilterDropdown();
+        updateFilterValues('amenities');
+        
+        // Apply styling after a short delay to ensure the layer is fully loaded
+        setTimeout(() => {
+          applyAmenitiesCatchmentLayerStyling();
+          updateSummaryStatistics(getCurrentFeatures());
+          isUpdatingCatchmentLayer = false;
+          hideLoadingOverlay();
+        }, 50);
+      };
+      
+      updateSliderRanges('Amenities', 'Opacity');
+      updateSliderRanges('Amenities', 'Outline');
+      
+      setTimeout(updatesComplete, 50);
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
