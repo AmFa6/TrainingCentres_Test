@@ -4202,73 +4202,6 @@ function updateAmenitiesCatchmentLayer() {
       const blob = new Blob([workerCode], { type: 'application/javascript' });
       const worker = new Worker(URL.createObjectURL(blob));
       
-      worker.onmessage = function(e) {
-        gridTimeMap = e.data;
-        
-        // Update the catchment layer with the calculated time data
-        let needToCreateNewLayer = !AmenitiesCatchmentLayer;
-        
-        if (needToCreateNewLayer) {
-          if (AmenitiesCatchmentLayer) {
-            map.removeLayer(AmenitiesCatchmentLayer);
-          }
-          
-          worker.onmessage = function(e) {
-            gridTimeMap = e.data;
-            
-            // Update the catchment layer with the calculated time data
-            let needToCreateNewLayer = !AmenitiesCatchmentLayer;
-            
-            if (needToCreateNewLayer) {
-              if (AmenitiesCatchmentLayer) {
-                map.removeLayer(AmenitiesCatchmentLayer);
-              }
-              
-              // Check if grid is valid before creating a GeoJSON layer
-              if (grid && grid.features && Array.isArray(grid.features)) {
-                AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                  pane: 'polygonLayers',
-                  style: function() {
-                    return {
-                      weight: 0,
-                      fillOpacity: 0,
-                      opacity: 0
-                    };
-                  }
-                }).addTo(map);
-                      
-                AmenitiesCatchmentLayer.eachLayer(layer => {
-                  layer.feature.properties._opacity = undefined;
-                  layer.feature.properties._weight = undefined;
-                });
-                
-                const updatesComplete = () => {
-                  drawSelectedAmenities();
-                  updateLegend();
-                  updateFilterDropdown();
-                  updateFilterValues('amenities');
-                };
-                
-                updateSliderRanges('Amenities', 'Opacity');
-                updateSliderRanges('Amenities', 'Outline');
-                
-                setTimeout(updatesComplete, 50);
-              } else {
-                console.error("Grid data is invalid or missing features array");
-                isUpdatingCatchmentLayer = false;
-                hideLoadingOverlay();
-                return;
-              }
-            } else {
-              applyAmenitiesCatchmentLayerStyling();
-              updateSummaryStatistics(getCurrentFeatures());
-            }
-            
-            worker.terminate();
-            isUpdatingCatchmentLayer = false;
-            hideLoadingOverlay();
-          };
-          
       // Calculate eligible destinations based on selected filters
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
@@ -4323,6 +4256,62 @@ function updateAmenitiesCatchmentLayer() {
           }
         });
       }
+      
+      worker.onmessage = function(e) {
+        gridTimeMap = e.data;
+        
+        // Update the catchment layer with the calculated time data
+        let needToCreateNewLayer = !AmenitiesCatchmentLayer;
+        
+        if (needToCreateNewLayer) {
+          if (AmenitiesCatchmentLayer) {
+            map.removeLayer(AmenitiesCatchmentLayer);
+          }
+          
+          // Check if grid is valid before creating a GeoJSON layer
+          if (grid && grid.features && Array.isArray(grid.features)) {
+            AmenitiesCatchmentLayer = L.geoJSON(grid, {
+              pane: 'polygonLayers',
+              style: function() {
+                return {
+                  weight: 0,
+                  fillOpacity: 0,
+                  opacity: 0
+                };
+              }
+            }).addTo(map);
+                  
+            AmenitiesCatchmentLayer.eachLayer(layer => {
+              layer.feature.properties._opacity = undefined;
+              layer.feature.properties._weight = undefined;
+            });
+            
+            const updatesComplete = () => {
+              drawSelectedAmenities();
+              updateLegend();
+              updateFilterDropdown();
+              updateFilterValues('amenities');
+            };
+            
+            updateSliderRanges('Amenities', 'Opacity');
+            updateSliderRanges('Amenities', 'Outline');
+            
+            setTimeout(updatesComplete, 50);
+          } else {
+            console.error("Grid data is invalid or missing features array");
+            isUpdatingCatchmentLayer = false;
+            hideLoadingOverlay();
+            return;
+          }
+        } else {
+          applyAmenitiesCatchmentLayerStyling();
+          updateSummaryStatistics(getCurrentFeatures());
+        }
+        
+        worker.terminate();
+        isUpdatingCatchmentLayer = false;
+        hideLoadingOverlay();
+      };
       
       worker.postMessage({
         csvData,
