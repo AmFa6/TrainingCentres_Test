@@ -880,12 +880,58 @@ function loadGridData() {
 function fetchGridDataFromServer(db) {
   console.log("Fetching grid data from server...");
   
+  // First log the URLs to check they're correct
+  const urls = [
+    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson',
+    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson',
+    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv'
+  ];
+  console.log("Fetching data from URLs:", urls);
+  
   Promise.all([
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
+    fetch(urls[0])
+      .then(response => {
+        if (!response.ok) throw new Error(`Failed to fetch from ${urls[0]}: ${response.status} ${response.statusText}`);
+        return response.json();
+      })
+      .then(data => {
+        console.log(`Data from ${urls[0]}:`, data ? (data.features ? `${data.features.length} features` : "No features array") : "No data");
+        return data;
+      }),
+    fetch(urls[1])
+      .then(response => {
+        if (!response.ok) throw new Error(`Failed to fetch from ${urls[1]}: ${response.status} ${response.statusText}`);
+        return response.json();
+      })
+      .then(data => {
+        console.log(`Data from ${urls[1]}:`, data ? (data.features ? `${data.features.length} features` : "No features array") : "No data");
+        return data;
+      }),
+    fetch(urls[2])
+      .then(response => {
+        if (!response.ok) throw new Error(`Failed to fetch from ${urls[2]}: ${response.status} ${response.statusText}`);
+        return response.text();
+      })
+      .then(text => {
+        console.log(`CSV data from ${urls[2]}:`, text ? `${text.length} chars` : "No data");
+        return text;
+      })
   ])
-    .then(([data1, data2, csvText]) => {    
+    .then(([data1, data2, csvText]) => {
+      console.log("All data fetched, processing now...");
+      
+      if (!data1 || !data1.features || !data1.features.length) {
+        console.error("No features in first GeoJSON file");
+      }
+      
+      if (!data2 || !data2.features || !data2.features.length) {
+        console.error("No features in second GeoJSON file");
+      }
+      
+      if (!csvText || csvText.length === 0) {
+        console.error("CSV data is empty");
+      }
+      
       processGridData(data1, data2, csvText).then(processedGrid => {
         // Make sure grid is properly set here
         grid = processedGrid;
@@ -916,7 +962,7 @@ function fetchGridDataFromServer(db) {
     .catch(error => {
       console.error("Error loading grid data:", error);
       hideBackgroundLoadingIndicator();
-      showErrorNotification("Error loading grid data. Some features may be limited.");
+      showErrorNotification(`Error loading grid data: ${error.message}`);
     });
 }
 
