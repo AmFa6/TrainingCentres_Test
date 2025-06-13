@@ -4163,7 +4163,8 @@ function updateAmenitiesCatchmentLayer() {
     .then(csvText => {
       const csvData = Papa.parse(csvText, { header: true }).data;
       
-      if (csvData.length === 0) {
+      if (!csvData || csvData.length === 0) {
+        console.error("Failed to parse CSV data");
         isUpdatingCatchmentLayer = false;
         hideLoadingOverlay();
         return;
@@ -4224,7 +4225,8 @@ function updateAmenitiesCatchmentLayer() {
         });
       }
       
-      // Process grid time map without using a worker to avoid serialization issues
+      // Process grid time map without using a worker 
+      // (since we had issues with the worker data format)
       gridTimeMap = {}; // Reset the time map
       
       csvData.forEach(row => {
@@ -4243,80 +4245,85 @@ function updateAmenitiesCatchmentLayer() {
         }
       });
       
-      // Update the catchment layer with the calculated time data
-      // First check if we need to remove the old layer
-      if (AmenitiesCatchmentLayer) {
-        map.removeLayer(AmenitiesCatchmentLayer);
-        AmenitiesCatchmentLayer = null;
+      // Create or update catchment layer
+      let needToCreateNewLayer = false;
+      
+      if (!AmenitiesCatchmentLayer) {
+        needToCreateNewLayer = true;
       }
       
-      // Check if grid is valid before creating a new GeoJSON layer
-      if (!grid || !grid.features || !Array.isArray(grid.features)) {
-        console.error("Invalid grid data:", grid);
-        isUpdatingCatchmentLayer = false;
-        hideLoadingOverlay();
-        return;
-      }
-      
-      // Ensure each feature has proper geometry
-      const validFeatures = grid.features.filter(feature => 
-        feature && 
-        feature.geometry && 
-        feature.geometry.type && 
-        feature.geometry.coordinates && 
-        Array.isArray(feature.geometry.coordinates)
-      );
-      
-      const validGrid = {
-        type: 'FeatureCollection',
-        features: validFeatures
-      };
-      
-      // Now create a new layer with valid GeoJSON
-      AmenitiesCatchmentLayer = L.geoJSON(validGrid, {
-        pane: 'polygonLayers',
-        style: function() {
-          return {
-            weight: 0,
-            fillOpacity: 0,
-            opacity: 0
-          };
+      if (needToCreateNewLayer) {
+        if (AmenitiesCatchmentLayer) {
+          map.removeLayer(AmenitiesCatchmentLayer);
         }
-      }).addTo(map);
-      
-      // Update layer properties
-      AmenitiesCatchmentLayer.eachLayer(layer => {
-        if (layer.feature && layer.feature.properties) {
+        
+        // Make sure grid is properly defined and is a valid GeoJSON object
+        if (!grid || !grid.type || !grid.features || !Array.isArray(grid.features)) {
+          console.error("Invalid grid data:", grid);
+          isUpdatingCatchmentLayer = false;
+          hideLoadingOverlay();
+          return;
+        }
+        
+        // Create a new AmenitiesCatchmentLayer from the grid data
+        AmenitiesCatchmentLayer = L.geoJSON(grid, {
+          pane: 'polygonLayers',
+          style: function() {
+            return {
+              weight: 0,
+              fillOpacity: 0,
+              opacity: 0
+            };
+          }
+        }).addTo(map);
+        
+        AmenitiesCatchmentLayer.eachLayer(layer => {
           layer.feature.properties._opacity = undefined;
           layer.feature.properties._weight = undefined;
           
-          // Add time property from gridTimeMap
-          const originId = layer.feature.properties.OriginId_tracc;
-          if (originId && gridTimeMap[originId]) {
-            layer.feature.properties.time = gridTimeMap[originId];
+          // Add journey time to each feature
+          if (layer.feature && layer.feature.properties) {
+            const originId = layer.feature.properties.OriginId_tracc;
+            if (originId && gridTimeMap[originId]) {
+              layer.feature.properties.time = gridTimeMap[originId];
+            }
           }
-        }
-      });
-      
-      const updatesComplete = () => {
-        drawSelectedAmenities();
-        updateLegend();
-        updateFilterDropdown();
-        updateFilterValues('amenities');
+        });
         
-        // Apply styling after a short delay to ensure the layer is fully loaded
-        setTimeout(() => {
-          applyAmenitiesCatchmentLayerStyling();
-          updateSummaryStatistics(getCurrentFeatures());
-          isUpdatingCatchmentLayer = false;
-          hideLoadingOverlay();
-        }, 50);
-      };
-      
-      updateSliderRanges('Amenities', 'Opacity');
-      updateSliderRanges('Amenities', 'Outline');
-      
-      setTimeout(updatesComplete, 50);
+        const updatesComplete = () => {
+          drawSelectedAmenities();
+          updateLegend();
+          updateFilterDropdown();
+          updateFilterValues('amenities');
+          
+          setTimeout(() => {
+            applyAmenitiesCatchmentLayerStyling();
+            updateSummaryStatistics(getCurrentFeatures());
+            isUpdatingCatchmentLayer = false;
+            hideLoadingOverlay();
+          }, 50);
+        };
+        
+        updateSliderRanges('Amenities', 'Opacity');
+        updateSliderRanges('Amenities', 'Outline');
+        
+        setTimeout(updatesComplete, 50);
+      } else {
+        // Update times in existing layer
+        AmenitiesCatchmentLayer.eachLayer(layer => {
+          if (layer.feature && layer.feature.properties) {
+            const originId = layer.feature.properties.OriginId_tracc;
+            if (originId && gridTimeMap[originId]) {
+              layer.feature.properties.time = gridTimeMap[originId];
+            }
+          }
+        });
+        
+        applyAmenitiesCatchmentLayerStyling();
+        updateSummaryStatistics(getCurrentFeatures());
+        isUpdatingCatchmentLayer = false;
+        hideLoadingOverlay();
+      }
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
