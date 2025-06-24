@@ -73,6 +73,79 @@ let lastAmenitiesState = {
 let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
 
+
+function convertMultiPolygonToPolygons(geoJson) {
+  console.log('Converting MultiPolygon to Polygon...');
+  return new Promise((resolve) => {
+    const features = [];
+    const featureCounts = {};
+    const totalFeatures = geoJson.features.length;
+    let processedCount = 0;
+    const batchSize = 50;
+    
+    function processBatch(startIdx) {
+      const endIdx = Math.min(startIdx + batchSize, totalFeatures);
+      
+      for (let i = startIdx; i < endIdx; i++) {
+        const feature = geoJson.features[i];
+        const name = feature.properties.LAD24NM || feature.properties.WD24NM || 
+                    feature.properties.LSOA21NM || feature.properties.name || 'Unknown';
+        featureCounts[name] = (featureCounts[name] || 0) + 1;
+        
+        if (feature.geometry.type === 'MultiPolygon') {      
+          const parts = feature.geometry.coordinates.map((polygonCoords, index) => {
+            const area = turf.area(turf.polygon(polygonCoords));
+            return { index, area, coords: polygonCoords };
+          });
+          
+          parts.sort((a, b) => b.area - a.area);
+                
+          if (name === 'North Somerset' || name === 'South Gloucestershire' || 
+              (feature.properties.name && feature.properties.name.length > 0)) {
+            features.push({
+              type: 'Feature',
+              geometry: {
+                type: 'Polygon',
+                coordinates: parts[0].coords
+              },
+              properties: feature.properties
+            });
+          } else {
+            feature.geometry.coordinates.forEach(polygonCoords => {
+              features.push({
+                type: 'Feature',
+                geometry: {
+                  type: 'Polygon',
+                  coordinates: polygonCoords
+                },
+                properties: feature.properties
+              });
+            });
+          }
+        } else {
+          features.push(feature);
+        }
+      }
+      
+      processedCount += (endIdx - startIdx);
+      
+      const percent = Math.round((processedCount / totalFeatures) * 100);
+      
+      if (processedCount < totalFeatures) {
+        setTimeout(() => requestAnimationFrame(() => processBatch(endIdx)), 0);
+      } else {
+        const result = {
+          type: 'FeatureCollection',
+          features: features
+        };
+        resolve(result);
+      }
+    }
+    
+    setTimeout(() => processBatch(0), 0);
+  });
+}
+
 const layers = {};
 const AmenitiesYear = document.getElementById("yearAmenitiesDropdown");
 const AmenitiesPurpose = document.querySelectorAll('.checkbox-label input[type="checkbox"]');
@@ -90,17 +163,31 @@ const debouncedUpdateOpacityOutlineFields = debounce(updateOpacityAndOutlineFiel
 AmenitiesOpacity.value = "None";
 AmenitiesOutline.value = "None";
 
+function debounce(func, wait) {
+  let timeout;
+  return function(...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      func.apply(this, args);
+    }, wait);
+  };
+}
+
 AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
-AmenitiesOpacity.addEventListener("change", debounce(() => {
+AmenitiesOpacity.addEventListener("change", () => {
   updateSliderRanges('Amenities', 'Opacity');
-  debouncedUpdateOpacityOutlineFields();
-}, 250));
-AmenitiesOutline.addEventListener("change", debounce(() => {
+  if (!isUpdatingOpacityOutlineFields) {
+    debouncedUpdateOpacityOutlineFields();
+  }
+});
+AmenitiesOutline.addEventListener("change", () => {
   updateSliderRanges('Amenities', 'Outline');
-  debouncedUpdateOpacityOutlineFields();
-}, 250));
+  if (!isUpdatingOpacityOutlineFields) {
+    debouncedUpdateOpacityOutlineFields();
+  }
+});
 AmenitiesInverseOpacity.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Opacity');
 });
@@ -175,151 +262,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
     showErrorNotification('Error loading map layers. Please try refreshing the page.');
   });
 });
-
-// Only render features in the current viewport
-function updateVisibleFeatures() {
-  if (!AmenitiesCatchmentLayer || !map) return;
-  
-  const bounds = map.getBounds();
-  const zoom = map.getZoom();
-  
-  // Skip detailed rendering at low zoom levels
-  if (zoom < 9) {
-    AmenitiesCatchmentLayer.eachLayer(layer => {
-      layer.setStyle({ opacity: 0, fillOpacity: 0 });
-    });
-    return;
-  }
-  
-  AmenitiesCatchmentLayer.eachLayer(layer => {
-    if (layer.feature && layer.feature.properties._centroid) {
-      const center = layer.feature.properties._centroid;
-      const isVisible = bounds.contains([center[1], center[0]]);
-      
-      if (isVisible) {
-        const range = layer.feature.properties._range;
-        const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
-        const visibleRanges = Array.from(legendCheckboxes)
-          .filter(checkbox => checkbox.checked)
-          .map(checkbox => checkbox.getAttribute('data-range'));
-        
-        const shouldShow = visibleRanges.includes(range);
-        
-        if (shouldShow) {
-          layer.setStyle({
-            fillColor: layer.feature.properties._fillColor,
-            color: 'black', 
-            weight: layer.feature.properties._weight,
-            fillOpacity: layer.feature.properties._opacity,
-            opacity: 1
-          });
-        } else {
-          layer.setStyle({ opacity: 0, fillOpacity: 0 });
-        }
-      } else {
-        layer.setStyle({ opacity: 0, fillOpacity: 0 });
-      }
-    }
-  });
-}
-
-function lazyLoadComponents() {
-  const options = {
-    root: null,
-    rootMargin: '0px',
-    threshold: 0.1
-  };
-  
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const component = entry.target;
-        const dataType = component.dataset.load;
-        
-        if (dataType === 'trainingCentres' && !amenityLayers['TrainingCentres']) {
-          loadTrainingCentres().then(() => {
-            initializeTrainingCentres();
-          });
-        }
-        
-        observer.unobserve(component);
-      }
-    });
-  }, options);
-  
-  // Observe components that should be lazily loaded
-  document.querySelectorAll('[data-load]').forEach(component => {
-    observer.observe(component);
-  });
-}
-
-function throttle(func, limit) {
-  let lastCall = 0;
-  return function(...args) {
-    const now = Date.now();
-    if (now - lastCall < limit) return;
-    lastCall = now;
-    return func.apply(this, args);
-  };
-}
-
-function debounce(func, wait, immediate = false) {
-  let timeout;
-  return function(...args) {
-    const context = this;
-    const later = function() {
-      timeout = null;
-      if (!immediate) func.apply(context, args);
-    };
-    const callNow = immediate && !timeout;
-    clearTimeout(timeout);
-    timeout = setTimeout(later, wait);
-    if (callNow) func.apply(context, args);
-  };
-}
-
-// For rendering many features efficiently
-function implementVirtualRendering(layer) {
-  if (!layer) return;
-  
-  // Store all features but only render those in view
-  const allFeatures = layer.getLayers();
-  let visibleFeatures = [];
-  
-  function updateVisibility() {
-    const bounds = map.getBounds();
-    const zoom = map.getZoom();
-    
-    // At very low zoom levels, just show a simplified view
-    if (zoom < 8) {
-      layer.clearLayers();
-      return;
-    }
-    
-    // Clear current visible features
-    layer.clearLayers();
-    
-    // Filter features in current viewport
-    visibleFeatures = allFeatures.filter(feature => {
-      if (!feature || !feature.feature || !feature.feature.properties._centroid) {
-        return false;
-      }
-      
-      const center = feature.feature.properties._centroid;
-      return bounds.contains([center[1], center[0]]);
-    });
-    
-    // Add visible features to the layer
-    visibleFeatures.forEach(feature => layer.addLayer(feature));
-  }
-  
-  // Update on map movement
-  map.on('moveend', updateVisibility);
-  map.on('zoomend', updateVisibility);
-  
-  // Initial update
-  updateVisibility();
-}
 
 /**
  * Initializes the basic UI components
@@ -637,74 +579,45 @@ function loadBoundaryData() {
     fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
       .then(response => response.json())
       .then(data => {
-        // Simplify polygons for better performance
-        data.features.forEach(feature => {
-          if (feature.geometry.type === 'MultiPolygon') {
-            feature.geometry.coordinates = feature.geometry.coordinates.map(polygon => {
-              // Keep only the largest polygon part for performance
-              const areas = polygon.map((ring, i) => ({ 
-                index: i, 
-                area: turf.area(turf.polygon([ring])) 
-              }));
-              areas.sort((a, b) => b.area - a.area);
-              return [polygon[areas[0].index]]; // Keep only the largest part
-            });
-          }
+        return convertMultiPolygonToPolygons(data).then(convertedData => {
+          uaBoundariesLayer = L.geoJSON(convertedData, {
+            pane: 'boundaryLayers',
+            style: function (feature) {
+              return {
+                color: 'black',
+                weight: 1.5,
+                fillOpacity: 0,
+                opacity: 0
+              };
+            },
+          }).addTo(map);
         });
-        
-        uaBoundariesLayer = L.geoJSON(data, {
-          pane: 'boundaryLayers',
-          style: function (feature) {
-            return {
-              color: 'black',
-              weight: 1.5,
-              fillOpacity: 0,
-              opacity: 0
-            };
-          },
-        }).addTo(map);
       }),
     
     fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
       .then(response => response.json())
       .then(data => {
-        // Filter ward features by LAD code first to reduce processing
-        const filteredFeatures = data.features.filter(feature => 
-          ladCodes.includes(feature.properties.LAD24CD)
-        );
-        
-        // Simplify polygons for better performance, similar to UA boundaries
-        filteredFeatures.forEach(feature => {
-          if (feature.geometry.type === 'MultiPolygon') {
-            feature.geometry.coordinates = feature.geometry.coordinates.map(polygon => {
-              // Keep only the largest polygon part for performance
-              const areas = polygon.map((ring, i) => ({ 
-                index: i, 
-                area: turf.area(turf.polygon([ring])) 
-              }));
-              areas.sort((a, b) => b.area - a.area);
-              return [polygon[areas[0].index]]; // Keep only the largest part
-            });
-          }
-        });
-        
-        const wardGeoJson = {
-          type: 'FeatureCollection',
-          features: filteredFeatures
-        };
-
-        wardBoundariesLayer = L.geoJSON(wardGeoJson, {
-          pane: 'boundaryLayers',
-          style: function () {
-            return {
-              color: 'black',
-              weight: 1,
-              fillOpacity: 0,
-              opacity: 0
+        return convertMultiPolygonToPolygons(data)
+          .then(convertedData => {
+            const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
+            const wardGeoJson = {
+              type: 'FeatureCollection',
+              features: filteredFeatures
             };
-          },
-        }).addTo(map);
-        console.log("Ward boundaries layer added to map.");
+
+            wardBoundariesLayer = L.geoJSON(wardGeoJson, {
+              pane: 'boundaryLayers',
+              style: function () {
+                return {
+                  color: 'black',
+                  weight: 1,
+                  fillOpacity: 0,
+                  opacity: 0
+                };
+              },
+            }).addTo(map);
+            console.log("Ward boundaries layer added to map.");
+          });
       })
   ]).catch(error => {
     console.error("Error loading boundary data:", error);
@@ -814,396 +727,85 @@ function loadBackgroundData() {
     });
 }
 
+/**
+ * Loads grid data in the background
+ */
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
-  // Check if data is already cached
-  const dbName = 'gridDataCache';
-  const request = indexedDB.open(dbName, 1);
-  
-  request.onupgradeneeded = function(event) {
-    const db = event.target.result;
-    db.createObjectStore('grid', { keyPath: 'id' });
-    db.createObjectStore('statistics', { keyPath: 'id' });
-  };
-  
-  request.onsuccess = function(event) {
-    const db = event.target.result;
-    const tx = db.transaction('grid', 'readonly');
-    const store = tx.objectStore('grid');
-    const getRequest = store.get('gridData');
-    
-    getRequest.onsuccess = function() {
-      if (getRequest.result && getRequest.result.data && 
-          getRequest.result.data.features && 
-          Array.isArray(getRequest.result.data.features)) {
-        console.log('Loading grid data from cache...');
-        const cachedData = getRequest.result.data;
-        grid = cachedData;
-        
-        console.log("Loaded grid from cache, features count:", grid.features.length);
-        
-        // Load cached statistics
-        const statsTx = db.transaction('statistics', 'readonly');
-        const statsStore = statsTx.objectStore('statistics');
-        const statsRequest = statsStore.get('gridStats');
-        
-        statsRequest.onsuccess = function() {
-          if (statsRequest.result) {
-            gridStatistics = statsRequest.result.data;
-            
-            updateFilterDropdown();
-            updateFilterValues();
-            updateSummaryStatistics(grid.features);
-            hideBackgroundLoadingIndicator();
-          } else {
-            calculateGridStatistics(grid);
-          }
-        };
-      } else {
-        console.log("Cached grid data invalid or incomplete, fetching from server");
-        fetchGridDataFromServer(db);
-      }
-    };
-    
-    getRequest.onerror = function() {
-      fetchGridDataFromServer(db);
-    };
-  };
-  
-  request.onerror = function() {
-    console.error("IndexedDB error");
-    fetchGridDataFromServer(null);
-  };
-}
-
-function fetchGridDataFromServer(db) {
-  console.log("Fetching grid data from server...");
-  
-  // First log the URLs to check they're correct
-  const urls = [
-    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson',
-    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson',
-    'https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv'
-  ];
-  console.log("Fetching data from URLs:", urls);
-  
   Promise.all([
-    fetch(urls[0])
-      .then(response => {
-        if (!response.ok) throw new Error(`Failed to fetch from ${urls[0]}: ${response.status} ${response.statusText}`);
-        return response.json();
-      })
-      .then(data => {
-        console.log(`Data from ${urls[0]}:`, data ? (data.features ? `${data.features.length} features` : "No features array") : "No data");
-        return data;
-      }),
-    fetch(urls[1])
-      .then(response => {
-        if (!response.ok) throw new Error(`Failed to fetch from ${urls[1]}: ${response.status} ${response.statusText}`);
-        return response.json();
-      })
-      .then(data => {
-        console.log(`Data from ${urls[1]}:`, data ? (data.features ? `${data.features.length} features` : "No features array") : "No data");
-        return data;
-      }),
-    fetch(urls[2])
-      .then(response => {
-        if (!response.ok) throw new Error(`Failed to fetch from ${urls[2]}: ${response.status} ${response.statusText}`);
-        return response.text();
-      })
-      .then(text => {
-        console.log(`CSV data from ${urls[2]}:`, text ? `${text.length} chars` : "No data");
-        return text;
-      })
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
   ])
-    .then(([data1, data2, csvText]) => {
-      console.log("All data fetched, processing now...");
-      
-      if (!data1 || !data1.features || !data1.features.length) {
-        console.error("No features in first GeoJSON file");
-      }
-      
-      if (!data2 || !data2.features || !data2.features.length) {
-        console.error("No features in second GeoJSON file");
-      }
-      
-      if (!csvText || csvText.length === 0) {
-        console.error("CSV data is empty");
-      }
+    .then(([data1, data2, csvText]) => {    
+      console.log("Processing grid data in background...");
       
       processGridData(data1, data2, csvText).then(processedGrid => {
-        // Make sure grid is properly set here
         grid = processedGrid;
-        console.log("Grid data successfully loaded:", 
-                    grid ? `${grid.features ? grid.features.length : 0} features` : "No data");
-        
-        // Cache the processed data
-        if (db) {
-          try {
-            const tx = db.transaction('grid', 'readwrite');
-            const store = tx.objectStore('grid');
-            store.put({ id: 'gridData', data: grid });
-            console.log("Grid data cached successfully");
-          } catch (err) {
-            console.error("Error caching grid data:", err);
-          }
-        }
         
         calculateGridStatistics(grid);
         
         updateFilterDropdown();
         updateFilterValues();
-        updateSummaryStatistics(grid.features);
+        
+        if (initialLoadComplete) {
+          updateSummaryStatistics(grid.features);
+        }
         
         hideBackgroundLoadingIndicator();
+        console.log("Grid data loading and processing complete");
       });
     })
     .catch(error => {
       console.error("Error loading grid data:", error);
       hideBackgroundLoadingIndicator();
-      showErrorNotification(`Error loading grid data: ${error.message}`);
+      showErrorNotification("Error loading grid data. Some features may be limited.");
     });
 }
 
+/**
+ * Processes grid data in batches to avoid UI blocking
+ * @param {Object} data1 First part of grid GeoJSON
+ * @param {Object} data2 Second part of grid GeoJSON
+ * @param {String} csvText CSV data for grid properties
+ * @returns {Promise} Promise that resolves with the processed grid data
+ */
 function processGridData(data1, data2, csvText) {
-  console.log("Processing grid data...");
-  
-  // Log input data details before processing
-  console.log("Input data1:", data1 ? `${data1.features ? data1.features.length : 0} features` : "No data");
-  console.log("Input data2:", data2 ? `${data2.features ? data2.features.length : 0} features` : "No data");
-  console.log("CSV text length:", csvText ? csvText.length : 0);
-
   return new Promise((resolve) => {
-    // First try the worker approach
-    try {
-      const blob = new Blob([
-        `importScripts('https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js');`,
-        `
-        self.onmessage = function(e) {
-          console.log("Worker received data");
-          
-          const { data1, data2, csvText } = e.data;
-          
-          // Verify input data
-          console.log("Worker data1:", data1 ? (data1.features ? data1.features.length : "No features") : "No data");
-          console.log("Worker data2:", data2 ? (data2.features ? data2.features.length : "No features") : "No data");
-          console.log("Worker CSV length:", csvText ? csvText.length : 0);
-          
-          try {
-            const csvData = self.Papa.parse(csvText, { header: true }).data;
-            console.log("CSV parsed successfully, rows:", csvData.length);
-            
-            const csvLookup = {};
-            let validRows = 0;
-            
-            csvData.forEach(row => {
-              if (row.OriginId_tracc) {
-                csvLookup[row.OriginId_tracc] = row;
-                validRows++;
-              }
-            });
-            
-            console.log("Valid CSV rows with OriginId_tracc:", validRows);
-            
-            const processFeatures = (features) => {
-              if (!features || !Array.isArray(features)) {
-                console.error("Invalid features data");
-                return [];
-              }
-              
-              let validFeatures = 0;
-              let matchedFeatures = 0;
-              
-              const result = features.map(feature => {
-                if (!feature || !feature.properties) {
-                  return null;
-                }
-                
-                validFeatures++;
-                const originId = feature.properties.OriginId_tracc;
-                
-                if (originId && csvLookup[originId]) {
-                  matchedFeatures++;
-                  Object.keys(csvLookup[originId]).forEach(key => {
-                    if (key !== 'OriginId_tracc') {
-                      feature.properties[key] = csvLookup[originId][key];
-                    }
-                  });
-                }
-                return feature;
-              }).filter(f => f !== null);
-              
-              console.log("Features processed:", features.length, "valid:", validFeatures, "matched:", matchedFeatures, "final:", result.length);
-              return result;
-            };
-            
-            let features1 = data1 && data1.features ? processFeatures(data1.features) : [];
-            let features2 = data2 && data2.features ? processFeatures(data2.features) : [];
-            
-            console.log("Processed features count - data1:", features1.length, "data2:", features2.length);
-            
-            const combinedData = {
-              type: 'FeatureCollection',
-              features: [...features1, ...features2]
-            };
-            
-            console.log("Combined features count:", combinedData.features.length);
-            self.postMessage(combinedData);
-
-            // With these lines to chunk the data transfer:
-            const CHUNK_SIZE = 5000; // Use a smaller chunk size
-            const totalFeatures = combinedData.features.length;
-            
-            // First send a message about how many chunks to expect
-            self.postMessage({
-              type: 'progress',
-              percent: 0,
-              message: 'Starting to transfer ' + totalFeatures + ' features in chunks'
-            });
-            
-            // Then send the chunks
-            for (let start = 0; start < totalFeatures; start += CHUNK_SIZE) {
-              const end = Math.min(start + CHUNK_SIZE, totalFeatures);
-              const chunkFeatures = combinedData.features.slice(start, end);
-              
-              // Create a clean chunk object with only the necessary data
-              const chunk = {
-                type: 'FeatureCollection',
-                features: chunkFeatures,
-                chunkInfo: {
-                  current: Math.floor(start / CHUNK_SIZE) + 1,
-                  total: Math.ceil(totalFeatures / CHUNK_SIZE),
-                  start: start,
-                  end: end,
-                  isLast: end >= totalFeatures
-                }
-              };
-              
-              // Report progress
-              const percent = Math.floor((end / totalFeatures) * 100);
-              self.postMessage({
-                type: 'progress',
-                percent: Math.round((processedFeatures / totalFeatures) * 100),
-                message: 'Processed ' + processedFeatures + ' of ' + totalFeatures + ' features'
-              });
-              
-              // Send the actual data chunk
-              self.postMessage(chunk);
-              
-              // Add a small delay to prevent stack overflow
-              if (end < totalFeatures) {
-                // In a web worker, we can use setTimeout
-                setTimeout(() => {}, 0);
-              }
-            }
-          };
-        `
-      ], { type: 'application/javascript' });
-      
-      const workerUrl = URL.createObjectURL(blob);
-      const worker = new Worker(workerUrl);
-      
-      let allFeatures = [];
-      let processedChunks = 0;
-      let totalChunks = 0;
-      let dbInstance = db;
-
-      worker.onmessage = function(e) {
-        const chunk = e.data;
-        
-        // Check if we have valid data
-        if (!chunk || typeof chunk !== 'object') {
-          console.error("Received invalid data from worker:", chunk);
-          return;
-        }
-        
-        // Handle progress updates
-        if (chunk.type === 'progress') {
-          console.log(`Progress: ${chunk.percent}%`);
-          return;
-        }
-        
-        // Handle actual data chunks
-        if (chunk.type === 'FeatureCollection' && Array.isArray(chunk.features)) {
-          processedChunks++;
-          
-          if (chunk.chunkInfo) {
-            totalChunks = chunk.chunkInfo.total;
-            console.log(`Received chunk ${chunk.chunkInfo.current}/${totalChunks}, features: ${chunk.features.length}`);
-          }
-          
-          // Safely add features to our collection
-          allFeatures = allFeatures.concat(chunk.features);
-          
-          // Check if this is the final chunk
-          const isLastChunk = chunk.chunkInfo?.isLast || processedChunks >= totalChunks;
-          
-          if (isLastChunk) {
-            console.log(`Processing complete, total features: ${allFeatures.length}`);
-            
-            const processedGrid = {
-              type: 'FeatureCollection',
-              features: allFeatures
-            };
-            
-            grid = processedGrid;
-            
-            // Cache the data if we have a database connection
-            if (dbInstance) {
-              try {
-                const tx = dbInstance.transaction('gridData', 'readwrite');
-                const store = tx.objectStore('gridData');
-                store.put({ id: 'gridData', data: grid });
-                console.log("Grid data cached successfully");
-              } catch (err) {
-                console.error("Error caching grid data:", err);
-              }
-            }
-            
-            calculateGridStatistics(grid);
-            updateFilterDropdown();
-            updateFilterValues();
-            updateSummaryStatistics(grid.features);
-            
-            hideBackgroundLoadingIndicator();
-            worker.terminate();
-            URL.revokeObjectURL(workerUrl);
-          }
-        }
-      };
-      
-      worker.onerror = function(error) {
-        console.error("Worker error:", error);
-        worker.terminate();
-        URL.revokeObjectURL(workerUrl);
-        
-        // Try fallback approach
-        console.log("Trying fallback data processing approach");
-        const fallbackData = {
+    console.log("Starting to process grid GeoJSON and CSV data...");
+    
+    const csvData = Papa.parse(csvText, { header: true }).data;
+    
+    const csvLookup = {};
+    csvData.forEach(row => {
+      if (row.OriginId_tracc) {
+        csvLookup[row.OriginId_tracc] = row;
+      }
+    });
+    
+    const batchSize = 5000;
+    let processedData1 = [], processedData2 = [];
+    
+    processFeaturesBatch(data1.features, csvLookup, 0, batchSize, processedData1, () => {
+      processFeaturesBatch(data2.features, csvLookup, 0, batchSize, processedData2, () => {
+        const combinedData = {
           type: 'FeatureCollection',
-          features: [...(data1.features || []), ...(data2.features || [])]
+          features: [...processedData1, ...processedData2]
         };
-        resolve(fallbackData);
-      };
-      
-      // Send a deep copy of the data to the worker
-      worker.postMessage({
-        data1: JSON.parse(JSON.stringify(data1)),
-        data2: JSON.parse(JSON.stringify(data2)),
-        csvText: csvText
+        
+        combinedData.features.forEach(feature => {
+          const centroid = turf.centroid(feature);
+          feature.properties._centroid = centroid.geometry.coordinates;
+        });
+        
+        const gridCentroidsFC = turf.featureCollection(
+          combinedData.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
+        );
+        
+        resolve(combinedData);
       });
-    } catch (error) {
-      console.error("Error setting up worker:", error);
-      
-      // Fallback to direct processing
-      console.log("Falling back to direct processing");
-      const fallbackData = {
-        type: 'FeatureCollection',
-        features: [...(data1.features || []), ...(data2.features || [])]
-      };
-      resolve(fallbackData);
-    }
+    });
   });
 }
 
@@ -1575,15 +1177,6 @@ map.on('click', function (e) {
     .openOn(map);
 });
 
-map.on('moveend', throttle(function() {
-  if (AmenitiesCatchmentLayer) {
-    applyAmenitiesCatchmentLayerStyling();
-  }
-}, 250));
-
-map.on('moveend', debounce(updateVisibleFeatures, 100));
-map.on('zoomend', debounce(updateVisibleFeatures, 100));
-
 function initializeFileUpload() {
   console.log('Initializing file upload...');
   const fileInput = document.getElementById('fileUpload');
@@ -1708,13 +1301,7 @@ function setupSubjectAndAimLevelCheckboxes() {
 
 function filterTrainingCentres() {
   console.log('Filtering training centres...');
-  if (!amenityLayers['TrainingCentres'] || !amenityLayers['TrainingCentres'].features) {
-    console.warn('Training centers data not available or invalid');
-    return {
-      type: "FeatureCollection",
-      features: []
-    };
-  }
+  if (!amenityLayers['TrainingCentres']) return [];
   
   const selectedYear = AmenitiesYear.value;
   const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
@@ -1753,7 +1340,7 @@ function filterTrainingCentres() {
     }
     
     if (isAllSubjectsSelected) {
-      const subjectsList = ["construction", "digital", "engineering"];
+      const subjectsList = ["construction", "digital", "engineering", 'other'];
       return subjectsList.some(subject => {
         const columnName = `${yearPrefix}_${subject}`;
         return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
@@ -1764,7 +1351,7 @@ function filterTrainingCentres() {
       const columnName = `${yearPrefix}_${subject}`;
       return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
     });
-  }) || [];
+  });
   
   return {
     type: "FeatureCollection",
@@ -1791,7 +1378,7 @@ function getTrainingCenterPopupContent(properties) {
   content += "</p>";
   
   content += "<p><strong>Available Courses by Year:</strong></p>";
-  content += "<table class='popup-table'><tr><th>Year</th><th>Digital</th><th>Engineering</th><th>Construction</th></tr>";
+  content += "<table class='popup-table'><tr><th>Year</th><th>Digital</th><th>Engineering</th><th>Construction</th><th>Other</th></tr>";
   
   const years = ["2122", "2223", "2324", "2425"];
   const yearLabels = ["2021/22", "2022/23", "2023/24", "2024/25"];
@@ -1800,8 +1387,9 @@ function getTrainingCenterPopupContent(properties) {
     const digital = properties[`${year}_digital`] || "";
     const engineering = properties[`${year}_engineering`] || "";
     const construction = properties[`${year}_construction`] || "";
+    const other = properties[`$_other`] || "";
     
-    content += `<tr><td>${yearLabels[index]}</td><td>${digital}</td><td>${engineering}</td><td>${construction}</td></tr>`;
+    content += `<tr><td>${yearLabels[index]}</td><td>${digital}</td><td>${engineering}</td><td>${construction}</td><th>${other}</th></tr></tr>`;
   });
   
   content += "</table>";
@@ -3391,13 +2979,7 @@ function detectAndFixProjection(data) {
       } else if (['Polygon', 'MultiLineString'].includes(feature.geometry.type)) {
         coord = feature.geometry.coordinates[0][0];
       } else if (feature.geometry.type === 'MultiPolygon') {
-        feature.geometry.coordinates = feature.geometry.coordinates.map(polygon => 
-          polygon.map(ring => ring.map(coord => {
-            const point = L.point(coord[0], coord[1]);
-            const latLng = sourceCrs.unproject(point);
-            return [latLng.lng, latLng.lat];
-          }))
-        );
+        coord = feature.geometry.coordinates[0][0][0];
       }
       
       if (coord) {
@@ -4356,393 +3938,487 @@ function drawSelectedAmenities() {
 }
 
 function updateAmenitiesCatchmentLayer() {
-  console.log("updateAmenitiesCatchmentLayer called");
-  
-  if (isUpdatingCatchmentLayer) {
-    return;
-  }
-  
-  isUpdatingCatchmentLayer = true;
-  showLoadingOverlay();
-
-  // Add check for grid data validity
-  if (!initialLoadComplete || !grid || !grid.features || !Array.isArray(grid.features)) {
-    console.log("Grid data not fully loaded yet, waiting...");
-    // Set up a retry mechanism
-    setTimeout(() => {
-      isUpdatingCatchmentLayer = false;
-      hideLoadingOverlay();
-      if (grid && grid.features && Array.isArray(grid.features)) {
-        updateAmenitiesCatchmentLayer();
-      } else {
-        showErrorNotification("Grid data not available. Please try refreshing the page.");
-      }
-    }, 2000);
-    return;
-  }
-  
-  const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
-    .classList.contains("collapsed") === false;
-  
-  if (!amenitiesPanelOpen) {
-    isUpdatingCatchmentLayer = false;
-    hideLoadingOverlay();
-    return;
-  }
-
-  const selectedYear = AmenitiesYear.value;
-  const filteredTrainingCentres = filterTrainingCentres();
-  
-  const filteredTrainingCenterIds = filteredTrainingCentres.features
-    .map(feature => feature.properties.DestinationId_tracc)
-    .filter(id => id !== undefined);
+    console.log("updateAmenitiesCatchmentLayer called");
     
-  if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-    // Handle empty case...
-    isUpdatingCatchmentLayer = false;
-    hideLoadingOverlay();
-    return;
-  }
-
-  // Use a web worker to compute time maps
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { csvData, filteredTrainingCenterIds, eligibleDestinations } = e.data;
-      
-      const gridTimeMap = {};
-      
-      csvData.forEach(row => {
-        const originId = row.origin;
-        const destinationId = row.destination;
-        const totalTime = parseFloat(row.totaltime);
-        
-        if (!originId || !destinationId || isNaN(totalTime)) {
-          return;
-        }
-        
-        if (eligibleDestinations.includes(destinationId)) {
-          if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-            gridTimeMap[originId] = totalTime;
-          }
-        }
-      });
-      
-      self.postMessage(gridTimeMap);
-    };
-  `;
-  
-  const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-
-  fetch(csvPath)
-    .then(response => response.text())
-    .then(csvText => {
-      const csvData = Papa.parse(csvText, { header: true }).data;
-      
-      if (csvData.length === 0) {
-        isUpdatingCatchmentLayer = false;
-        hideLoadingOverlay();
+    if (isUpdatingCatchmentLayer) {
+        console.log("Already updating catchment layer, skipping duplicate call");
         return;
-      }
-      
-      const blob = new Blob([workerCode], { type: 'application/javascript' });
-      const worker = new Worker(URL.createObjectURL(blob));
-      
-      // Calculate eligible destinations based on selected filters
-      const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-      const eligibleDestinations = new Set();
-      
-      const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
-      const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
-      
-      const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-      const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-      
-      const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
-      const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
-      
-      const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-      const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-      
-      if (amenityLayers['TrainingCentres']) {
-        amenityLayers['TrainingCentres'].features.forEach(feature => {
-          const props = feature.properties;
-          const destinationId = props.DestinationId_tracc;
-          
-          if (!destinationId || !filteredTrainingCenterIds.includes(destinationId)) {
-            return;
-          }
-          
-          const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-            selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-          
-          if (!hasSelectedAimLevel) {
-            return;
-          }
-          
-          let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-          
-          if (!hasSelectedSubject && yearPrefix) {
-            hasSelectedSubject = selectedSubjects.some(subject => {
-              const columnName = `${yearPrefix}_${subject}`;
-              return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-            });
-          } else if (!hasSelectedSubject) {
-            const years = ["2122", "2223", "2324", "2425"];
-            hasSelectedSubject = years.some(year => {
-              return selectedSubjects.some(subject => {
-                const columnName = `${year}_${subject}`;
-                return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-              });
-            });
-          }
-          
-          if (hasSelectedSubject) {
-            eligibleDestinations.add(destinationId);
-          }
-        });
-      }
-      
-      worker.onmessage = function(e) {
-        gridTimeMap = e.data;
-        
-        // Update the catchment layer with the calculated time data
-        let needToCreateNewLayer = !AmenitiesCatchmentLayer;
-        
-        if (needToCreateNewLayer) {
-          if (AmenitiesCatchmentLayer) {
-            map.removeLayer(AmenitiesCatchmentLayer);
-          }
-          
-          // Check if grid is valid before creating a GeoJSON layer
-          if (grid && grid.features && Array.isArray(grid.features)) {
-            AmenitiesCatchmentLayer = L.geoJSON(grid, {
-              pane: 'polygonLayers',
-              style: function() {
-                return {
-                  weight: 0,
-                  fillOpacity: 0,
-                  opacity: 0
-                };
-              }
-            }).addTo(map);
-                  
-            AmenitiesCatchmentLayer.eachLayer(layer => {
-              layer.feature.properties._opacity = undefined;
-              layer.feature.properties._weight = undefined;
-            });
-            
-            const updatesComplete = () => {
-              drawSelectedAmenities();
-              updateLegend();
-              updateFilterDropdown();
-              updateFilterValues('amenities');
-            };
-            
-            updateSliderRanges('Amenities', 'Opacity');
-            updateSliderRanges('Amenities', 'Outline');
-            
-            setTimeout(updatesComplete, 50);
-          } else {
-            console.error("Grid data is invalid or missing features array");
-            isUpdatingCatchmentLayer = false;
-            hideLoadingOverlay();
-            return;
-          }
-        } else {
-          applyAmenitiesCatchmentLayerStyling();
-          updateSummaryStatistics(getCurrentFeatures());
-        }
-        
-        worker.terminate();
+    }
+    
+    isUpdatingCatchmentLayer = true;
+    
+    //showoadingOverlay();
+
+    if (!initialLoadComplete || !grid) {
         isUpdatingCatchmentLayer = false;
-        hideLoadingOverlay();
-      };
-      
-      worker.postMessage({
-        csvData,
-        filteredTrainingCenterIds,
-        eligibleDestinations: Array.from(eligibleDestinations)
-      });
-    })
-    .catch(error => {
-      console.error("Error loading journey time data:", error);
-      isUpdatingCatchmentLayer = false;
-      hideLoadingOverlay();
-    });
+        //hideLoadingOverlay();
+        return;
+    }
+    
+    const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
+        .classList.contains("collapsed") === false;
+    
+    if (!amenitiesPanelOpen) {
+        isUpdatingCatchmentLayer = false;
+        //hideLoadingOverlay();
+        return;
+    }
+
+    const selectedYear = AmenitiesYear.value;
+    
+    const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
+    const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
+    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
+    const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
+    
+    const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
+    const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
+    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
+    const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
+    
+    const filteredTrainingCentres = filterTrainingCentres();
+    
+    const filteredTrainingCenterIds = filteredTrainingCentres.features
+        .map(feature => feature.properties.DestinationId_tracc)
+        .filter(id => id !== undefined);
+        
+    if (!selectedYear || filteredTrainingCenterIds.length === 0) {
+        if (AmenitiesCatchmentLayer) {
+            map.removeLayer(AmenitiesCatchmentLayer);
+            AmenitiesCatchmentLayer = null;
+        }
+        drawSelectedAmenities([]);
+        updateLegend();
+        updateFilterDropdown();
+        updateFilterValues();
+        updateSummaryStatistics([]);
+        updateAmenitiesCatchmentLayer.isRunning = false;
+        return;
+    }
+
+    gridTimeMap = {};
+    
+    const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+
+    fetch(csvPath)
+        .then(response => response.text())
+        .then(csvText => {
+            const csvData = Papa.parse(csvText, { header: true }).data;
+            
+            if (csvData.length === 0) {
+                updateAmenitiesCatchmentLayer.isRunning = false;
+                return;
+            }
+            
+            const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+            
+            const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
+            
+            if (matchingIds.length === 0) {
+                updateAmenitiesCatchmentLayer.isRunning = false;
+                return;
+            }
+            
+            const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
+            const eligibleDestinations = new Set();
+            
+            if (amenityLayers['TrainingCentres']) {
+                amenityLayers['TrainingCentres'].features.forEach(feature => {
+                    const props = feature.properties;
+                    const destinationId = props.DestinationId_tracc;
+                    
+                    if (!destinationId || !matchingIds.includes(destinationId)) {
+                        return;
+                    }
+                    
+                    const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
+                        selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
+                    
+                    if (!hasSelectedAimLevel) {
+                        return;
+                    }
+                    
+                    let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
+                    
+                    if (!hasSelectedSubject && yearPrefix) {
+                        hasSelectedSubject = selectedSubjects.some(subject => {
+                            const columnName = `${yearPrefix}_${subject}`;
+                            return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                        });
+                    } else if (!hasSelectedSubject) {
+                        const years = ["2122", "2223", "2324", "2425"];
+                        hasSelectedSubject = years.some(year => {
+                            return selectedSubjects.some(subject => {
+                                const columnName = `${year}_${subject}`;
+                                return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                            });
+                        });
+                    }
+                    
+                    if (hasSelectedSubject) {
+                        eligibleDestinations.add(destinationId);
+                    }
+                });
+            }
+            
+            csvData.forEach(row => {
+                const originId = row.origin;
+                const destinationId = row.destination;
+                const totalTime = parseFloat(row.totaltime);
+                
+                if (!originId || !destinationId || isNaN(totalTime)) {
+                    return;
+                }
+                
+                if (eligibleDestinations.has(destinationId)) {
+                    if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
+                        gridTimeMap[originId] = totalTime;
+                    }
+                }
+            });
+            
+            grid.features.forEach(feature => {
+                const originId = feature.properties.OriginId_tracc;
+                if (gridTimeMap[originId] === undefined) {
+                    gridTimeMap[originId] = 120;
+                }
+            });
+            
+            let needToCreateNewLayer = false;
+            if (!AmenitiesCatchmentLayer) {
+                needToCreateNewLayer = true;
+            }
+            
+            if (needToCreateNewLayer) {
+                if (AmenitiesCatchmentLayer) {
+                    map.removeLayer(AmenitiesCatchmentLayer);
+                }
+                
+                AmenitiesCatchmentLayer = L.geoJSON(grid, {
+                    pane: 'polygonLayers',
+                    style: function() {
+                        return {
+                            weight: 0,
+                            fillOpacity: 0,
+                            opacity: 0
+                        };
+                    }
+                }).addTo(map);
+                
+                AmenitiesCatchmentLayer.eachLayer(layer => {
+                    layer.feature.properties._opacity = undefined;
+                    layer.feature.properties._weight = undefined;
+                });
+                
+                const updatesComplete = () => {
+                  drawSelectedAmenities();
+                  updateLegend();
+                  updateFilterDropdown();
+                  updateFilterValues('amenities');
+                };
+                
+                updateSliderRanges('Amenities', 'Opacity');
+                updateSliderRanges('Amenities', 'Outline');
+                
+                setTimeout(updatesComplete, 50);
+              } else {
+                  applyAmenitiesCatchmentLayerStyling();
+                  updateSummaryStatistics(getCurrentFeatures());
+              }
+              isUpdatingCatchmentLayer = false;
+              //hideLoadingOverlay();
+        })
+        .catch(error => {
+            console.error("Error loading journey time data:", error);
+            isUpdatingCatchmentLayer = false;
+            //hideLoadingOverlay();
+        });
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
-  if (!AmenitiesCatchmentLayer) return;
-  
-  // Check if there are any actual layers
-  if (AmenitiesCatchmentLayer.getLayers().length === 0) {
-    console.warn("No layers in AmenitiesCatchmentLayer to style");
-    return;
-  }
-  
-  // Only update visible features based on map bounds
-  const bounds = map.getBounds();
-  const visibleFeatures = [];
-  
-  AmenitiesCatchmentLayer.eachLayer(layer => {
-    const center = layer.feature.properties._centroid;
-    if (center && bounds.contains([center[1], center[0]])) {
-      visibleFeatures.push(layer);
-    }
-  });
-  
-  console.log(`Styling ${visibleFeatures.length} visible features out of ${AmenitiesCatchmentLayer.getLayers().length} total`);
-  
-  const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
-  const visibleRanges = Array.from(legendCheckboxes)
-    .filter(checkbox => checkbox.checked)
-    .map(checkbox => checkbox.getAttribute('data-range'));
-  
-  const hasLegendCheckboxes = legendCheckboxes.length > 0;
-  const hasAnyVisibleRanges = visibleRanges.length > 0;
-  
-  // Process in batches to avoid UI freezing
-  const batchSize = 500;
-  let currentIndex = 0;
-  
-  function processBatch() {
-    const endIndex = Math.min(currentIndex + batchSize, visibleFeatures.length);
+    console.log("applyAmenitiesCatchmentLayerStyling called");
     
-    for (let i = currentIndex; i < endIndex; i++) {
-      const layer = visibleFeatures[i];
-      const range = layer.feature.properties._range;
-      
-      const isVisible = !hasLegendCheckboxes || 
-                      (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
-                      (!hasAnyVisibleRanges);
-      
-      layer.setStyle({
-        fillColor: layer.feature.properties._fillColor,
-        color: 'black',
-        weight: isVisible ? layer.feature.properties._weight : 0,
-        fillOpacity: isVisible ? layer.feature.properties._opacity : 0,
-        opacity: isVisible ? 1 : 0
-      });
+    if (!AmenitiesCatchmentLayer) {
+        console.log("No AmenitiesCatchmentLayer, returning early");
+        return;
     }
     
-    currentIndex = endIndex;
+    console.log("Processing layer styling");
     
-    if (currentIndex < visibleFeatures.length) {
-      requestAnimationFrame(processBatch);
+    const featureCount = AmenitiesCatchmentLayer.getLayers().length;
+    console.log(`Styling ${featureCount} features`);
+    
+    try {
+        AmenitiesCatchmentLayer.eachLayer(layer => {
+            const OriginId_tracc = layer.feature.properties.OriginId_tracc;
+            const time = gridTimeMap[OriginId_tracc];
+            
+            if (layer.feature.properties._opacity === undefined) {
+                layer.feature.properties._opacity = 0.5;
+            }
+            
+            if (layer.feature.properties._weight === undefined) {
+                layer.feature.properties._weight = 0;
+            }
+            
+            let fillColor = 'transparent';
+            if (time !== undefined) {
+                if (time <= 10) fillColor = '#fde725';
+                else if (time <= 20) fillColor = '#8fd744';
+                else if (time <= 30) fillColor = '#35b779';
+                else if (time <= 40) fillColor = '#21908d';
+                else if (time <= 50) fillColor = '#31688e';
+                else if (time <= 60) fillColor = '#443a82';
+                else fillColor = '#440154';
+            }
+            
+            layer.feature.properties._fillColor = fillColor;
+            layer.feature.properties._range = time <= 10 ? "0-10" :
+                                time <= 20 ? "10-20" :
+                                time <= 30 ? "20-30" :
+                                time <= 40 ? "30-40" :
+                                time <= 50 ? "40-50" :
+                                time <= 60 ? "50-60" : ">60";
+        });
+        
+        const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
+        const visibleRanges = Array.from(legendCheckboxes)
+            .filter(checkbox => checkbox.checked)
+            .map(checkbox => checkbox.getAttribute('data-range'));
+        
+        const hasLegendCheckboxes = legendCheckboxes.length > 0;
+        const hasAnyVisibleRanges = visibleRanges.length > 0;
+        
+        console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
+        
+        AmenitiesCatchmentLayer.setStyle(function(feature) {
+            const range = feature.properties._range;
+            
+            const isVisible = !hasLegendCheckboxes || 
+                            (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
+                            (!hasAnyVisibleRanges);
+            
+            return {
+                fillColor: feature.properties._fillColor,
+                color: 'black',
+                weight: isVisible ? feature.properties._weight : 0,
+                fillOpacity: isVisible ? feature.properties._opacity : 0,
+                opacity: isVisible ? 1 : 0
+            };
+        });
+        
+        console.log("Layer styling completed successfully");
+    } catch (error) {
+        console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
+        console.error("Error stack:", error.stack);
     }
-  }
-  
-  processBatch();
 }
 
 function updateOpacityAndOutlineFields() {
-  if (isUpdatingOpacityOutlineFields) return;
-  isUpdatingOpacityOutlineFields = true;
-  
-  if (!AmenitiesCatchmentLayer) {
-    isUpdatingOpacityOutlineFields = false;
-    return;
-  }
-  
-  // Use a worker for calculations
-  const workerCode = `
-    self.onmessage = function(e) {
-      const { features, opacityField, outlineField, opacityRange, outlineRange, 
-              isInverseOpacity, isInverseOutline } = e.data;
-      
-      const results = [];
-      const needOpacity = opacityField !== "None";
-      const needOutline = outlineField !== "None";
-      
-      for (let i = 0; i < features.length; i++) {
-        const feature = features[i];
-        const result = {
-          id: feature.id,
-          _opacity: 0.5,
-          _weight: 0
+    if (isUpdatingOpacityOutlineFields) {
+        return;
+    }
+    
+    isUpdatingOpacityOutlineFields = true;
+    console.log("updateOpacityAndOutlineFields called");
+    
+    if (!AmenitiesCatchmentLayer) {
+        isUpdatingOpacityOutlineFields = false;
+        return;
+    }
+    
+    const currentUpdateTime = Date.now();
+    updateOpacityAndOutlineFields.lastUpdateTime = currentUpdateTime;
+    
+    if (isUpdatingStyles) {
+        setTimeout(() => {
+            if (updateOpacityAndOutlineFields.lastUpdateTime === currentUpdateTime) {
+                updateOpacityAndOutlineFields();
+            }
+        }, 250);
+        isUpdatingOpacityOutlineFields = false;
+        return;
+    }
+    
+    isUpdatingStyles = true;
+    
+    const opacityField = AmenitiesOpacity.value;
+    const outlineField = AmenitiesOutline.value;
+    const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
+    const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
+    
+    const needOpacity = opacityField !== "None";
+    const needOutline = outlineField !== "None";
+    const opacityMin = opacityRange[0];
+    const opacityMax = opacityRange[1];
+    const outlineMin = outlineRange[0];
+    const outlineMax = outlineRange[1];
+    
+    const opacityLookup = {};
+    const outlineLookup = {};
+    
+    if (needOpacity) {
+        const step = Math.max((opacityMax - opacityMin) / 100, 0.1);
+        for (let value = opacityMin; value <= opacityMax; value += step) {
+            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+            opacityLookup[value.toFixed(1)] = isInverseAmenitiesOpacity ? 
+                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
+        }
+    }
+    
+    if (needOutline) {
+        const step = Math.max((outlineMax - outlineMin) / 100, 0.1);
+        for (let value = outlineMin; value <= outlineMax; value += step) {
+            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+            outlineLookup[value.toFixed(1)] = isInverseAmenitiesOutline ? 
+                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+        }
+    }
+    
+    const features = AmenitiesCatchmentLayer.getLayers();
+    const batchSize = 500;
+    
+    if (window.Worker && features.length > 1000) {
+        processWithWorker();
+    } else {
+        processWithBatches();
+    }
+    
+    function processWithBatches() {
+        let currentIndex = 0;
+        
+        function processBatch() {
+            const endIndex = Math.min(currentIndex + batchSize, features.length);
+            
+            for (let i = currentIndex; i < endIndex; i++) {
+                const layer = features[i];
+                layer.feature.properties._opacity = 0.5;
+                layer.feature.properties._weight = 0;
+                
+                if (needOpacity) {
+                    const value = parseFloat(layer.feature.properties[opacityField]);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (opacityLookup[key] !== undefined) {
+                            layer.feature.properties._opacity = opacityLookup[key];
+                        } else if (value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
+                        }
+                    }
+                }
+                
+                if (needOutline) {
+                    const value = parseFloat(layer.feature.properties[outlineField]);
+                    if (!isNaN(value)) {
+                        const key = value.toFixed(1);
+                        if (outlineLookup[key] !== undefined) {
+                            layer.feature.properties._weight = outlineLookup[key];
+                        } else if (value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
+                        }
+                    }
+                }
+            }
+            
+            currentIndex = endIndex;
+            
+            if (currentIndex < features.length) {
+                requestAnimationFrame(processBatch);
+            } else {
+                applyAmenitiesCatchmentLayerStyling();
+                isUpdatingStyles = false;
+                isUpdatingOpacityOutlineFields = false;
+            }
+        }
+        
+        processBatch();
+    }
+    
+    function processWithWorker() {
+        const workerCode = `
+            self.onmessage = function(e) {
+                const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
+                          isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
+                
+                const needOpacity = opacityField !== "None";
+                const needOutline = outlineField !== "None";
+                const results = [];
+                
+                for (let i = 0; i < features.length; i++) {
+                    const feature = features[i];
+                    const result = {
+                        index: i,
+                        _opacity: 0.5,
+                        _weight: 0
+                    };
+                    
+                    if (needOpacity) {
+                        const value = parseFloat(feature.properties[opacityField]);
+                        if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
+                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+                            const scaledValue = isInverseAmenitiesOpacity ? 
+                                (1 - normalized) : normalized;
+                            result._opacity = 0.1 + (scaledValue * 0.7);
+                        }
+                    }
+                    
+                    if (needOutline) {
+                        const value = parseFloat(feature.properties[outlineField]);
+                        if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
+                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+                            const scaledValue = isInverseAmenitiesOutline ? 
+                                (1 - normalized) : normalized;
+                            result._weight = 0.5 + (scaledValue * 2.5);
+                        }
+                    }
+                    
+                    results.push(result);
+                }
+                
+                self.postMessage(results);
+            };
+        `;
+        
+        const blob = new Blob([workerCode], { type: 'application/javascript' });
+        const worker = new Worker(URL.createObjectURL(blob));
+        
+        const featureData = features.map(layer => ({
+            properties: layer.feature.properties
+        }));
+        
+        worker.onmessage = function(e) {
+            const results = e.data;
+            
+            results.forEach(result => {
+                const layer = features[result.index];
+                layer.feature.properties._opacity = result._opacity;
+                layer.feature.properties._weight = result._weight;
+            });
+            
+            applyAmenitiesCatchmentLayerStyling();
+            isUpdatingStyles = false;
+            isUpdatingOpacityOutlineFields = false;
+            worker.terminate();
         };
         
-        if (needOpacity) {
-          const value = parseFloat(feature.properties[opacityField]);
-          if (!isNaN(value)) {
-            // Get opacity value based on range
-            let normalized = (value - opacityRange[0]) / (opacityRange[1] - opacityRange[0]);
-            normalized = Math.max(0, Math.min(1, normalized)); // Clamp to 0-1 range
-            
-            if (isInverseOpacity) {
-              normalized = 1 - normalized;
-            }
-            
-            result._opacity = 0.1 + (normalized * 0.7);
-          }
-        }
-        
-        if (needOutline) {
-          const value = parseFloat(feature.properties[outlineField]);
-          if (!isNaN(value)) {
-            // Get weight value based on range
-            let normalized = (value - outlineRange[0]) / (outlineRange[1] - outlineRange[0]);
-            normalized = Math.max(0, Math.min(1, normalized)); // Clamp to 0-1 range
-            
-            if (isInverseOutline) {
-              normalized = 1 - normalized;
-            }
-            
-            result._weight = 0.5 + (normalized * 2.5);
-          }
-        }
-        
-        results.push(result);
-      }
-      
-      self.postMessage(results);
-    };
-  `;
-  
-  // Get all features once, store them by ID for quick lookup
-  const featureById = {};
-  const featuresToProcess = [];
-  
-  AmenitiesCatchmentLayer.eachLayer(layer => {
-    if (layer.feature) {
-      const id = layer.feature.id || Math.random().toString(36).substr(2, 9);
-      layer.feature.id = id;
-      featureById[id] = layer;
-      featuresToProcess.push({
-        id: id,
-        properties: layer.feature.properties
-      });
+        worker.postMessage({
+            features: featureData,
+            opacityField,
+            outlineField,
+            opacityMin,
+            opacityMax,
+            outlineMin,
+            outlineMax,
+            isInverseAmenitiesOpacity,
+            isInverseAmenitiesOutline
+        });
     }
-  });
-  
-  const blob = new Blob([workerCode], { type: 'application/javascript' });
-  const worker = new Worker(URL.createObjectURL(blob));
-  
-  worker.onmessage = function(e) {
-    const results = e.data;
-    
-    results.forEach(result => {
-      const layer = featureById[result.id];
-      if (layer) {
-        layer.feature.properties._opacity = result._opacity;
-        layer.feature.properties._weight = result._weight;
-      }
-    });
-    
-    applyAmenitiesCatchmentLayerStyling();
-    isUpdatingOpacityOutlineFields = false;
-    worker.terminate();
-  };
-  
-  worker.postMessage({
-    features: featuresToProcess,
-    opacityField: AmenitiesOpacity.value,
-    outlineField: AmenitiesOutline.value,
-    opacityRange: AmenitiesOpacityRange.noUiSlider.get().map(parseFloat),
-    outlineRange: AmenitiesOutlineRange.noUiSlider.get().map(parseFloat),
-    isInverseOpacity: isInverseAmenitiesOpacity,
-    isInverseOutline: isInverseAmenitiesOutline
-  });
 }
 
 function updateFilterDropdown() {
@@ -5105,31 +4781,16 @@ function displayEmptyStatistics() {
 }
 
 function applyFilters(features) {
+  console.log('applyFilters');
   const filterType = filterTypeDropdown.value;
   
-  // This is where the error occurs - need to properly initialize filteredFeatures
-  // even when no features are passed in
-  let filteredFeatures = [];
+  let filteredFeatures = features && features.length ? features : (grid ? grid.features : []);
   
-  // First check if we have features passed in
-  if (features && Array.isArray(features) && features.length > 0) {
-    filteredFeatures = features;
-  }
-  // Otherwise check if we can use grid features
-  else if (grid && grid.features) {
-    filteredFeatures = grid.features;
-  }
-  // If we have the catchment layer, use that as source
-  else if (AmenitiesCatchmentLayer) {
+  if ((AmenitiesCatchmentLayer) && (!features || features.length === 0)) {
     filteredFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
-  }
-  // If we reach here with no features, return empty array to prevent errors
-  else {
-    return [];
   }
   
   if (filterType.startsWith('UserLayer_')) {
-    // Create spatial index for user layer features for fast intersection testing
     const layerId = filterType.split('UserLayer_')[1];
     const userLayer = userLayers.find(l => l.id === layerId);
     
@@ -5142,49 +4803,115 @@ function applyFilters(features) {
         
         if (selectedValues.length === 0) return [];
         
-        // Filter user features by attribute first
-        const relevantUserFeatures = userLayer.originalData.features.filter(feature => 
-          selectedValues.includes(String(feature.properties[selectedField]))
-        );
-        
-        // Create a spatial index for the filtered user features
-        const userFeatureIndex = new rbush();
-        const userFeatureItems = relevantUserFeatures.map((feature, idx) => {
-          const bounds = turf.bbox(feature);
-          return {
-            minX: bounds[0], minY: bounds[1], maxX: bounds[2], maxY: bounds[3],
-            id: idx, feature: feature
-          };
-        });
-        userFeatureIndex.load(userFeatureItems);
-        
-        // Find intersecting grid cells using the spatial index
         const combinedFeatures = [];
         
+        filteredFeatures.forEach(feature => {
+          const gridPolygon = turf.polygon(feature.geometry.coordinates);
+          
+          for (const userFeature of userLayer.originalData.features) {
+            if (selectedValues.includes(String(userFeature.properties[selectedField]))) {
+              if (userFeature.geometry.type === 'Polygon') {
+                const poly = turf.polygon(userFeature.geometry.coordinates);
+                const gridCenter = turf.center(gridPolygon);
+                if (turf.booleanPointInPolygon(gridCenter, poly)) {
+                  combinedFeatures.push(feature);
+                  break;
+                }
+              } 
+              else if (userFeature.geometry.type === 'MultiPolygon') {
+                const gridCenter = turf.center(gridPolygon);
+                const isInside = userFeature.geometry.coordinates.some(coords => {
+                  const poly = turf.polygon(coords);
+                  return turf.booleanPointInPolygon(gridCenter, poly);
+                });
+                
+                if (isInside) {
+                  combinedFeatures.push(feature);
+                  break;
+                }
+              }
+              else if (userFeature.geometry.type === 'Point') {
+                const point = turf.point(userFeature.geometry.coordinates);
+                if (turf.booleanPointInPolygon(point, gridPolygon)) {
+                  combinedFeatures.push(feature);
+                  break;
+                }
+              }
+              else if (userFeature.geometry.type === 'LineString') {
+                const line = turf.lineString(userFeature.geometry.coordinates);
+                if (turf.booleanIntersects(line, gridPolygon)) {
+                  combinedFeatures.push(feature);
+                  break;
+                }
+              }
+              else if (userFeature.geometry.type === 'MultiLineString') {
+                const isIntersecting = userFeature.geometry.coordinates.some(coords => {
+                  const line = turf.lineString(coords);
+                  return turf.booleanIntersects(line, gridPolygon);
+                });
+                if (isIntersecting) {
+                  combinedFeatures.push(feature);
+                  break;
+                }
+              }
+            }
+          }
+        });
+        return combinedFeatures;
+      } else {
+        const userLayerFeatures = userLayer.originalData.features;
+        const combinedFeatures = [];
         for (const feature of filteredFeatures) {
           const gridPolygon = turf.polygon(feature.geometry.coordinates);
-          const gridBounds = turf.bbox(gridPolygon);
-          
-          // Query the index to find potential intersections
-          const candidates = userFeatureIndex.search({
-            minX: gridBounds[0], minY: gridBounds[1], maxX: gridBounds[2], maxY: gridBounds[3]
-          });
-          
-          // Test actual intersection for candidates
-          for (const candidate of candidates) {
-            const userFeature = candidate.feature;
-            if (turf.booleanIntersects(gridPolygon, userFeature)) {
-              combinedFeatures.push(feature);
-              break; // Once we find an intersection, we can add this grid cell and move on
+          for (const userFeature of userLayerFeatures) {
+            if (userFeature.geometry.type === 'Polygon') {
+              const poly = turf.polygon(userFeature.geometry.coordinates);
+              const gridCenter = turf.center(gridPolygon);
+              if (turf.booleanPointInPolygon(gridCenter, poly)) {
+                combinedFeatures.push(feature);
+                break;
+              }
+            } 
+            else if (userFeature.geometry.type === 'MultiPolygon') {
+              const gridCenter = turf.center(gridPolygon);
+              const isInside = userFeature.geometry.coordinates.some(coords => {
+                const poly = turf.polygon(coords);
+                return turf.booleanPointInPolygon(gridCenter, poly);
+              });
+              if (isInside) {
+                combinedFeatures.push(feature);
+                break;
+              }
+            }
+            else if (userFeature.geometry.type === 'Point') {
+              const point = turf.point(userFeature.geometry.coordinates);
+              if (turf.booleanPointInPolygon(point, gridPolygon)) {
+                combinedFeatures.push(feature);
+                break;
+              }
+            }
+            else if (userFeature.geometry.type === 'LineString') {
+              const line = turf.lineString(userFeature.geometry.coordinates);
+              if (turf.booleanIntersects(line, gridPolygon)) {
+                combinedFeatures.push(feature);
+                break;
+              }
+            }
+            else if (userFeature.geometry.type === 'MultiLineString') {
+              const isIntersecting = userFeature.geometry.coordinates.some(coords => {
+                const line = turf.lineString(coords);
+                return turf.booleanIntersects(line, gridPolygon);
+              });
+              
+              if (isIntersecting) {
+                combinedFeatures.push(feature);
+                break;
+              }
             }
           }
         }
-        
         return combinedFeatures;
       }
-      
-      // If no field is selected, return all features
-      return filteredFeatures;
     }
   }
   else if (filterType === 'Range') {
@@ -5206,7 +4933,7 @@ function applyFilters(features) {
       });
     });
     
-    return combinedFeatures; 
+    filteredFeatures = combinedFeatures; 
   } else if (filterType === 'LA' || filterType === 'Ward') {
     const filterValueContainer = document.getElementById('filterValueContainer');
     if (!filterValueContainer) return filteredFeatures;
@@ -5224,15 +4951,15 @@ function applyFilters(features) {
       }
       if (selectedSet.has('MCA')) {
         return filteredFeatures.filter(f =>
-          f.properties && f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
+          f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
         );
       }
       return filteredFeatures.filter(f =>
-        f.properties && f.properties.LAD24NM && selectedSet.has(f.properties.LAD24NM)
+        f.properties.LAD24NM && selectedSet.has(f.properties.LAD24NM)
       );
     } else if (filterType === 'Ward') {
       return filteredFeatures.filter(f =>
-        f.properties && f.properties.WD24NM && selectedSet.has(f.properties.WD24NM)
+        f.properties.WD24NM && selectedSet.has(f.properties.WD24NM)
       );
     }
   }
@@ -5295,73 +5022,106 @@ function calculateBaseStatistics(features) {
     };
   }
 
+  console.log('Calculating stats for', features.length, 'features');
+  
+  const BATCH_SIZE = 5000;
+  const totalBatches = Math.ceil(features.length / BATCH_SIZE);
+  
   return new Promise(resolve => {
-    // Use a worker for heavy computation
-    const workerCode = `
-      self.onmessage = function(e) {
-        const features = e.data;
+    let stats = {
+      totalPopulation: 0,
+      minPopulation: Infinity,
+      maxPopulation: -Infinity,
+      
+      totalWeightedImdScore: 0,
+      minImdScore: Infinity,
+      maxImdScore: -Infinity,
+      
+      totalWeightedImdDecile: 0,
+      minImdDecile: Infinity,
+      maxImdDecile: -Infinity,
+      
+      totalWeightedCarAvailability: 0,
+      minCarAvailability: Infinity,
+      maxCarAvailability: -Infinity,
+      
+      totalPopGrowth: 0,
+      minPopGrowth: Infinity,
+      maxPopGrowth: -Infinity,
+      
+      populationWithImdScore: 0,
+      populationWithImdDecile: 0,
+      populationWithCarAvailability: 0
+    };
+    
+    let currentBatch = 0;
+    
+    function processBatch() {
+      const startIdx = currentBatch * BATCH_SIZE;
+      const endIdx = Math.min((currentBatch + 1) * BATCH_SIZE, features.length);
+      
+      for (let i = startIdx; i < endIdx; i++) {
+        const props = features[i].properties;
+        if (!props) continue;
         
-        let stats = {
-          totalPopulation: 0,
-          minPopulation: Infinity,
-          maxPopulation: -Infinity,
+        const pop = Number(props.pop);
+        if (isFinite(pop) && pop >= 0) {
+          stats.totalPopulation += pop;
+          stats.minPopulation = Math.min(stats.minPopulation, pop);
+          stats.maxPopulation = Math.max(stats.maxPopulation, pop);
           
-          totalWeightedImdScore: 0,
-          minImdScore: Infinity,
-          maxImdScore: -Infinity,
-          
-          totalWeightedImdDecile: 0,
-          minImdDecile: Infinity,
-          maxImdDecile: -Infinity,
-          
-          totalWeightedCarAvailability: 0,
-          minCarAvailability: Infinity,
-          maxCarAvailability: -Infinity,
-          
-          totalPopGrowth: 0,
-          minPopGrowth: Infinity,
-          maxPopGrowth: -Infinity,
-          
-          populationWithImdScore: 0,
-          populationWithImdDecile: 0,
-          populationWithCarAvailability: 0
-        };
-        
-        // Process in one go - no need for batching in a worker
-        for (let i = 0; i < features.length; i++) {
-          const props = features[i].properties;
-          if (!props) continue;
-          
-          const pop = Number(props.pop);
-          if (isFinite(pop) && pop >= 0) {
-            stats.totalPopulation += pop;
-            stats.minPopulation = Math.min(stats.minPopulation, pop);
-            stats.maxPopulation = Math.max(stats.maxPopulation, pop);
-            
-            const imdScore = Number(props.IMDScore);
-            if (isFinite(imdScore)) {
-              stats.totalWeightedImdScore += imdScore * pop;
-              stats.minImdScore = Math.min(stats.minImdScore, imdScore);
-              stats.maxImdScore = Math.max(stats.maxImdScore, imdScore);
-              stats.populationWithImdScore += pop;
-            }
-            
-            // Process other fields...
+          const imdScore = Number(props.IMDScore);
+          if (isFinite(imdScore)) {
+            stats.totalWeightedImdScore += imdScore * pop;
+            stats.minImdScore = Math.min(stats.minImdScore, imdScore);
+            stats.maxImdScore = Math.max(stats.maxImdScore, imdScore);
+            stats.populationWithImdScore += pop;
           }
           
-          const popGrowth = Number(props.pop_growth);
-          if (isFinite(popGrowth) && popGrowth >= 0) {
-            stats.totalPopGrowth += popGrowth;
-            stats.minPopGrowth = Math.min(stats.minPopGrowth, popGrowth);
-            stats.maxPopGrowth = Math.max(stats.maxPopGrowth, popGrowth);
+          const imdDecile = Number(props.IMD_Decile);
+          if (isFinite(imdDecile)) {
+            stats.totalWeightedImdDecile += imdDecile * pop;
+            stats.minImdDecile = Math.min(stats.minImdDecile, imdDecile);
+            stats.maxImdDecile = Math.max(stats.maxImdDecile, imdDecile);
+            stats.populationWithImdDecile += pop;
+          }
+          
+          const carAvailability = Number(props.car_availability_ts045);
+          if (isFinite(carAvailability)) {
+            stats.totalWeightedCarAvailability += carAvailability * pop;
+            stats.minCarAvailability = Math.min(stats.minCarAvailability, carAvailability);
+            stats.maxCarAvailability = Math.max(stats.maxCarAvailability, carAvailability);
+            stats.populationWithCarAvailability += pop;
           }
         }
         
-        // Fix infinities and calculate averages
+        const popGrowth = Number(props.pop_growth);
+        if (isFinite(popGrowth) && popGrowth >= 0) {
+          stats.totalPopGrowth += popGrowth;
+          stats.minPopGrowth = Math.min(stats.minPopGrowth, popGrowth);
+          stats.maxPopGrowth = Math.max(stats.maxPopGrowth, popGrowth);
+        }
+      }
+      
+      currentBatch++;
+      
+      if (currentBatch < totalBatches) {
+        requestAnimationFrame(processBatch);
+      } else {
         if (stats.minPopulation === Infinity) stats.minPopulation = 0;
         if (stats.maxPopulation === -Infinity) stats.maxPopulation = 0;
         
-        // Fix other infinities...
+        if (stats.minImdScore === Infinity) stats.minImdScore = 0;
+        if (stats.maxImdScore === -Infinity) stats.maxImdScore = 0;
+        
+        if (stats.minImdDecile === Infinity) stats.minImdDecile = 0;
+        if (stats.maxImdDecile === -Infinity) stats.maxImdDecile = 0;
+        
+        if (stats.minCarAvailability === Infinity) stats.minCarAvailability = 0;
+        if (stats.maxCarAvailability === -Infinity) stats.maxCarAvailability = 0;
+        
+        if (stats.minPopGrowth === Infinity) stats.minPopGrowth = 0;
+        if (stats.maxPopGrowth === -Infinity) stats.maxPopGrowth = 0;
         
         const avgImdScore = stats.populationWithImdScore > 0 ? 
           stats.totalWeightedImdScore / stats.populationWithImdScore : 0;
@@ -5372,7 +5132,7 @@ function calculateBaseStatistics(features) {
         const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
           stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
 
-        self.postMessage({
+        resolve({
           totalPopulation: stats.totalPopulation,
           minPopulation: stats.minPopulation,
           maxPopulation: stats.maxPopulation,
@@ -5393,23 +5153,10 @@ function calculateBaseStatistics(features) {
           minPopGrowth: stats.minPopGrowth,
           maxPopGrowth: stats.maxPopGrowth
         });
-      };
-    `;
+      }
+    }
     
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
-    
-    worker.onmessage = function(e) {
-      resolve(e.data);
-      worker.terminate();
-    };
-    
-    // Extract just the properties to reduce data transfer size
-    const featureData = features.map(feature => ({
-      properties: feature.properties
-    }));
-    
-    worker.postMessage(featureData);
+    processBatch();
   });
 }
 
