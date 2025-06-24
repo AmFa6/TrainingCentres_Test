@@ -1387,9 +1387,9 @@ function getTrainingCenterPopupContent(properties) {
     const digital = properties[`${year}_digital`] || "";
     const engineering = properties[`${year}_engineering`] || "";
     const construction = properties[`${year}_construction`] || "";
-    const other = properties[`$_other`] || "";
+    const other = properties[`${year}_other`] || "";
     
-    content += `<tr><td>${yearLabels[index]}</td><td>${digital}</td><td>${engineering}</td><td>${construction}</td><th>${other}</th></tr></tr>`;
+    content += `<tr><td>${yearLabels[index]}</td><td>${digital}</td><td>${engineering}</td><td>${construction}</td><td>${other}</td></tr></tr>`;
   });
   
   content += "</table>";
