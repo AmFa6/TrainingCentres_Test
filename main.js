@@ -1025,6 +1025,7 @@ map.on('zoomend', () => {
 
 /**
  * Get journey time data for a specific origin, sorted by travel time (closest first)
+ * Only includes destinations that match current filtering criteria
  * @param {string} originId The OriginId_tracc to get journey time data for
  * @returns {Array} Array of journey time records sorted by total time
  */
@@ -1043,6 +1044,14 @@ function getJourneyTimeData(originId) {
   console.log('Searching for origin:', { originIdStr, originIdNum });
   console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
   
+  // Get currently filtered training centers to limit destinations
+  const filteredTrainingCentres = filterTrainingCentres();
+  const allowedDestinationIds = new Set(
+    filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
+  );
+  
+  console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
+  
   // Filter CSV data for this specific origin - handle both string and number comparisons
   const originRecords = fullCsvData.filter(row => {
     if (!row.origin || !row.destination || !row.totaltime) {
@@ -1050,20 +1059,25 @@ function getJourneyTimeData(originId) {
     }
     
     const rowOrigin = String(row.origin).trim();
-    const isMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
+    const isOriginMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
+    
+    // Check if destination is in the filtered training centers
+    const destinationId = String(row.destination);
+    const isDestinationAllowed = allowedDestinationIds.has(destinationId);
     
     const totalTime = parseFloat(row.totaltime);
     const hasValidTime = !isNaN(totalTime);
     
-    return isMatch && hasValidTime;
+    return isOriginMatch && isDestinationAllowed && hasValidTime;
   });
   
-  console.log(`Found ${originRecords.length} records for origin ${originId}`);
+  console.log(`Found ${originRecords.length} records for origin ${originId} with current filtering`);
   
   if (originRecords.length === 0) {
     // Debug: Show what origins are actually in the CSV
     const availableOrigins = [...new Set(fullCsvData.map(row => row.origin))].slice(0, 10);
     console.log('Sample available origins in CSV:', availableOrigins);
+    console.log('Number of allowed destinations:', allowedDestinationIds.size);
     return [];
   }
   
@@ -1118,7 +1132,7 @@ function createJourneyTimeContent(journeyTimeData) {
   let html = `
     <div id="journey-time-container">
       <div id="journey-time-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
           <strong>Closest Training Centre:</strong>
           <span style="font-size: 0.9em; color: #666;">
             <span id="journey-current-index">1</span> of ${totalRecords}
@@ -1126,16 +1140,16 @@ function createJourneyTimeContent(journeyTimeData) {
         </div>
         
         <div id="journey-time-details">
-          <p><strong>Destination:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span></p>
-          <p><strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins</p>
-          <p><strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span></p>
+          <strong>Destination:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span><br>
+          <strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins<br>
+          <strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span>
         </div>
   `;
   
   // Add navigation buttons if there are multiple records
   if (totalRecords > 1) {
     html += `
-      <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+      <div style="display: flex; justify-content: space-between; margin-top: 8px;">
         <button id="journey-prev-btn" onclick="navigateJourneyTime(-1)" disabled 
                 style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: not-allowed; opacity: 0.5;">
           ← Previous
