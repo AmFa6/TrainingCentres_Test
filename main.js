@@ -1036,17 +1036,34 @@ function getJourneyTimeData(originId) {
     return [];
   }
   
-  // Filter CSV data for this specific origin
-  const originRecords = fullCsvData.filter(row => 
-    row.origin === originId && 
-    row.destination && 
-    row.totaltime && 
-    !isNaN(parseFloat(row.totaltime))
-  );
+  // Convert originId to string and number for comparison
+  const originIdStr = String(originId);
+  const originIdNum = Number(originId);
+  
+  console.log('Searching for origin:', { originIdStr, originIdNum });
+  console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
+  
+  // Filter CSV data for this specific origin - handle both string and number comparisons
+  const originRecords = fullCsvData.filter(row => {
+    if (!row.origin || !row.destination || !row.totaltime) {
+      return false;
+    }
+    
+    const rowOrigin = String(row.origin).trim();
+    const isMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
+    
+    const totalTime = parseFloat(row.totaltime);
+    const hasValidTime = !isNaN(totalTime);
+    
+    return isMatch && hasValidTime;
+  });
   
   console.log(`Found ${originRecords.length} records for origin ${originId}`);
   
   if (originRecords.length === 0) {
+    // Debug: Show what origins are actually in the CSV
+    const availableOrigins = [...new Set(fullCsvData.map(row => row.origin))].slice(0, 10);
+    console.log('Sample available origins in CSV:', availableOrigins);
     return [];
   }
   
@@ -1059,12 +1076,17 @@ function getJourneyTimeData(originId) {
     
     // Find matching training center by destination ID (match destination with fid)
     if (amenityLayers['TrainingCentres']) {
-      const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => 
-        feature.properties.fid === record.destination
-      );
+      const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
+        const featureFid = String(feature.properties.fid);
+        const recordDestination = String(record.destination);
+        return featureFid === recordDestination;
+      });
       
       if (matchingCenter && matchingCenter.properties.postcode) {
         destinationPostcode = matchingCenter.properties.postcode;
+      } else {
+        // Debug: log the destination we're looking for
+        console.log('No matching center found for destination:', record.destination);
       }
     }
     
