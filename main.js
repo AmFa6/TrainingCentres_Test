@@ -1023,6 +1023,150 @@ map.on('zoomend', () => {
   }
 });
 
+// Add these functions after line 1146 (before the map click handler)
+
+/**
+ * Get journey time data for a specific origin, sorted by travel time (closest first)
+ * @param {string} originId The OriginId_tracc to get journey time data for
+ * @returns {Array} Array of journey time records sorted by total time
+ */
+function getJourneyTimeData(originId) {
+  if (!fullCsvData || !originId) {
+    return [];
+  }
+  
+  // Filter CSV data for this specific origin
+  const originRecords = fullCsvData.filter(row => 
+    row.origin === originId && 
+    row.destination && 
+    row.totaltime && 
+    !isNaN(parseFloat(row.totaltime))
+  );
+  
+  // Sort by total time (closest first)
+  originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
+  
+  // Match destinations with training centers to get postcodes
+  const journeyTimeData = originRecords.map(record => {
+    let destinationPostcode = 'Unknown';
+    
+    // Find matching training center by destination ID
+    if (amenityLayers['TrainingCentres']) {
+      const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => 
+        feature.properties.DestinationId_tracc === record.destination
+      );
+      
+      if (matchingCenter && matchingCenter.properties['Delivery Postcode']) {
+        destinationPostcode = matchingCenter.properties['Delivery Postcode'];
+      }
+    }
+    
+    return {
+      destination: destinationPostcode,
+      journeyTime: parseFloat(record.totaltime),
+      services: record.services || 'N/A'
+    };
+  });
+  
+  return journeyTimeData;
+}
+
+/**
+ * Create HTML content for journey time display with navigation
+ * @param {Array} journeyTimeData Array of journey time records
+ * @returns {string} HTML content for the journey time section
+ */
+function createJourneyTimeContent(journeyTimeData) {
+  if (!journeyTimeData || journeyTimeData.length === 0) {
+    return '<p>No journey time data available</p>';
+  }
+  
+  const totalRecords = journeyTimeData.length;
+  
+  let html = `
+    <div id="journey-time-container">
+      <div id="journey-time-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <strong>Closest Training Centre:</strong>
+          <span style="font-size: 0.9em; color: #666;">
+            <span id="journey-current-index">1</span> of ${totalRecords}
+          </span>
+        </div>
+        
+        <div id="journey-time-details">
+          <p><strong>Destination:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span></p>
+          <p><strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins</p>
+          <p><strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span></p>
+        </div>
+  `;
+  
+  // Add navigation buttons if there are multiple records
+  if (totalRecords > 1) {
+    html += `
+      <div style="display: flex; justify-content: space-between; margin-top: 10px;">
+        <button id="journey-prev-btn" onclick="navigateJourneyTime(-1)" disabled 
+                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer;">
+          ← Previous
+        </button>
+        <button id="journey-next-btn" onclick="navigateJourneyTime(1)" 
+                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer;">
+          Next →
+        </button>
+      </div>
+    `;
+  }
+  
+  html += `</div>`;
+  
+  // Store journey time data globally for navigation
+  window.currentJourneyTimeData = journeyTimeData;
+  window.currentJourneyTimeIndex = 0;
+  
+  return html;
+}
+
+/**
+ * Navigate through journey time records
+ * @param {number} direction -1 for previous, 1 for next
+ */
+function navigateJourneyTime(direction) {
+  if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
+    return;
+  }
+  
+  const totalRecords = window.currentJourneyTimeData.length;
+  let newIndex = window.currentJourneyTimeIndex + direction;
+  
+  // Ensure index stays within bounds
+  if (newIndex < 0) newIndex = 0;
+  if (newIndex >= totalRecords) newIndex = totalRecords - 1;
+  
+  window.currentJourneyTimeIndex = newIndex;
+  const record = window.currentJourneyTimeData[newIndex];
+  
+  // Update the display
+  document.getElementById('journey-current-index').textContent = newIndex + 1;
+  document.getElementById('journey-destination').textContent = record.destination;
+  document.getElementById('journey-time').textContent = record.journeyTime;
+  document.getElementById('journey-services').textContent = record.services;
+  
+  // Update button states
+  const prevBtn = document.getElementById('journey-prev-btn');
+  const nextBtn = document.getElementById('journey-next-btn');
+  
+  if (prevBtn) {
+    prevBtn.disabled = newIndex === 0;
+    prevBtn.style.opacity = newIndex === 0 ? '0.5' : '1';
+    prevBtn.style.cursor = newIndex === 0 ? 'not-allowed' : 'pointer';
+  }
+  
+  if (nextBtn) {
+    nextBtn.disabled = newIndex === totalRecords - 1;
+    nextBtn.style.opacity = newIndex === totalRecords - 1 ? '0.5' : '1';
+    nextBtn.style.cursor = newIndex === totalRecords - 1 ? 'not-allowed' : 'pointer';
+  }
+}
+
 map.on('click', function (e) {
   if (isDrawingActive) {
     return;
