@@ -1023,15 +1023,16 @@ map.on('zoomend', () => {
   }
 });
 
-// Add these functions after line 1146 (before the map click handler)
-
 /**
  * Get journey time data for a specific origin, sorted by travel time (closest first)
  * @param {string} originId The OriginId_tracc to get journey time data for
  * @returns {Array} Array of journey time records sorted by total time
  */
 function getJourneyTimeData(originId) {
+  console.log('getJourneyTimeData called with originId:', originId);
+  
   if (!fullCsvData || !originId) {
+    console.log('No fullCsvData or originId missing');
     return [];
   }
   
@@ -1043,6 +1044,12 @@ function getJourneyTimeData(originId) {
     !isNaN(parseFloat(row.totaltime))
   );
   
+  console.log(`Found ${originRecords.length} records for origin ${originId}`);
+  
+  if (originRecords.length === 0) {
+    return [];
+  }
+  
   // Sort by total time (closest first)
   originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
   
@@ -1050,24 +1057,25 @@ function getJourneyTimeData(originId) {
   const journeyTimeData = originRecords.map(record => {
     let destinationPostcode = 'Unknown';
     
-    // Find matching training center by destination ID
+    // Find matching training center by destination ID (match destination with fid)
     if (amenityLayers['TrainingCentres']) {
       const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => 
-        feature.properties.DestinationId_tracc === record.destination
+        feature.properties.fid === record.destination
       );
       
-      if (matchingCenter && matchingCenter.properties['Delivery Postcode']) {
-        destinationPostcode = matchingCenter.properties['Delivery Postcode'];
+      if (matchingCenter && matchingCenter.properties.postcode) {
+        destinationPostcode = matchingCenter.properties.postcode;
       }
     }
     
     return {
       destination: destinationPostcode,
-      journeyTime: parseFloat(record.totaltime),
+      journeyTime: Math.round(parseFloat(record.totaltime)),
       services: record.services || 'N/A'
     };
   });
   
+  console.log('Journey time data processed:', journeyTimeData);
   return journeyTimeData;
 }
 
@@ -1077,6 +1085,8 @@ function getJourneyTimeData(originId) {
  * @returns {string} HTML content for the journey time section
  */
 function createJourneyTimeContent(journeyTimeData) {
+  console.log('createJourneyTimeContent called with data:', journeyTimeData);
+  
   if (!journeyTimeData || journeyTimeData.length === 0) {
     return '<p>No journey time data available</p>';
   }
@@ -1105,7 +1115,7 @@ function createJourneyTimeContent(journeyTimeData) {
     html += `
       <div style="display: flex; justify-content: space-between; margin-top: 10px;">
         <button id="journey-prev-btn" onclick="navigateJourneyTime(-1)" disabled 
-                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer;">
+                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: not-allowed; opacity: 0.5;">
           ← Previous
         </button>
         <button id="journey-next-btn" onclick="navigateJourneyTime(1)" 
@@ -1116,7 +1126,7 @@ function createJourneyTimeContent(journeyTimeData) {
     `;
   }
   
-  html += `</div>`;
+  html += `</div></div>`;
   
   // Store journey time data globally for navigation
   window.currentJourneyTimeData = journeyTimeData;
@@ -1130,7 +1140,10 @@ function createJourneyTimeContent(journeyTimeData) {
  * @param {number} direction -1 for previous, 1 for next
  */
 function navigateJourneyTime(direction) {
+  console.log('navigateJourneyTime called with direction:', direction);
+  
   if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
+    console.log('No journey time data available for navigation');
     return;
   }
   
@@ -1144,11 +1157,18 @@ function navigateJourneyTime(direction) {
   window.currentJourneyTimeIndex = newIndex;
   const record = window.currentJourneyTimeData[newIndex];
   
+  console.log('Updating to record:', record, 'at index:', newIndex);
+  
   // Update the display
-  document.getElementById('journey-current-index').textContent = newIndex + 1;
-  document.getElementById('journey-destination').textContent = record.destination;
-  document.getElementById('journey-time').textContent = record.journeyTime;
-  document.getElementById('journey-services').textContent = record.services;
+  const currentIndexEl = document.getElementById('journey-current-index');
+  const destinationEl = document.getElementById('journey-destination');
+  const timeEl = document.getElementById('journey-time');
+  const servicesEl = document.getElementById('journey-services');
+  
+  if (currentIndexEl) currentIndexEl.textContent = newIndex + 1;
+  if (destinationEl) destinationEl.textContent = record.destination;
+  if (timeEl) timeEl.textContent = record.journeyTime;
+  if (servicesEl) servicesEl.textContent = record.services;
   
   // Update button states
   const prevBtn = document.getElementById('journey-prev-btn');
@@ -1286,11 +1306,54 @@ map.on('click', function (e) {
             <strong>Population Growth:</strong> ${PopGrowth}
           `);
 
-          // Add Journey Time data
-          if (fullCsvData && properties.OriginId_tracc) {
-            const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
-            if (journeyTimeData.length > 0) {
-              popupContent.JourneyTime = journeyTimeData;
+          if (properties.OriginId_tracc) {
+            console.log('Requesting journey time data for:', properties.OriginId_tracc);
+            
+            // If fullCsvData is not loaded, try to use it or load it
+            if (!fullCsvData) {
+              console.log('CSV data not loaded yet, attempting to load...');
+              // Try to get it from the cache first
+              const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+              
+              fetch(csvPath)
+                .then(response => response.text())
+                .then(csvText => {
+                  const csvData = Papa.parse(csvText, { header: true }).data;
+                  fullCsvData = csvData;
+                  console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
+                  console.log('Sample CSV row:', fullCsvData[0]);
+                  
+                  const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
+                  if (journeyTimeData.length > 0) {
+                    popupContent.JourneyTime = journeyTimeData;
+                    
+                    // Update the popup content with journey time data
+                    const content = `
+                      <div>
+                        <h4 style="text-decoration: underline;">Geographies</h4>
+                        ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
+                        <h4 style="text-decoration: underline;">GridCell</h4>
+                        ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
+                        <h4 style="text-decoration: underline;">Journey Time</h4>
+                        ${createJourneyTimeContent(journeyTimeData)}
+                      </div>
+                    `;
+                    
+                    L.popup()
+                      .setLatLng(clickedLatLng)
+                      .setContent(content)
+                      .openOn(map);
+                  }
+                })
+                .catch(error => {
+                  console.error('Error loading CSV for popup:', error);
+                });
+            } else {
+              console.log('Using existing CSV data');
+              const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
+              if (journeyTimeData.length > 0) {
+                popupContent.JourneyTime = journeyTimeData;
+              }
             }
           }
         }
