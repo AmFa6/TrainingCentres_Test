@@ -5242,7 +5242,7 @@ function calculateBaseStatistics(features) {
           stats.minPopulation = Math.min(stats.minPopulation, pop);
           stats.maxPopulation = Math.max(stats.maxPopulation, pop);
           
-          const imdScore = Number(props.IMDScore);
+          const imdScore = Number(props.imd_score_mhclg);
           if (isFinite(imdScore)) {
             stats.totalWeightedImdScore += imdScore * pop;
             stats.minImdScore = Math.min(stats.minImdScore, imdScore);
@@ -5250,7 +5250,7 @@ function calculateBaseStatistics(features) {
             stats.populationWithImdScore += pop;
           }
           
-          const imdDecile = Number(props.IMD_Decile);
+          const imdDecile = Number(props.imd_decile_mhclg);
           if (isFinite(imdDecile)) {
             stats.totalWeightedImdDecile += imdDecile * pop;
             stats.minImdDecile = Math.min(stats.minImdDecile, imdDecile);
