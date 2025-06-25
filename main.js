@@ -23,6 +23,7 @@ let wardBoundariesLayer;
 let AmenitiesCatchmentLayer = null;
 let gridTimeMap = {};
 let csvDataCache = {};
+let fullCsvData = null; // Store full CSV data for journey time popup
 let amenitiesLayerGroup = L.featureGroup();
 let selectedAmenitiesAmenities = [];
 let selectingFromMap = false;
@@ -1090,10 +1091,10 @@ map.on('click', function (e) {
       return;
     }
   }
-  
-  const popupContent = {
+    const popupContent = {
     Geographies: [],
-    GridCell: []
+    GridCell: [],
+    JourneyTime: []
   };
 
   let isWithinLEP = false;
@@ -1125,9 +1126,7 @@ map.on('click', function (e) {
     gridLayer.eachLayer(layer => {
       const polygon = turf.polygon(layer.feature.geometry.coordinates);
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
-        const properties = layer.feature.properties;
-        if (AmenitiesCatchmentLayer) {
-          const time = formatValue(gridTimeMap[properties.OriginId_tracc], 1);
+        const properties = layer.feature.properties;        if (AmenitiesCatchmentLayer) {
           const population = formatValue(properties.pop, 10);
           const imdScore = formatValue(properties.imd_score_mhclg, 0.1);
           const imdDecile = formatValue(properties.imd_decile_mhclg, 1);
@@ -1136,13 +1135,20 @@ map.on('click', function (e) {
 
           popupContent.GridCell.push(`
             <strong>ID:</strong> ${properties.OriginId_tracc}<br>
-            <strong>Journey Time:</strong> ${time} minutes<br>
             <strong>Population:</strong> ${population}<br>
             <strong>IMD Score:</strong> ${imdScore}<br>
             <strong>IMD Decile:</strong> ${imdDecile}<br>
             <strong>Car Availability:</strong> ${carAvailability}<br>
             <strong>Population Growth:</strong> ${PopGrowth}
           `);
+
+          // Add Journey Time data
+          if (fullCsvData && properties.OriginId_tracc) {
+            const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
+            if (journeyTimeData.length > 0) {
+              popupContent.JourneyTime = journeyTimeData;
+            }
+          }
         }
       }
     });
@@ -1168,13 +1174,14 @@ map.on('click', function (e) {
       }
     });
   }
-
   const content = `
     <div>
       <h4 style="text-decoration: underline;">Geographies</h4>
       ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
       <h4 style="text-decoration: underline;">GridCell</h4>
       ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
+      <h4 style="text-decoration: underline;">Journey Time</h4>
+      ${popupContent.JourneyTime.length > 0 ? createJourneyTimeContent(popupContent.JourneyTime) : '-'}
     </div>
   `;
 
@@ -4022,9 +4029,9 @@ function updateAmenitiesCatchmentLayer() {
     const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
 
     fetch(csvPath)
-        .then(response => response.text())
-        .then(csvText => {
+        .then(response => response.text())        .then(csvText => {
             const csvData = Papa.parse(csvText, { header: true }).data;
+            fullCsvData = csvData; // Store full CSV data globally
             
             if (csvData.length === 0) {
                 updateAmenitiesCatchmentLayer.isRunning = false;
