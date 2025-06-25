@@ -1767,6 +1767,28 @@ function setupDrawingTools() {
   const drawingNameInput = document.getElementById('drawingNameInput');
   const saveDrawingContainer = document.getElementById('save-drawing-container');
   
+  // Set up attribute editor modal event listeners
+  const addAttributeFieldBtn = document.getElementById('add-attribute-field');
+  const saveAttributesBtn = document.getElementById('save-attributes');
+  const cancelAttributesBtn = document.getElementById('cancel-attributes');
+  
+  if (addAttributeFieldBtn) {
+    addAttributeFieldBtn.addEventListener('click', function() {
+      addAttributeField();
+    });
+  }
+  
+  if (saveAttributesBtn) {
+    saveAttributesBtn.addEventListener('click', function() {
+      saveAttributes();
+    });
+  }
+  
+  if (cancelAttributesBtn) {
+    cancelAttributesBtn.addEventListener('click', function() {
+      cancelAttributeEditing();
+    });
+  }
   
   let originalLayerState = null;
   let hasUnsavedChanges = false;
@@ -3698,31 +3720,23 @@ function formatFeatureProperties(feature, featureType) {
 function showInfrastructurePopup(latlng, nearbyFeatures) {
   const busLineFeatures = nearbyFeatures.busLines;
   const busStopFeatures = nearbyFeatures.busStops;
-  
   let combinedBusFrequency = 0;
   if (busLineFeatures.length > 0) {
     combinedBusFrequency = busLineFeatures.reduce((total, current) => {
       const frequency = current.feature.properties.am_peak_service_frequency;
-      return total + (parseFloat(frequency) || 0);
+      return total + (frequency || 0);
     }, 0);
   }
   
-  const allFeatures = [
-    ...busStopFeatures, 
-    ...busLineFeatures
-  ];
-  
-  if (allFeatures.length === 0) return;
-  
-  let currentIndex = 0;
+  const allFeatures = [...busLineFeatures, ...busStopFeatures];
   const totalFeatures = allFeatures.length;
-  let popup = null;
+  let currentIndex = 0;
   let highlightedLayer = null;
+  let popup = null;
   
   function highlightCurrentFeature() {
     if (highlightedLayer) {
       map.removeLayer(highlightedLayer);
-      highlightedLayer = null;
     }
     
     const currentFeature = allFeatures[currentIndex];
