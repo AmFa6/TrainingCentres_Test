@@ -8,10 +8,10 @@ const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
-  IMDScore: { min: Infinity, max: -Infinity },
-  car_availability_ts045: { min: Infinity, max: -Infinity },
+  imd_score_mhclg: { min: Infinity, max: -Infinity },
+  hh_caravail_ts045: { min: Infinity, max: -Infinity },
   pop_growth: { min: Infinity, max: -Infinity },
-  IMD_Decile: { min: Infinity, max: -Infinity }
+  imd_decile_mhclg: { min: Infinity, max: -Infinity }
 };
 let gridCentroidsFC = null;
 let opacityAmenitiesOrder = 'low-to-high';
@@ -865,10 +865,10 @@ function calculateGridStatistics(gridData) {
   
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
-    IMDScore: { min: Infinity, max: -Infinity },
-    car_availability_ts045: { min: Infinity, max: -Infinity },
+    imd_score_mhclg: { min: Infinity, max: -Infinity },
+    hh_caravail_ts045: { min: Infinity, max: -Infinity },
     pop_growth: { min: Infinity, max: -Infinity },
-    IMD_Decile: { min: Infinity, max: -Infinity }
+    imd_decile_mhclg: { min: Infinity, max: -Infinity }
   };
   
   const BATCH_SIZE = 5000;
@@ -1129,9 +1129,9 @@ map.on('click', function (e) {
         if (AmenitiesCatchmentLayer) {
           const time = formatValue(gridTimeMap[properties.OriginId_tracc], 1);
           const population = formatValue(properties.pop, 10);
-          const imdScore = formatValue(properties.IMDScore, 0.1);
-          const imdDecile = formatValue(properties.IMD_Decile, 1);
-          const carAvailability = formatValue(properties.car_availability_ts045, 0.01);
+          const imdScore = formatValue(properties.imd_score_mhclg, 0.1);
+          const imdDecile = formatValue(properties.imd_decile_mhclg, 1);
+          const carAvailability = formatValue(properties.hh_caravail_ts045, 0.01);
           const PopGrowth = formatValue(properties.pop_growth, 10);
 
           popupContent.GridCell.push(`
@@ -1152,9 +1152,9 @@ map.on('click', function (e) {
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
         const properties = feature.properties;
         const population = formatValue(properties.pop, 10);
-        const imdScore = formatValue(properties.IMDScore, 0.1);
-        const imdDecile = formatValue(properties.IMD_Decile, 1);
-        const carAvailability = formatValue(properties.car_availability_ts045, 0.01);
+        const imdScore = formatValue(properties.imd_score_mhclg, 0.1);
+        const imdDecile = formatValue(properties.imd_decile_mhclg, 1);
+        const carAvailability = formatValue(properties.hh_caravail_ts045, 0.01);
         const PopGrowth = formatValue(properties.pop_growth, 10);
 
         popupContent.GridCell.push(`
@@ -5093,7 +5093,7 @@ function calculateBaseStatistics(features) {
             stats.populationWithImdDecile += pop;
           }
           
-          const carAvailability = Number(props.car_availability_ts045);
+          const carAvailability = Number(props.hh_caravail_ts045);
           if (isFinite(carAvailability)) {
             stats.totalWeightedCarAvailability += carAvailability * pop;
             stats.minCarAvailability = Math.min(stats.minCarAvailability, carAvailability);
