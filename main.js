@@ -732,16 +732,16 @@ function loadBackgroundData() {
  */
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
-  
-  Promise.all([
+    Promise.all([
     fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
     fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid.csv').then(response => response.text())
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
+    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
   ])
-    .then(([data1, data2, csvText]) => {    
+    .then(([data1, data2, csvText1, csvText2]) => {    
       console.log("Processing grid data in background...");
       
-      processGridData(data1, data2, csvText).then(processedGrid => {
+      processGridData(data1, data2, csvText1, csvText2).then(processedGrid => {
         grid = processedGrid;
         
         calculateGridStatistics(grid);
@@ -768,17 +768,24 @@ function loadGridData() {
  * Processes grid data in batches to avoid UI blocking
  * @param {Object} data1 First part of grid GeoJSON
  * @param {Object} data2 Second part of grid GeoJSON
- * @param {String} csvText CSV data for grid properties
+ * @param {String} csvText1 CSV data for first grid part
+ * @param {String} csvText2 CSV data for second grid part
  * @returns {Promise} Promise that resolves with the processed grid data
  */
-function processGridData(data1, data2, csvText) {
+function processGridData(data1, data2, csvText1, csvText2) {
   return new Promise((resolve) => {
     console.log("Starting to process grid GeoJSON and CSV data...");
     
-    const csvData = Papa.parse(csvText, { header: true }).data;
+    const csvData1 = Papa.parse(csvText1, { header: true }).data;
+    const csvData2 = Papa.parse(csvText2, { header: true }).data;
     
     const csvLookup = {};
-    csvData.forEach(row => {
+    csvData1.forEach(row => {
+      if (row.OriginId_tracc) {
+        csvLookup[row.OriginId_tracc] = row;
+      }
+    });
+    csvData2.forEach(row => {
       if (row.OriginId_tracc) {
         csvLookup[row.OriginId_tracc] = row;
       }
