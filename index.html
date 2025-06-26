@@ -16,94 +16,6 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
-  <script src="https://cdn.jsdelivr.net/npm/apache-arrow@17.0.0/dist/umd/apache-arrow.js"></script>
-  <script>
-  async function loadDuckDB() {
-    try {
-      console.log('Initializing DuckDB...');
-      
-      // GitHub Pages compatibility check - skip DuckDB entirely
-      const isGitHubPages = window.location.hostname.includes('github.io');
-      if (isGitHubPages) {
-        console.log('GitHub Pages detected - skipping DuckDB initialization');
-        window.isDuckDBReady = false;
-        showDuckDBStatus(false);
-        window.dispatchEvent(new CustomEvent('duckdbReady'));
-        return;
-      }
-      
-      // Check if DuckDB is available
-      if (typeof duckdb === 'undefined') {
-        throw new Error('DuckDB not loaded');
-      }
-      
-      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-      const worker_url = URL.createObjectURL(
-        new Blob([`importScripts("${bundle.mainWorker}");`], {type: 'text/javascript'})
-      );
-      
-      const worker = new Worker(worker_url);
-      const logger = new duckdb.ConsoleLogger();
-      const db = new duckdb.AsyncDuckDB(logger, worker);
-      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      
-      // Make DuckDB available globally
-      window.duckdb = duckdb;
-      window.db = db;
-      window.isDuckDBReady = true;
-      
-      console.log('✅ DuckDB initialized successfully');
-      showDuckDBStatus(true);
-      
-      // Trigger DuckDB ready event
-      window.dispatchEvent(new CustomEvent('duckdbReady'));
-      
-    } catch (error) {
-      console.error('❌ DuckDB initialization failed:', error);
-      window.isDuckDBReady = false;
-      showDuckDBStatus(false);
-      // Still dispatch the event so the app continues
-      window.dispatchEvent(new CustomEvent('duckdbReady'));
-    }
-  }
-
-  function showDuckDBStatus(isReady) {
-    const indicator = document.getElementById('duckdb-status');
-    if (indicator) {
-      if (isReady) {
-        indicator.textContent = '⚡ DuckDB Active';
-        indicator.style.background = 'rgba(0, 128, 0, 0.9)';
-        indicator.style.display = 'block';
-      } else {
-        indicator.textContent = '⚠️ JavaScript Fallback';
-        indicator.style.background = 'rgba(255, 165, 0, 0.9)';
-        indicator.style.display = 'block';
-      }
-      
-      // Hide after 3 seconds
-      setTimeout(() => {
-        indicator.style.display = 'none';
-      }, 3000);
-    }
-  }
-
-  // Only try to load DuckDB if not on GitHub Pages
-  if (window.location.hostname.includes('github.io')) {
-    console.log('GitHub Pages detected - DuckDB disabled for compatibility');
-    window.isDuckDBReady = false;
-    document.addEventListener('DOMContentLoaded', () => {
-      showDuckDBStatus(false);
-      window.dispatchEvent(new CustomEvent('duckdbReady'));
-    });
-  } else {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', loadDuckDB);
-    } else {
-      loadDuckDB();
-    }
-  }
-  </script>
   <style>
   html, body {
     height: 100%;
@@ -123,22 +35,6 @@
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     z-index: 1000;
     box-sizing: border-box;
-  }
-  
-  /* Performance indicator styles */
-  .performance-indicator {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    background: rgba(0, 128, 0, 0.9);
-    color: white;
-    padding: 8px 12px;
-    border-radius: 5px;
-    font-size: 13px;
-    font-weight: bold;
-    z-index: 2000;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-    transition: all 0.3s ease;
   }
   #panel-container {
     top: 10px;
@@ -935,7 +831,6 @@
   </style>
 </head>
 <body>
-  <div id="duckdb-status" class="performance-indicator" style="display: none;"></div>
   <div id="map"></div>
   <div id="panel-container">
     <div id="Amenities" class="panel">
@@ -1281,12 +1176,6 @@
   <div class="loading-spinner"></div>
   <div id="loading-text" class="loading-text">Loading...</div>
   </div>
-  
-  <!-- Performance indicator for DuckDB -->
-  <div id="performance-indicator" class="performance-indicator" style="display: none;">
-    Processing with JavaScript
-  </div>
-  
   <script>
     const AmenitiesFiles = [
       { type: 'Training Centres', path: 'https://AmFa6.github.io/TrainingCentres/trainingcentres+.geojson' }
@@ -1296,23 +1185,6 @@
       { type: 'BusStops', path: 'https://AmFa6.github.io/TAF_test/stops.geojson' }
     ];
     const ladCodes = ['E06000022', 'E06000023', 'E06000024', 'E06000025'];
-    
-    // Show GitHub Pages optimized mode indicator
-    window.addEventListener('DOMContentLoaded', () => {
-      setTimeout(() => {
-        const indicator = document.getElementById('performance-indicator');
-        if (indicator) {
-          indicator.textContent = '🌐 GitHub Pages Optimized Mode';
-          indicator.style.background = 'rgba(0, 150, 50, 0.9)';
-          indicator.style.display = 'block';
-          
-          // Hide after 3 seconds
-          setTimeout(() => {
-            indicator.style.display = 'none';
-          }, 3000);
-        }
-      }, 1000);
-    });
   </script>
   <script src="main.js"></script>
 </body>
