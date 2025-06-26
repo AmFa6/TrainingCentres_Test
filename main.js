@@ -1078,8 +1078,13 @@ function getJourneyTimeData(originId) {
   
   originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
   
+  // Function to convert to title case (capitalize first letter of each word)
+  const toTitleCase = (str) => {
+    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  };
+  
   const journeyTimeData = originRecords.map(record => {
-    let destinationPostcode = 'Unknown';
+    let destinationLocation = 'Unknown';
     
     if (amenityLayers['TrainingCentres']) {
       const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
@@ -1088,8 +1093,21 @@ function getJourneyTimeData(originId) {
         return featureFid === recordDestination;
       });
       
-      if (matchingCenter && matchingCenter.properties.postcode) {
-        destinationPostcode = matchingCenter.properties.postcode;
+      if (matchingCenter && matchingCenter.properties) {
+        const deliveryPostcode = matchingCenter.properties['Delivery Postcode'] || '';
+        const postcode = matchingCenter.properties.postcode || '';
+        
+        // Format the delivery postcode with proper capitalization
+        const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
+        
+        // Create the location string
+        if (formattedDeliveryPostcode && postcode) {
+          destinationLocation = `${formattedDeliveryPostcode}, ${postcode}`;
+        } else if (formattedDeliveryPostcode) {
+          destinationLocation = formattedDeliveryPostcode;
+        } else if (postcode) {
+          destinationLocation = postcode;
+        }
       } else {
         console.log('No matching center found for destination:', record.destination);
       }
@@ -1103,7 +1121,7 @@ function getJourneyTimeData(originId) {
     }
     
     return {
-      destination: destinationPostcode,
+      destination: destinationLocation,
       journeyTime: Math.round(parseFloat(record.totaltime)),
       services: services
     };
@@ -1608,10 +1626,34 @@ function filterTrainingCentres() {
 
 function getTrainingCenterPopupContent(properties) {
   console.log('Generating popup content for training center...');
+  
+  // Get and format the delivery postcode with proper capitalization
+  const deliveryPostcode = properties['Delivery Postcode'] || '';
+  const postcode = properties.postcode || '';
+  
+  // Function to convert to title case (capitalize first letter of each word)
+  const toTitleCase = (str) => {
+    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
+  };
+  
+  // Format the delivery postcode
+  const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
+  
+  // Create the location string
+  let locationString = 'Unknown';
+  if (formattedDeliveryPostcode && postcode) {
+    locationString = `${formattedDeliveryPostcode}, ${postcode}`;
+  } else if (formattedDeliveryPostcode) {
+    locationString = formattedDeliveryPostcode;
+  } else if (postcode) {
+    locationString = postcode;
+  }
+  
   let content = `
     <div>
-      <h4>${properties.Provider || 'Unknown Provider'}</h4>
-      <p><strong>Location:</strong> ${properties['Delivery Postcode'] || 'Unknown'}</p>
+      <h4>Training Centre</h4>
+      <p><strong>Provider:</strong> ${properties.Provider || 'Unknown Provider'}</p>
+      <p><strong>Location:</strong> ${locationString}</p>
       <p><strong>Aim Levels:</strong> `;
   
   const aimLevels = [];
@@ -1640,6 +1682,7 @@ function getTrainingCenterPopupContent(properties) {
   });
   
   content += "</table>";
+  content += "</div>";
   
   return content;
 }
