@@ -824,8 +824,8 @@ function loadBoundaryData() {
             
             // Populate ward code to name lookup map
             filteredFeatures.forEach(feature => {
-              const code = feature.properties.WD24CD || feature.properties.WD21CD; // Handle both possible field names
-              const name = feature.properties.WD24NM || feature.properties.WD21NM; // Handle both possible field names
+              const code = feature.properties.WD24CD; // Handle both possible field names
+              const name = feature.properties.WD24NM; // Handle both possible field names
               if (code && name) {
                 wardCodeToNameMap[code] = name;
               }
@@ -1179,8 +1179,8 @@ async function loadGridDataWithDuckDB() {
         imd_score_mhclg,
         imd_decile_mhclg,
         hh_caravail_ts045,
-        LAD24CD,
-        WD21CD,
+        lad24cd,
+        wd24cd,
         ST_AsGeoJSON(geometry) as geojson_geom
       FROM grid_data
       ORDER BY OriginId_tracc
@@ -1896,7 +1896,7 @@ map.on('click', function (e) {
         const properties = layer.feature.properties;
         
         // Get LAD name from code using lookup map
-        const ladCode = properties.LAD24CD;
+        const ladCode = properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         if (ladName) {
           isWithinLEP = true;
@@ -1904,7 +1904,7 @@ map.on('click', function (e) {
         }
         
         // Get Ward name from code using lookup map
-        const wardCode = properties.WD21CD;
+        const wardCode = properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         if (wardName) {
           popupContent.Geographies.push(`<strong>Ward:</strong> ${wardName}`);
@@ -1984,7 +1984,7 @@ map.on('click', function (e) {
         const properties = feature.properties;
         
         // Get LAD name from code using lookup map
-        const ladCode = properties.LAD24CD;
+        const ladCode = properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         if (ladName) {
           isWithinLEP = true;
@@ -1992,7 +1992,7 @@ map.on('click', function (e) {
         }
         
         // Get Ward name from code using lookup map
-        const wardCode = properties.WD21CD;
+        const wardCode = properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         if (wardName) {
           popupContent.Geographies.push(`<strong>Ward:</strong> ${wardName}`);
