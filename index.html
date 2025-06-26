@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/noUiSlider/15.5.0/nouislider.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <!-- DuckDB WebAssembly for high-performance data processing -->
+  <script src="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
@@ -35,6 +37,22 @@
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
     z-index: 1000;
     box-sizing: border-box;
+  }
+  
+  /* Performance indicator styles */
+  .performance-indicator {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: rgba(0, 128, 0, 0.9);
+    color: white;
+    padding: 8px 12px;
+    border-radius: 5px;
+    font-size: 13px;
+    font-weight: bold;
+    z-index: 2000;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    transition: all 0.3s ease;
   }
   #panel-container {
     top: 10px;
@@ -1176,6 +1194,12 @@
   <div class="loading-spinner"></div>
   <div id="loading-text" class="loading-text">Loading...</div>
   </div>
+  
+  <!-- Performance indicator for DuckDB -->
+  <div id="performance-indicator" class="performance-indicator" style="display: none;">
+    Processing with JavaScript
+  </div>
+  
   <script>
     const AmenitiesFiles = [
       { type: 'Training Centres', path: 'https://AmFa6.github.io/TrainingCentres/trainingcentres+.geojson' }
@@ -1185,6 +1209,35 @@
       { type: 'BusStops', path: 'https://AmFa6.github.io/TAF_test/stops.geojson' }
     ];
     const ladCodes = ['E06000022', 'E06000023', 'E06000024', 'E06000025'];
+    
+    // Performance indicator management
+    function updatePerformanceIndicator(mode) {
+      const indicator = document.getElementById('performance-indicator');
+      if (mode === 'duckdb') {
+        indicator.textContent = '🚀 High-Performance Mode: DuckDB Active';
+        indicator.style.background = 'rgba(0, 100, 200, 0.9)';
+        indicator.style.display = 'block';
+      } else if (mode === 'javascript') {
+        indicator.textContent = '⚠️ Standard Mode: JavaScript Fallback';
+        indicator.style.background = 'rgba(200, 100, 0, 0.9)';
+        indicator.style.display = 'block';
+      } else {
+        indicator.style.display = 'none';
+      }
+    }
+    
+    // Show performance indicator based on DuckDB availability after load
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (window.isDuckDBReady) {
+          updatePerformanceIndicator('duckdb');
+          console.log('✅ DuckDB is active - Expecting 10-50x performance improvement on data operations');
+        } else {
+          updatePerformanceIndicator('javascript');
+          console.log('⚠️ DuckDB initialization failed - Using JavaScript fallback');
+        }
+      }, 3000); // Give time for DuckDB to initialize
+    });
   </script>
   <script src="main.js"></script>
 </body>
