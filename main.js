@@ -28,31 +28,79 @@ class ParquetProcessor {
         throw new Error('Apache Arrow library not loaded. Please check the script tag.');
       }
       
+      console.log('Arrow methods available:', {
+        tableFromIPC: !!Arrow.tableFromIPC,
+        readParquet: !!Arrow.readParquet,
+        Table: !!Arrow.Table,
+        'Table.from': !!(Arrow.Table && Arrow.Table.from)
+      });
+      
       const response = await fetch(url);
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const arrayBuffer = await response.arrayBuffer();
+      console.log(`Loaded ${arrayBuffer.byteLength} bytes from ${url}`);
       
       // Try different methods to parse the parquet file
       let table;
+      let parseMethod = 'unknown';
+      
       try {
-        table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+        // Method 1: Try tableFromIPC first
+        if (Arrow.tableFromIPC) {
+          table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+          parseMethod = 'tableFromIPC';
+        } else {
+          throw new Error('tableFromIPC not available');
+        }
       } catch (e) {
-        console.log('tableFromIPC failed, trying readParquet...');
+        console.log('tableFromIPC failed:', e.message);
         try {
-          table = Arrow.readParquet(arrayBuffer);
+          // Method 2: Try readParquet
+          if (Arrow.readParquet) {
+            table = Arrow.readParquet(arrayBuffer);
+            parseMethod = 'readParquet';
+          } else {
+            throw new Error('readParquet not available');
+          }
         } catch (e2) {
-          console.log('readParquet failed, trying Table.from...');
-          table = Arrow.Table.from(arrayBuffer);
+          console.log('readParquet failed:', e2.message);
+          try {
+            // Method 3: Try Table.from
+            if (Arrow.Table && Arrow.Table.from) {
+              table = Arrow.Table.from(arrayBuffer);
+              parseMethod = 'Table.from';
+            } else {
+              throw new Error('Table.from not available');
+            }
+          } catch (e3) {
+            console.log('Table.from failed:', e3.message);
+            // Method 4: Try with RecordBatchReader
+            try {
+              if (Arrow.RecordBatchReader) {
+                const reader = Arrow.RecordBatchReader.from(arrayBuffer);
+                table = reader.readAll();
+                parseMethod = 'RecordBatchReader';
+              } else {
+                throw new Error('RecordBatchReader not available');
+              }
+            } catch (e4) {
+              console.error('All parsing methods failed');
+              throw new Error(`Failed to parse parquet file with all available methods. Last error: ${e4.message}`);
+            }
+          }
         }
       }
+      
+      console.log(`Successfully parsed parquet file using ${parseMethod}`);
+      console.log(`Table has ${table.numRows} rows and ${table.numCols} columns`);
       
       this.cache.set(url, table);
       return table;
     } catch (error) {
-      console.warn(`Failed to load Parquet file ${url}:`, error);
+      console.error(`Failed to load Parquet file ${url}:`, error);
       throw error;
     }
   }
@@ -893,27 +941,83 @@ function loadGridData() {
   const Arrow = window.Arrow || window.apache_arrow || window.Apache;
   
   if (!Arrow) {
-    console.warn('Apache Arrow not available. Trying to load it...');
+    console.warn('Apache Arrow not available. Trying alternative loading methods...');
     
-    // Try to dynamically load Apache Arrow if not available
-    const script = document.createElement('script');
-    script.src = 'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/Arrow.es2015.min.js';
-    script.onload = function() {
-      console.log('Apache Arrow loaded dynamically');
-      setTimeout(() => {
-        loadGridData(); // Retry after loading
-      }, 100);
-    };
-    script.onerror = function() {
-      console.error('Failed to load Apache Arrow dynamically');
-      hideBackgroundLoadingIndicator();
-      showErrorNotification("Apache Arrow library could not be loaded. Grid data features will be limited.");
-    };
-    document.head.appendChild(script);
+    // Try multiple CDN sources for Apache Arrow
+    const arrowSources = [
+      'https://unpkg.com/apache-arrow@14.0.1/dist/umd/Arrow.js',
+      'https://cdn.skypack.dev/apache-arrow@14.0.1',
+      'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/umd/Arrow.js'
+    ];
+    
+    let sourceIndex = 0;
+    
+    function tryLoadArrow() {
+      if (sourceIndex >= arrowSources.length) {
+        console.error('All Apache Arrow sources failed to load, trying GeoJSON fallback...');
+        
+        // If Apache Arrow can't be loaded, try GeoJSON fallback
+        fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(geojsonData => {
+            console.log("Successfully loaded grid data from GeoJSON (Arrow unavailable)");
+            grid = geojsonData;
+            
+            calculateGridStatistics(grid);
+            
+            updateFilterDropdown();
+            updateFilterValues();
+            
+            if (initialLoadComplete) {
+              updateSummaryStatistics(grid.features);
+            }
+            
+            hideBackgroundLoadingIndicator();
+            console.log("Grid data loading complete (using GeoJSON, Arrow unavailable)");
+          })
+          .catch(geoJsonError => {
+            console.error("GeoJSON fallback also failed:", geoJsonError);
+            hideBackgroundLoadingIndicator();
+            showErrorNotification("Apache Arrow library and GeoJSON fallback both failed to load. Grid data features will be unavailable, but training centers will still work.");
+          });
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = arrowSources[sourceIndex];
+      script.onload = function() {
+        console.log(`Apache Arrow loaded successfully from source ${sourceIndex + 1}`);
+        // Give it a moment to initialize
+        setTimeout(() => {
+          window.Arrow = window.Arrow || window.apache_arrow || window.Apache;
+          if (window.Arrow) {
+            loadGridData(); // Retry after loading
+          } else {
+            sourceIndex++;
+            tryLoadArrow(); // Try next source
+          }
+        }, 200);
+      };
+      script.onerror = function() {
+        console.warn(`Failed to load Apache Arrow from source ${sourceIndex + 1}: ${arrowSources[sourceIndex]}`);
+        sourceIndex++;
+        tryLoadArrow(); // Try next source
+      };
+      document.head.appendChild(script);
+    }
+    
+    tryLoadArrow();
     return;
   }
   
-  // Load single parquet file instead of multiple files
+  console.log('Apache Arrow is available, proceeding with grid data loading...');
+  
+  // Load single parquet file
   parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/grid_combined.parquet')
     .then(table => {
       console.log("Processing grid data from parquet file...");
@@ -936,8 +1040,44 @@ function loadGridData() {
     })
     .catch(error => {
       console.error("Error loading grid data:", error);
-      hideBackgroundLoadingIndicator();
-      showErrorNotification("Error loading grid data. Some features may be limited.");
+      
+      // Check if it's an Arrow-related error or file loading error
+      if (error.message && error.message.includes('Arrow')) {
+        console.log("Trying fallback to GeoJSON format...");
+        
+        // Try to load a GeoJSON version as fallback
+        fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson')
+          .then(response => {
+            if (!response.ok) {
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            return response.json();
+          })
+          .then(geojsonData => {
+            console.log("Successfully loaded grid data from GeoJSON fallback");
+            grid = geojsonData;
+            
+            calculateGridStatistics(grid);
+            
+            updateFilterDropdown();
+            updateFilterValues();
+            
+            if (initialLoadComplete) {
+              updateSummaryStatistics(grid.features);
+            }
+            
+            hideBackgroundLoadingIndicator();
+            console.log("Grid data loading complete (using GeoJSON fallback)");
+          })
+          .catch(fallbackError => {
+            console.error("Fallback GeoJSON loading also failed:", fallbackError);
+            hideBackgroundLoadingIndicator();
+            showErrorNotification("Grid data could not be loaded in any format. Grid-based features will be unavailable.");
+          });
+      } else {
+        hideBackgroundLoadingIndicator();
+        showErrorNotification("Error loading grid data file. Please check your internet connection and try refreshing the page.");
+      }
     });
 }
 
