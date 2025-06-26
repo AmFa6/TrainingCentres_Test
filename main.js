@@ -614,22 +614,12 @@ function loadBoundaryData() {
           .then(convertedData => {
             const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
             
-            // Populate ward code to name lookup map
             filteredFeatures.forEach(feature => {
-              const code24 = feature.properties.WD24CD;
-              const name24 = feature.properties.WD24NM;
-              
-              // Use whichever code/name pair exists
-              const code = code24 || code21;
-              const name = name24 || name21;
+              const code = feature.properties.WD24CD;
+              const name = feature.properties.WD24NM;
               
               if (code && name) {
                 wardCodeToNameMap[code] = name;
-                // Also map the alternative code format if both exist
-                if (code24 && code21 && code24 !== code21) {
-                  wardCodeToNameMap[code21] = name;
-                  wardCodeToNameMap[code24] = name;
-                }
               }
             });
             console.log('Ward lookup map populated:', wardCodeToNameMap);
@@ -5831,7 +5821,7 @@ function applyFilters(features) {
       // For specific LA selection, match codes to names
       console.log('Specific LA selected, filtering by codes');
       const laFiltered = filteredFeatures.filter(f => {
-        const ladCode = f.properties.LAD24CD;
+        const ladCode = f.properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         const result = ladCode && ladName && selectedSet.has(ladName);
         if (!result) {
@@ -5848,7 +5838,7 @@ function applyFilters(features) {
     } else if (filterType === 'Ward') {
       console.log('Processing Ward filter');
       const wardFiltered = filteredFeatures.filter(f => {
-        const wardCode = f.properties.WD24CD;
+        const wardCode = f.properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         const result = wardCode && wardName && selectedSet.has(wardName);
         return result;
@@ -5862,44 +5852,6 @@ function applyFilters(features) {
   console.log('Final filtered features count:', filteredFeatures.length);
   console.log('Filter type processed:', filterType);
   return filteredFeatures;
-}
-
-function applyGeographicFilter(features, filterType, filterValue) {
-  console.log('applyGeographicFilter', filterType, filterValue);
-  console.log('Input features count:', features.length);
-  
-  if (filterType === 'LA') {
-    if (filterValue === 'MCA') {
-      const mcaFiltered = features.filter(f => {
-        const ladCode = f.properties.LAD24CD;
-        const ladName = ladCodeToNameMap[ladCode];
-        return ladCode && ladName && ladName !== 'North Somerset';
-      });
-      console.log('MCA filtered count:', mcaFiltered.length);
-      return mcaFiltered;
-    } else if (filterValue === 'LEP') {
-      console.log('LEP filter - returning all features');
-      return features;
-    } else {
-      const laFiltered = features.filter(f => {
-        const ladCode = f.properties.LAD24CD;
-        const ladName = ladCodeToNameMap[ladCode];
-        return ladCode && ladName && ladName === filterValue;
-      });
-      console.log('Specific LA filtered count:', laFiltered.length);
-      return laFiltered;
-    }
-  } else if (filterType === 'Ward') {
-    const wardFiltered = features.filter(f => {
-      const wardCode = f.properties.WD24CD;
-      const wardName = wardCodeToNameMap[wardCode];
-      return wardCode && wardName && wardName === filterValue;
-    });
-    console.log('Ward filtered count:', wardFiltered.length);
-    return wardFiltered;
-  }
-  console.log('No matching filter type, returning empty array');
-  return [];
 }
 
 function applyRangeFilter(features, filterValue) {
