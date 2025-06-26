@@ -90,105 +90,74 @@ async function initializeDuckDB() {
   try {
     console.log('Initializing DuckDB for high-performance data processing...');
     
-    // Load DuckDB from CDN
+    // Load DuckDB from CDN with fallback options
     if (typeof duckdb === 'undefined') {
       console.log('Loading DuckDB library...');
       
-      // Try multiple CDN sources for better reliability
       const cdnUrls = [
-        'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js',
-        'https://unpkg.com/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js',
+        'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-eh.js',
+        'https://unpkg.com/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-eh.js',
         'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js'
       ];
       
-      let scriptLoaded = false;
+      let loaded = false;
       for (const url of cdnUrls) {
+        console.log(`Trying to load DuckDB from: ${url}`);
         try {
-          console.log(`Trying to load DuckDB from: ${url}`);
           const script = document.createElement('script');
           script.src = url;
-          script.crossOrigin = 'anonymous';
           document.head.appendChild(script);
           
-          // Wait for script to load with timeout
           await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error(`Timeout loading from ${url}`));
-            }, 10000); // 10 second timeout
-            
             script.onload = () => {
-              clearTimeout(timeout);
+              loaded = true;
               resolve();
             };
-            script.onerror = (error) => {
-              clearTimeout(timeout);
-              reject(error);
-            };
+            script.onerror = reject;
           });
           
-          // Check if duckdb is available
-          if (typeof duckdb !== 'undefined') {
-            scriptLoaded = true;
-            console.log(`Successfully loaded DuckDB from: ${url}`);
-            break;
-          }
+          if (loaded) break;
         } catch (error) {
-          console.warn(`Failed to load DuckDB from ${url}:`, error);
-          continue;
+          console.log(`Failed to load DuckDB from ${url}:`, error);
+          // Remove failed script tag
+          const failedScript = document.querySelector(`script[src="${url}"]`);
+          if (failedScript) failedScript.remove();
         }
       }
       
-      if (!scriptLoaded) {
+      if (!loaded) {
         throw new Error('Failed to load DuckDB from any CDN source');
       }
     }
     
-    // Add a small delay to ensure the library is fully initialized
-    await new Promise(resolve => setTimeout(resolve, 100));
-    
     // Initialize DuckDB
-    console.log('Initializing DuckDB instance...');
-    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-    
-    console.log('Creating DuckDB worker...');
-    const worker = new Worker(bundle.mainWorker);
-    const logger = new duckdb.ConsoleLogger();
-    db = new duckdb.AsyncDuckDB(logger, worker);
-    
-    console.log('Instantiating DuckDB...');
-    await db.instantiate(bundle.mainModule);
-    
-    // Install and load spatial extension for geospatial operations
-    console.log('Loading DuckDB spatial extension...');
-    try {
+    if (typeof duckdb !== 'undefined') {
+      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+      const worker = new Worker(bundle.mainWorker);
+      const logger = new duckdb.ConsoleLogger();
+      db = new duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule);
+      
+      // Install and load spatial extension for geospatial operations
+      console.log('Loading DuckDB spatial extension...');
       await db.query("INSTALL spatial; LOAD spatial;");
-      console.log('Spatial extension loaded successfully');
-    } catch (spatialError) {
-      console.warn('Failed to load spatial extension:', spatialError);
-      // Continue without spatial extension
-    }
-    
-    // Install and load httpfs extension for remote file access
-    console.log('Loading DuckDB httpfs extension...');
-    try {
+      
+      // Install and load httpfs extension for remote file access
       await db.query("INSTALL httpfs; LOAD httpfs;");
-      console.log('HTTPFS extension loaded successfully');
-    } catch (httpfsError) {
-      console.warn('Failed to load httpfs extension:', httpfsError);
-      // Continue without httpfs extension
+      
+      isDuckDBReady = true;
+      window.isDuckDBReady = true; // Update global reference
+      console.log('DuckDB initialized successfully with spatial support');
+    } else {
+      throw new Error('DuckDB library not available after loading attempts');
     }
-    
-    isDuckDBReady = true;
-    window.isDuckDBReady = true; // Update global reference
-    console.log('DuckDB initialized successfully');
     
     return true;
   } catch (error) {
     console.error('Failed to initialize DuckDB:', error);
     console.log('Falling back to JavaScript-based processing...');
     isDuckDBReady = false;
-    window.isDuckDBReady = false;
     return false;
   }
 }
@@ -436,21 +405,13 @@ document.addEventListener('DOMContentLoaded', (event) => {
   //showoadingOverlay();
   
   // Initialize DuckDB early for performance benefits
-  initializeDuckDB().then((success) => {
+  initializeDuckDB().then(() => {
     console.log('DuckDB initialization completed');
-    if (success && isDuckDBReady) {
-      console.log('DuckDB is ready, loading data...');
+    if (isDuckDBReady) {
       loadDataIntoDuckDB().then(() => {
         console.log('DuckDB data loading completed');
-      }).catch((error) => {
-        console.error('Failed to load data into DuckDB:', error);
       });
-    } else {
-      console.log('DuckDB not available, using JavaScript fallback');
     }
-  }).catch((error) => {
-    console.error('DuckDB initialization failed:', error);
-    console.log('Application will continue with JavaScript processing');
   });
   
   initializeUI();
