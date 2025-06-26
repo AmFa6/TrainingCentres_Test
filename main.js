@@ -90,67 +90,59 @@ async function initializeDuckDB() {
   try {
     console.log('Initializing DuckDB for high-performance data processing...');
     
-    // Load DuckDB from CDN with fallback options
-    if (typeof duckdb === 'undefined') {
-      console.log('Loading DuckDB library...');
-      
-      const cdnUrls = [
-        'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-eh.js',
-        'https://unpkg.com/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-eh.js',
-        'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js'
-      ];
-      
-      let loaded = false;
-      for (const url of cdnUrls) {
-        console.log(`Trying to load DuckDB from: ${url}`);
-        try {
-          const script = document.createElement('script');
-          script.src = url;
-          document.head.appendChild(script);
-          
-          await new Promise((resolve, reject) => {
-            script.onload = () => {
-              loaded = true;
-              resolve();
-            };
-            script.onerror = reject;
-          });
-          
-          if (loaded) break;
-        } catch (error) {
-          console.log(`Failed to load DuckDB from ${url}:`, error);
-          // Remove failed script tag
-          const failedScript = document.querySelector(`script[src="${url}"]`);
-          if (failedScript) failedScript.remove();
+    // Wait for DuckDB module to be loaded from the HTML module import
+    if (typeof window.duckdb === 'undefined') {
+      console.log('Waiting for DuckDB module to load...');
+      await new Promise((resolve, reject) => {
+        if (window.duckdbLoaded) {
+          resolve();
+        } else {
+          window.addEventListener('duckdbLoaded', resolve);
+          // Timeout after 10 seconds
+          setTimeout(() => reject(new Error('DuckDB module load timeout')), 10000);
         }
-      }
-      
-      if (!loaded) {
-        throw new Error('Failed to load DuckDB from any CDN source');
-      }
+      });
     }
     
-    // Initialize DuckDB
-    if (typeof duckdb !== 'undefined') {
-      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-      const worker = new Worker(bundle.mainWorker);
-      const logger = new duckdb.ConsoleLogger();
-      db = new duckdb.AsyncDuckDB(logger, worker);
-      await db.instantiate(bundle.mainModule);
+    // Initialize DuckDB with modern approach
+    if (window.duckdb) {
+      console.log('Initializing DuckDB instance...');
+      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
+      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
+      
+      const worker_url = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], {type: 'text/javascript'})
+      );
+      
+      const worker = new Worker(worker_url);
+      const logger = new window.duckdb.ConsoleLogger();
+      db = new window.duckdb.AsyncDuckDB(logger, worker);
+      
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      URL.revokeObjectURL(worker_url);
       
       // Install and load spatial extension for geospatial operations
       console.log('Loading DuckDB spatial extension...');
-      await db.query("INSTALL spatial; LOAD spatial;");
+      try {
+        await db.query("INSTALL spatial; LOAD spatial;");
+        console.log('DuckDB spatial extension loaded successfully');
+      } catch (spatialError) {
+        console.warn('Failed to load spatial extension, continuing without it:', spatialError);
+      }
       
       // Install and load httpfs extension for remote file access
-      await db.query("INSTALL httpfs; LOAD httpfs;");
+      try {
+        await db.query("INSTALL httpfs; LOAD httpfs;");
+        console.log('DuckDB httpfs extension loaded successfully');
+      } catch (httpfsError) {
+        console.warn('Failed to load httpfs extension, continuing without it:', httpfsError);
+      }
       
       isDuckDBReady = true;
       window.isDuckDBReady = true; // Update global reference
-      console.log('DuckDB initialized successfully with spatial support');
+      console.log('DuckDB initialized successfully');
     } else {
-      throw new Error('DuckDB library not available after loading attempts');
+      throw new Error('DuckDB module not available');
     }
     
     return true;
@@ -158,6 +150,7 @@ async function initializeDuckDB() {
     console.error('Failed to initialize DuckDB:', error);
     console.log('Falling back to JavaScript-based processing...');
     isDuckDBReady = false;
+    window.isDuckDBReady = false; // Update global reference
     return false;
   }
 }
