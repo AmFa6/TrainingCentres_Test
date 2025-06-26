@@ -5807,12 +5807,9 @@ function applyFilters(features) {
         console.log('MCA selected, filtering out North Somerset');
         // For MCA filter, need to filter based on codes and lookup names
         const mcaFiltered = filteredFeatures.filter(f => {
-          const ladCode = f.properties.LAD24CD;
+          const ladCode = f.properties.lad24cd;
           const ladName = ladCodeToNameMap[ladCode];
           const result = ladCode && ladName && ladName !== 'North Somerset';
-          if (!result) {
-            console.log('Filtered out feature:', ladCode, ladName);
-          }
           return result;
         });
         console.log('MCA filtered features count:', mcaFiltered.length);
