@@ -1159,7 +1159,6 @@ function createJourneyTimeContent(journeyTimeData) {
     <div id="journey-time-container">
       <div id="journey-time-content">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <strong>Accessible Training Centres:</strong>
           <span style="font-size: 0.9em; color: #666;">
             <span id="journey-current-index">1</span> of ${totalRecords}
           </span>
@@ -1657,7 +1656,7 @@ function getTrainingCenterPopupContent(properties) {
   let content = `
     <div>
       <h4>Training Centre</h4>
-      <strong>Provider:</strong> ${locationString}
+      <strong>Provider:</strong> ${locationString}<br>
       <strong>Aim Levels:</strong> `;
   
   const aimLevels = [];
