@@ -16,7 +16,37 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
-  <script src="https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/Arrow.es2015.min.js"></script>
+  <script src="https://unpkg.com/apache-arrow@14.0.1/dist/umd/Arrow.js"></script>
+  <script>
+    // Ensure Apache Arrow is available globally with detailed debugging
+    console.log('Checking Apache Arrow after script load...');
+    console.log('window.Arrow:', !!window.Arrow);
+    console.log('window.apache_arrow:', !!window.apache_arrow);
+    console.log('window.Apache:', !!window.Apache);
+    
+    // Set a global reference
+    if (window.Arrow) {
+      console.log('Apache Arrow loaded successfully via window.Arrow');
+      console.log('Arrow version:', window.Arrow.util ? window.Arrow.util.version : 'version unknown');
+    } else if (window.apache_arrow) {
+      console.log('Apache Arrow loaded via window.apache_arrow');
+      window.Arrow = window.apache_arrow;
+    } else if (window.Apache) {
+      console.log('Apache Arrow loaded via window.Apache');
+      window.Arrow = window.Apache;
+    } else {
+      console.warn('Apache Arrow not detected after script load');
+    }
+    
+    // Final availability check
+    window.Arrow = window.Arrow || window.apache_arrow || window.Apache;
+    console.log('Final Apache Arrow availability check:', !!window.Arrow);
+    
+    // If Arrow is available, log some of its methods
+    if (window.Arrow) {
+      console.log('Available Arrow methods:', Object.keys(window.Arrow).slice(0, 10));
+    }
+  </script>
   <style>
   html, body {
     height: 100%;
