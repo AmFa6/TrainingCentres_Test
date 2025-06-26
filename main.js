@@ -1023,6 +1023,21 @@ map.on('zoomend', () => {
   }
 });
 
+const toTitleCase = (str) => {
+  const wordsToNotCapitalize = ['of', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by'];
+  return str.toLowerCase().replace(/\b\w/g, (letter, index) => {
+    const word = str.toLowerCase().match(/\b\w+/g);
+    const currentWordIndex = str.toLowerCase().substring(0, index).split(/\b\w+/).length - 1;
+    const currentWord = word ? word[currentWordIndex] : '';
+    
+    // Always capitalize first word, or if not in the list of words to avoid
+    if (currentWordIndex === 0 || !wordsToNotCapitalize.includes(currentWord)) {
+      return letter.toUpperCase();
+    }
+    return letter;
+  });
+}
+
 /**
  * Get journey time data for a specific origin, sorted by travel time (closest first)
  * Only includes destinations that match current filtering criteria
@@ -1077,11 +1092,6 @@ function getJourneyTimeData(originId) {
   }
   
   originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
-  
-  // Function to convert to title case (capitalize first letter of each word)
-  const toTitleCase = (str) => {
-    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-  };
   
   const journeyTimeData = originRecords.map(record => {
     let destinationLocation = 'Unknown';
@@ -1149,14 +1159,14 @@ function createJourneyTimeContent(journeyTimeData) {
     <div id="journey-time-container">
       <div id="journey-time-content">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <strong>Closest Training Centre:</strong>
+          <strong>Accessible Training Centres:</strong>
           <span style="font-size: 0.9em; color: #666;">
             <span id="journey-current-index">1</span> of ${totalRecords}
           </span>
         </div>
         
         <div id="journey-time-details">
-          <strong>Destination:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span><br>
+          <strong>Provider:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span><br>
           <strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins<br>
           <strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span>
         </div>
@@ -1631,11 +1641,6 @@ function getTrainingCenterPopupContent(properties) {
   const deliveryPostcode = properties['Delivery Postcode'] || '';
   const postcode = properties.postcode || '';
   
-  // Function to convert to title case (capitalize first letter of each word)
-  const toTitleCase = (str) => {
-    return str.toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
-  };
-  
   // Format the delivery postcode
   const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
   
@@ -1652,8 +1657,7 @@ function getTrainingCenterPopupContent(properties) {
   let content = `
     <div>
       <h4>Training Centre</h4>
-      <p><strong>Provider:</strong> ${properties.Provider || 'Unknown Provider'}</p>
-      <p><strong>Location:</strong> ${locationString}</p>
+      <p><strong>Provider:</strong> ${locationString}</p> || 'Unknown Provider'}</p>
       <p><strong>Aim Levels:</strong> `;
   
   const aimLevels = [];
