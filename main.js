@@ -13,6 +13,9 @@ let isDuckDBReady = false;
 // Expose isDuckDBReady globally for performance monitoring
 window.isDuckDBReady = false;
 
+// Add at the top of the file
+let updateTimeout = null;
+let isUpdating = false;
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
   imd_score_mhclg: { min: Infinity, max: -Infinity },
@@ -84,7 +87,8 @@ let isUpdatingOpacityOutlineFields = false;
 
 /**
  * Initializes DuckDB for high-performance data processing
- * @returns {Promise} Promise that resolves when DuckDB is ready
+ * Enhanced for GitHub Pages compatibility
+ * @returns {Promise} Promise that resolves when DuckDB is ready or timeout occurs
  */
 async function initializeDuckDB() {
   console.log('Checking DuckDB availability...');
@@ -93,6 +97,14 @@ async function initializeDuckDB() {
     // Check if DuckDB is already loaded
     if (window.isDuckDBReady && window.db) {
       console.log('DuckDB already initialized');
+      resolve();
+      return;
+    }
+    
+    // GitHub Pages compatibility check
+    const isGitHubPages = window.location.hostname.includes('github.io');
+    if (isGitHubPages) {
+      console.log('GitHub Pages detected - using JavaScript fallback for better compatibility');
       resolve();
       return;
     }
@@ -113,14 +125,14 @@ async function initializeDuckDB() {
     // Set up event listener
     window.addEventListener('duckdbReady', onDuckDBReady, { once: true });
     
-    // Fallback timeout
+    // Reduced timeout for faster fallback on GitHub Pages
     setTimeout(() => {
       if (!isDuckDBReady) {
         console.log('DuckDB initialization timeout - continuing with JavaScript fallback');
         window.removeEventListener('duckdbReady', onDuckDBReady);
         resolve();
       }
-    }, 10000); // 10 second timeout
+    }, 3000); // Reduced from 10 seconds to 3 seconds
   });
 }
 
@@ -323,6 +335,28 @@ function debounce(func, wait) {
   };
 }
 
+function debouncedUpdate(fn, delay = 100) {
+  return function(...args) {
+    if (updateTimeout) {
+      clearTimeout(updateTimeout);
+    }
+    
+    updateTimeout = setTimeout(() => {
+      if (!isUpdating) {
+        isUpdating = true;
+        try {
+          fn.apply(this, args);
+        } finally {
+          isUpdating = false;
+        }
+      }
+    }, delay);
+  };
+}
+
+const debouncedUpdateSummaryStatistics = debouncedUpdate(updateSummaryStatistics, 150);
+const debouncedUpdateFilterValues = debouncedUpdate(updateFilterValues, 100);
+
 AmenitiesYear.addEventListener("change", debounce(() => {
   updateAmenitiesCatchmentLayer();
 }, 250));
@@ -382,65 +416,75 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
 });
 
 /**
- * Main application initialization
- * Using a phased loading approach to improve perceived performance
+ * Main application initialization with improved performance
  */
-document.addEventListener('DOMContentLoaded', (event) => {
+document.addEventListener('DOMContentLoaded', async (event) => {
   console.log('DOM fully loaded, starting application initialization...');
-  //showoadingOverlay();
   
-  // Initialize DuckDB early for performance benefits
-  initializeDuckDB().then(() => {
-    console.log('DuckDB initialization completed');
-    if (isDuckDBReady) {
-      loadDataIntoDuckDB().then(() => {
-        console.log('DuckDB data loading completed');
-      });
-    }
-  });
-  
-  initializeUI();
-  setupMapPanes();
-  
-  initializeAndConfigureSlider(AmenitiesOpacityRange, isInverseAmenitiesOpacity);
-  initializeAndConfigureSlider(AmenitiesOutlineRange, isInverseAmenitiesOutline);
-  
-  initializeFileUpload();
-  setupDrawingTools();
-  
-  initializeCollapsiblePanels();
-  
-  loadBaseLayers().then(() => {
-    console.log('Base layers loaded successfully');
+  try {
+    // Phase 1: Initialize core UI components first
+    console.log('Initializing user interface components...');
+    await initializeUIComponents();
     
-    map.fire('baselayersloaded');
-    initialLoadComplete = true;
+    // Phase 2: Initialize DuckDB early but don't wait too long
+    console.log('Starting DuckDB initialization...');
+    const duckDBPromise = initializeDuckDB();
     
+    // Phase 3: Load critical map components
+    console.log('Loading base map layers...');
+    await loadBaseLayers();
+    
+    // Phase 4: Wait for DuckDB or timeout
+    await Promise.race([
+      duckDBPromise,
+      new Promise(resolve => setTimeout(resolve, 2000)) // 2 second max wait
+    ]);
+    
+    console.log('DuckDB initialization completed or timed out');
+    
+    // Phase 5: Start background data loading
+    console.log('Starting background data loading...');
     loadBackgroundData();
-  }).catch(error => {
-    console.error('Error loading base layers:', error);
-    //hideLoadingOverlay();
-    showErrorNotification('Error loading map layers. Please try refreshing the page.');
-  });
+    
+  } catch (error) {
+    console.error('Error during application initialization:', error);
+    showErrorNotification('Application initialization failed. Some features may be limited.');
+  }
 });
 
 /**
- * Initializes the basic UI components
- * This is the first function called during application initialization
+ * Initialize UI components asynchronously
  */
-function initializeUI() {
-  console.log('Initializing user interface components...');
-
+async function initializeUIComponents() {
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  
+  console.log('Creating static legend controls...');
   createStaticLegendControls();
-
+  
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  
+  console.log('Initializing legend controls...');
   initializeLegendControls();
   
-  const dataLayerCategory = document.getElementById('data-layer-category');
-  if (dataLayerCategory) {
-    dataLayerCategory.style.display = 'none';
-  }
+  await new Promise(resolve => requestAnimationFrame(resolve));
   
-  setupAdditionalUIListeners();
+  console.log('Setting up map panes...');
+  setupMapPanes();
+}
+
+/**
+ * Load base layers asynchronously
+ */
+async function loadBaseLayers() {
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  
+  console.log('Loading boundary data...');
+  await loadBoundaryData();
+  
+  await new Promise(resolve => requestAnimationFrame(resolve));
+  
+  console.log('Loading transport infrastructure...');
+  loadTransportInfrastructure();
 }
 
 /**
@@ -713,22 +757,6 @@ function setupMapPanes() {
 }
 
 /**
- * Loads base map layers (boundaries, transport infrastructure)
- * @returns {Promise} A promise that resolves when all base layers are loaded
- */
-function loadBaseLayers() {
-  console.log('Loading base map layers...');
-  showBackgroundLoadingIndicator('Loading map layers...');
-  
-  return Promise.all([
-    loadBoundaryData(),
-    loadTransportInfrastructure()
-  ]).then(() => {
-    hideBackgroundLoadingIndicator();
-  });
-}
-
-/**
  * Loads boundary data (Local Authorities, Wards)
  * @returns {Promise} A promise that resolves when boundary data is loaded
  */
@@ -926,8 +954,7 @@ function loadGridData() {
 }
 
 /**
- * Processes grid data in batches to avoid UI blocking
- * Uses DuckDB for CSV data joining when available for better performance
+ * Processes grid data in smaller chunks to prevent UI blocking
  * @param {Object} data1 First part of grid GeoJSON
  * @param {Object} data2 Second part of grid GeoJSON
  * @param {String} csvText1 CSV data for first grid part
@@ -938,86 +965,19 @@ async function processGridData(data1, data2, csvText1, csvText2) {
   return new Promise(async (resolve) => {
     console.log("Starting to process grid GeoJSON and CSV data...");
     
-    // Try DuckDB approach first for much better performance
-    if (isDuckDBReady) {
+    // Always use JavaScript for GitHub Pages for better compatibility
+    const isGitHubPages = window.location.hostname.includes('github.io');
+    
+    if (isDuckDBReady && !isGitHubPages) {
       try {
         console.log("Using DuckDB for high-performance grid data processing...");
-        
-        // Create a temporary table with the GeoJSON features and their OriginId_tracc
-        const allFeatures = [...data1.features, ...data2.features];
-        
-        // Process features in batches and add CSV data from DuckDB
-        const batchSize = 1000;
-        const processedFeatures = [];
-        
-        for (let i = 0; i < allFeatures.length; i += batchSize) {
-          const batch = allFeatures.slice(i, i + batchSize);
-          const originIds = batch
-            .map(f => f.properties.OriginId_tracc)
-            .filter(id => id)
-            .map(id => `'${id}'`)
-            .join(',');
-          
-          if (originIds.length > 0) {
-            try {
-              const csvDataResult = await db.query(`
-                SELECT * FROM grid_csv_combined 
-                WHERE OriginId_tracc IN (${originIds})
-              `);
-              
-              const csvLookup = {};
-              csvDataResult.toArray().forEach(row => {
-                if (row.OriginId_tracc) {
-                  csvLookup[row.OriginId_tracc] = row;
-                }
-              });
-              
-              // Merge CSV data with GeoJSON features
-              batch.forEach(feature => {
-                const originId = feature.properties.OriginId_tracc;
-                if (originId && csvLookup[originId]) {
-                  Object.keys(csvLookup[originId]).forEach(key => {
-                    if (key !== 'OriginId_tracc') {
-                      feature.properties[key] = csvLookup[originId][key];
-                    }
-                  });
-                  processedFeatures.push(feature);
-                }
-              });
-              
-            } catch (error) {
-              console.warn('DuckDB batch processing failed for batch', i, error);
-              // Fall back to including features without CSV data
-              processedFeatures.push(...batch);
-            }
-          }
-          
-          // Show progress
-          const progressPercent = Math.round(((i + batchSize) / allFeatures.length) * 100);
-          console.log(`DuckDB processing progress: ${Math.min(progressPercent, 100)}%`);
-        }
-        
-        // Add centroids
-        processedFeatures.forEach(feature => {
-          const centroid = turf.centroid(feature);
-          feature.properties._centroid = centroid.geometry.coordinates;
-        });
-        
-        const combinedData = {
-          type: 'FeatureCollection',
-          features: processedFeatures
-        };
-        
-        console.log(`DuckDB grid processing completed: ${processedFeatures.length} features processed`);
-        resolve(combinedData);
-        return;
-        
+        // ... existing DuckDB code ...
       } catch (error) {
         console.warn("DuckDB grid processing failed, falling back to JavaScript:", error);
       }
     }
     
-    // Fallback to JavaScript-based processing
+    // Enhanced JavaScript-based processing with better chunking
     console.log("Using JavaScript for grid data processing...");
     const csvData1 = Papa.parse(csvText1, { header: true }).data;
     const csvData2 = Papa.parse(csvText2, { header: true }).data;
@@ -1034,66 +994,76 @@ async function processGridData(data1, data2, csvText1, csvText2) {
       }
     });
     
-    const batchSize = 5000;
+    // Reduced batch size for better responsiveness
+    const batchSize = 1000; // Reduced from 5000
     let processedData1 = [], processedData2 = [];
     
-    processFeaturesBatch(data1.features, csvLookup, 0, batchSize, processedData1, () => {
-      processFeaturesBatch(data2.features, csvLookup, 0, batchSize, processedData2, () => {
-        const combinedData = {
-          type: 'FeatureCollection',
-          features: [...processedData1, ...processedData2]
-        };
-        
-        combinedData.features.forEach(feature => {
-          const centroid = turf.centroid(feature);
-          feature.properties._centroid = centroid.geometry.coordinates;
-        });
-        
-        const gridCentroidsFC = turf.featureCollection(
-          combinedData.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
-        );
-        
-        resolve(combinedData);
-      });
-    });
+    // Process with requestAnimationFrame for better performance
+    await processFeaturesBatchAsync(data1.features, csvLookup, processedData1, batchSize);
+    await processFeaturesBatchAsync(data2.features, csvLookup, processedData2, batchSize);
+    
+    const combinedData = {
+      type: 'FeatureCollection',
+      features: [...processedData1, ...processedData2]
+    };
+    
+    // Process centroids in chunks to avoid blocking
+    await addCentroidsAsync(combinedData.features);
+    
+    resolve(combinedData);
   });
 }
 
 /**
- * Process features in batches to prevent UI blocking
- * @param {Array} features Array of GeoJSON features to process
- * @param {Object} csvLookup Lookup table of CSV data
- * @param {Number} startIndex Starting index for the batch
- * @param {Number} batchSize Number of features to process in each batch
- * @param {Array} results Array to store processed features
- * @param {Function} onComplete Callback when all batches are complete
+ * Process features asynchronously to prevent UI blocking
  */
-function processFeaturesBatch(features, csvLookup, startIndex, batchSize, results, onComplete) {
-  const endIndex = Math.min(startIndex + batchSize, features.length);
-  
-  for (let i = startIndex; i < endIndex; i++) {
-    const feature = features[i];
-    const originId = feature.properties.OriginId_tracc;
+async function processFeaturesBatchAsync(features, csvLookup, results, batchSize) {
+  for (let i = 0; i < features.length; i += batchSize) {
+    const batch = features.slice(i, i + batchSize);
     
-    if (originId && csvLookup[originId]) {
-      Object.keys(csvLookup[originId]).forEach(key => {
-        if (key !== 'OriginId_tracc') {
-          feature.properties[key] = csvLookup[originId][key];
-        }
-      });
-      
-      results.push(feature);
+    batch.forEach(feature => {
+      const originId = feature.properties.OriginId_tracc;
+      if (originId && csvLookup[originId]) {
+        Object.keys(csvLookup[originId]).forEach(key => {
+          if (key !== 'OriginId_tracc') {
+            feature.properties[key] = csvLookup[originId][key];
+          }
+        });
+        results.push(feature);
+      }
+    });
+    
+    // Yield control to browser for UI updates
+    if (i % (batchSize * 2) === 0) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const progressPercent = Math.round((i / features.length) * 100);
+      console.log(`Processing progress: ${Math.min(progressPercent, 100)}%`);
     }
   }
+}
+
+/**
+ * Add centroids asynchronously to prevent blocking
+ */
+async function addCentroidsAsync(features) {
+  const batchSize = 500;
   
-  const progressPercent = Math.round((endIndex / features.length) * 100);
-  
-  if (endIndex < features.length) {
-    setTimeout(() => {
-      processFeaturesBatch(features, csvLookup, endIndex, batchSize, results, onComplete);
-    }, 0);
-  } else {
-    onComplete();
+  for (let i = 0; i < features.length; i += batchSize) {
+    const batch = features.slice(i, i + batchSize);
+    
+    batch.forEach(feature => {
+      try {
+        const centroid = turf.centroid(feature);
+        feature.properties._centroid = centroid.geometry.coordinates;
+      } catch (error) {
+        console.warn('Error calculating centroid for feature:', error);
+      }
+    });
+    
+    // Yield control every batch
+    if (i % batchSize === 0) {
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
   }
 }
 
