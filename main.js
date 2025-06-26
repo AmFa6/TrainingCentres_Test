@@ -6,6 +6,68 @@ const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/lig
 
 const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
+class ParquetProcessor {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  async loadParquetFile(url) {
+    if (this.cache.has(url)) {
+      return this.cache.get(url);
+    }
+
+    try {
+      console.log(`Loading Parquet file: ${url}`);
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const table = arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+      
+      this.cache.set(url, table);
+      return table;
+    } catch (error) {
+      console.warn(`Failed to load Parquet file ${url}:`, error);
+      throw error;
+    }
+  }
+
+  filterAndAggregate(table, filters = {}) {
+    let filteredData = table;
+    
+    Object.entries(filters).forEach(([column, condition]) => {
+      if (condition.min !== undefined || condition.max !== undefined) {
+        filteredData = filteredData.filter(arrow.predicate.and(
+          condition.min !== undefined ? arrow.predicate.gteq(column, condition.min) : null,
+          condition.max !== undefined ? arrow.predicate.lteq(column, condition.max) : null
+        ).filter(Boolean));
+      }
+    });
+
+    return {
+      count: filteredData.numRows,
+      data: filteredData.toArray(),
+      stats: this.calculateStats(filteredData)
+    };
+  }
+
+  calculateStats(table) {
+    const stats = {};
+    table.schema.fields.forEach(field => {
+      if (field.type.typeId === arrow.Type.Float || field.type.typeId === arrow.Type.Int) {
+        const column = table.getChild(field.name);
+        stats[field.name] = {
+          min: arrow.util.min(column),
+          max: arrow.util.max(column),
+          sum: arrow.util.sum(column),
+          mean: arrow.util.mean(column)
+        };
+      }
+    });
+    return stats;
+  }
+}
+
+const parquetProcessor = new ParquetProcessor();
+
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
   imd_score_mhclg: { min: Infinity, max: -Infinity },
@@ -729,34 +791,31 @@ function loadBackgroundData() {
 }
 
 /**
- * Loads grid data in the background
+ * Loads grid data from a single parquet file in the background
  */
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
-    Promise.all([
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
-    fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
-  ])
-    .then(([data1, data2, csvText1, csvText2]) => {    
-      console.log("Processing grid data in background...");
+  
+  // Load single parquet file instead of multiple files
+  parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/grid_combined.parquet')
+    .then(table => {
+      console.log("Processing grid data from parquet file...");
+      return processGridDataFromParquet(table);
+    })
+    .then(processedGrid => {
+      grid = processedGrid;
       
-      processGridData(data1, data2, csvText1, csvText2).then(processedGrid => {
-        grid = processedGrid;
-        
-        calculateGridStatistics(grid);
-        
-        updateFilterDropdown();
-        updateFilterValues();
-        
-        if (initialLoadComplete) {
-          updateSummaryStatistics(grid.features);
-        }
-        
-        hideBackgroundLoadingIndicator();
-        console.log("Grid data loading and processing complete");
-      });
+      calculateGridStatistics(grid);
+      
+      updateFilterDropdown();
+      updateFilterValues();
+      
+      if (initialLoadComplete) {
+        updateSummaryStatistics(grid.features);
+      }
+      
+      hideBackgroundLoadingIndicator();
+      console.log("Grid data loading and processing complete");
     })
     .catch(error => {
       console.error("Error loading grid data:", error);
@@ -766,93 +825,174 @@ function loadGridData() {
 }
 
 /**
- * Processes grid data in batches to avoid UI blocking
- * @param {Object} data1 First part of grid GeoJSON
- * @param {Object} data2 Second part of grid GeoJSON
- * @param {String} csvText1 CSV data for first grid part
- * @param {String} csvText2 CSV data for second grid part
+ * Processes grid data from parquet table
+ * @param {Object} table Arrow table from parquet file
  * @returns {Promise} Promise that resolves with the processed grid data
  */
-function processGridData(data1, data2, csvText1, csvText2) {
+function processGridDataFromParquet(table) {
   return new Promise((resolve) => {
-    console.log("Starting to process grid GeoJSON and CSV data...");
-    
-    const csvData1 = Papa.parse(csvText1, { header: true }).data;
-    const csvData2 = Papa.parse(csvText2, { header: true }).data;
-    
-    const csvLookup = {};
-    csvData1.forEach(row => {
-      if (row.OriginId_tracc) {
-        csvLookup[row.OriginId_tracc] = row;
-      }
-    });
-    csvData2.forEach(row => {
-      if (row.OriginId_tracc) {
-        csvLookup[row.OriginId_tracc] = row;
-      }
-    });
+    console.log("Starting to process grid data from parquet table...");
     
     const batchSize = 5000;
-    let processedData1 = [], processedData2 = [];
+    const totalRows = table.numRows;
+    let processedFeatures = [];
     
-    processFeaturesBatch(data1.features, csvLookup, 0, batchSize, processedData1, () => {
-      processFeaturesBatch(data2.features, csvLookup, 0, batchSize, processedData2, () => {
-        const combinedData = {
-          type: 'FeatureCollection',
-          features: [...processedData1, ...processedData2]
-        };
-        
-        combinedData.features.forEach(feature => {
-          const centroid = turf.centroid(feature);
-          feature.properties._centroid = centroid.geometry.coordinates;
-        });
-        
-        const gridCentroidsFC = turf.featureCollection(
-          combinedData.features.map(f => turf.point(f.properties._centroid, { OriginId_tracc: f.properties.OriginId_tracc }))
-        );
-        
-        resolve(combinedData);
+    console.log(`Processing ${totalRows} rows from parquet file`);
+    
+    // Process in batches to avoid UI blocking
+    processParquetBatch(table, 0, batchSize, processedFeatures, () => {
+      const combinedData = {
+        type: 'FeatureCollection',
+        features: processedFeatures
+      };
+      
+      // Add centroids to features
+      combinedData.features.forEach(feature => {
+        const centroid = turf.centroid(feature);
+        feature.properties._centroid = centroid.geometry.coordinates;
       });
+      
+      resolve(combinedData);
     });
   });
 }
 
 /**
- * Process features in batches to prevent UI blocking
- * @param {Array} features Array of GeoJSON features to process
- * @param {Object} csvLookup Lookup table of CSV data
+ * Process parquet data in batches to prevent UI blocking
+ * @param {Object} table Arrow table
  * @param {Number} startIndex Starting index for the batch
- * @param {Number} batchSize Number of features to process in each batch
+ * @param {Number} batchSize Number of rows to process in each batch
  * @param {Array} results Array to store processed features
  * @param {Function} onComplete Callback when all batches are complete
  */
-function processFeaturesBatch(features, csvLookup, startIndex, batchSize, results, onComplete) {
-  const endIndex = Math.min(startIndex + batchSize, features.length);
+function processParquetBatch(table, startIndex, batchSize, results, onComplete) {
+  const endIndex = Math.min(startIndex + batchSize, table.numRows);
   
   for (let i = startIndex; i < endIndex; i++) {
-    const feature = features[i];
-    const originId = feature.properties.OriginId_tracc;
+    const row = table.get(i);
     
-    if (originId && csvLookup[originId]) {
-      Object.keys(csvLookup[originId]).forEach(key => {
-        if (key !== 'OriginId_tracc') {
-          feature.properties[key] = csvLookup[originId][key];
+    // Extract geometry (assuming it's stored as WKT or coordinates)
+    let geometry;
+    
+    // Try to get geometry from different possible column names
+    const geometryColumn = row.geometry || row.geom || row.wkt;
+    
+    if (geometryColumn) {
+      if (typeof geometryColumn === 'string') {
+        // If it's WKT format, parse it
+        try {
+          geometry = parseWKT(geometryColumn);
+        } catch (e) {
+          console.warn(`Failed to parse WKT for row ${i}:`, e);
+          continue;
         }
-      });
-      
-      results.push(feature);
+      } else if (geometryColumn.coordinates) {
+        // If it's already a geometry object
+        geometry = geometryColumn;
+      }
+    } else {
+      // Try to construct geometry from coordinate columns if available
+      const coords = getCoordinatesFromRow(row);
+      if (coords) {
+        geometry = {
+          type: 'Polygon',
+          coordinates: coords
+        };
+      } else {
+        console.warn(`No geometry found for row ${i}`);
+        continue;
+      }
     }
+    
+    // Extract properties (all non-geometry columns)
+    const properties = {};
+    const schema = table.schema;
+    
+    schema.fields.forEach(field => {
+      const fieldName = field.name;
+      if (!['geometry', 'geom', 'wkt'].includes(fieldName.toLowerCase())) {
+        properties[fieldName] = row[fieldName];
+      }
+    });
+    
+    // Create feature
+    const feature = {
+      type: 'Feature',
+      geometry: geometry,
+      properties: properties
+    };
+    
+    results.push(feature);
   }
   
-  const progressPercent = Math.round((endIndex / features.length) * 100);
+  const progressPercent = Math.round((endIndex / table.numRows) * 100);
   
-  if (endIndex < features.length) {
+  if (endIndex < table.numRows) {
     setTimeout(() => {
-      processFeaturesBatch(features, csvLookup, endIndex, batchSize, results, onComplete);
+      processParquetBatch(table, endIndex, batchSize, results, onComplete);
     }, 0);
   } else {
     onComplete();
   }
+}
+
+/**
+ * Simple WKT parser for POLYGON geometries
+ * @param {String} wkt WKT string
+ * @returns {Object} GeoJSON geometry object
+ */
+function parseWKT(wkt) {
+  // Remove extra whitespace and convert to uppercase
+  wkt = wkt.trim().toUpperCase();
+  
+  if (wkt.startsWith('POLYGON')) {
+    // Extract coordinates from POLYGON ((x1 y1, x2 y2, ...))
+    const coordsMatch = wkt.match(/POLYGON\s*\(\s*\(([^)]+)\)\s*\)/);
+    if (coordsMatch) {
+      const coordPairs = coordsMatch[1].split(',');
+      const coordinates = coordPairs.map(pair => {
+        const [x, y] = pair.trim().split(/\s+/).map(parseFloat);
+        return [x, y];
+      });
+      
+      return {
+        type: 'Polygon',
+        coordinates: [coordinates]
+      };
+    }
+  } else if (wkt.startsWith('MULTIPOLYGON')) {
+    // Handle MULTIPOLYGON if needed
+    throw new Error('MULTIPOLYGON parsing not implemented');
+  }
+  
+  throw new Error(`Unsupported WKT format: ${wkt.substring(0, 50)}...`);
+}
+
+/**
+ * Try to extract coordinates from row if stored as separate columns
+ * @param {Object} row Data row
+ * @returns {Array|null} Coordinate array or null if not found
+ */
+function getCoordinatesFromRow(row) {
+  // Check for common coordinate column patterns
+  const coordFields = ['coordinates', 'coords', 'polygon_coords'];
+  
+  for (const field of coordFields) {
+    if (row[field]) {
+      try {
+        // If it's a string, try to parse as JSON
+        if (typeof row[field] === 'string') {
+          return JSON.parse(row[field]);
+        } else if (Array.isArray(row[field])) {
+          return row[field];
+        }
+      } catch (e) {
+        console.warn(`Failed to parse coordinates from ${field}:`, e);
+      }
+    }
+  }
+  
+  return null;
 }
 
 /**
@@ -1030,7 +1170,6 @@ const toTitleCase = (str) => {
     const currentWordIndex = str.toLowerCase().substring(0, index).split(/\b\w+/).length - 1;
     const currentWord = word ? word[currentWordIndex] : '';
     
-    // Always capitalize first word, or if not in the list of words to avoid
     if (currentWordIndex === 0 || !wordsToNotCapitalize.includes(currentWord)) {
       return letter.toUpperCase();
     }
@@ -1107,10 +1246,8 @@ function getJourneyTimeData(originId) {
         const deliveryPostcode = matchingCenter.properties['Delivery Postcode'] || '';
         const postcode = matchingCenter.properties.postcode || '';
         
-        // Format the delivery postcode with proper capitalization
         const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
         
-        // Create the location string
         if (formattedDeliveryPostcode && postcode) {
           destinationLocation = `${formattedDeliveryPostcode}, ${postcode}`;
         } else if (formattedDeliveryPostcode) {
@@ -1366,20 +1503,28 @@ map.on('click', function (e) {
             console.log('Requesting journey time data for:', properties.OriginId_tracc);
             
             if (!fullCsvData) {
-              console.log('CSV data not loaded yet, attempting to load...');
-              const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+              console.log('Journey time data not loaded yet, attempting to load...');
               
-              fetch(csvPath)
-                .then(response => response.text())
-                .then(csvText => {
-                  const csvData = Papa.parse(csvText, { header: true }).data;
-                  fullCsvData = csvData;
-                  console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
-                  console.log('Sample CSV row:', fullCsvData[0]);
+              parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/trainingcentres_od.parquet')
+                .then(table => {
+                  const journeyTimeData = [];
+                  for (let i = 0; i < table.numRows; i++) {
+                    const row = table.get(i);
+                    journeyTimeData.push({
+                      origin: row.origin,
+                      destination: row.destination,
+                      totaltime: row.totaltime,
+                      services: row.services
+                    });
+                  }
                   
-                  const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
-                  if (journeyTimeData.length > 0) {
-                    popupContent.JourneyTime = journeyTimeData;
+                  fullCsvData = journeyTimeData;
+                  console.log('Journey time data loaded for popup, total rows:', fullCsvData.length);
+                  console.log('Sample row:', fullCsvData[0]);
+                  
+                  const journeyTimeData_filtered = getJourneyTimeData(properties.OriginId_tracc);
+                  if (journeyTimeData_filtered.length > 0) {
+                    popupContent.JourneyTime = journeyTimeData_filtered;
                     
                     const content = `
                       <div>
@@ -1388,7 +1533,7 @@ map.on('click', function (e) {
                         <h4 style="text-decoration: underline;">GridCell</h4>
                         ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
                         <h4 style="text-decoration: underline;">Journey Time</h4>
-                        ${createJourneyTimeContent(journeyTimeData)}
+                        ${createJourneyTimeContent(journeyTimeData_filtered)}
                       </div>
                     `;
                     
@@ -1399,10 +1544,10 @@ map.on('click', function (e) {
                   }
                 })
                 .catch(error => {
-                  console.error('Error loading CSV for popup:', error);
+                  console.error('Error loading journey time data for popup:', error);
                 });
             } else {
-              console.log('Using existing CSV data');
+              console.log('Using existing journey time data');
               const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
               if (journeyTimeData.length > 0) {
                 popupContent.JourneyTime = journeyTimeData;
@@ -1636,14 +1781,11 @@ function filterTrainingCentres() {
 function getTrainingCenterPopupContent(properties) {
   console.log('Generating popup content for training center...');
   
-  // Get and format the delivery postcode with proper capitalization
   const deliveryPostcode = properties['Delivery Postcode'] || '';
   const postcode = properties.postcode || '';
   
-  // Format the delivery postcode
   const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
   
-  // Create the location string
   let locationString = 'Unknown';
   if (formattedDeliveryPostcode && postcode) {
     locationString = `${formattedDeliveryPostcode}, ${postcode}`;
@@ -4245,6 +4387,9 @@ function drawSelectedAmenities() {
   amenitiesLayerGroup.addTo(map);
 }
 
+/**
+ * Update the journey time data loading to work with parquet data
+ */
 function updateAmenitiesCatchmentLayer() {
     console.log("updateAmenitiesCatchmentLayer called");
     
@@ -4254,12 +4399,9 @@ function updateAmenitiesCatchmentLayer() {
     }
     
     isUpdatingCatchmentLayer = true;
-    
-    //showoadingOverlay();
 
     if (!initialLoadComplete || !grid) {
         isUpdatingCatchmentLayer = false;
-        //hideLoadingOverlay();
         return;
     }
     
@@ -4268,7 +4410,6 @@ function updateAmenitiesCatchmentLayer() {
     
     if (!amenitiesPanelOpen) {
         isUpdatingCatchmentLayer = false;
-        //hideLoadingOverlay();
         return;
     }
 
@@ -4300,30 +4441,40 @@ function updateAmenitiesCatchmentLayer() {
         updateFilterDropdown();
         updateFilterValues();
         updateSummaryStatistics([]);
-        updateAmenitiesCatchmentLayer.isRunning = false;
+        isUpdatingCatchmentLayer = false;
         return;
     }
 
     gridTimeMap = {};
     
-    const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-
-    fetch(csvPath)
-        .then(response => response.text())        .then(csvText => {
-            const csvData = Papa.parse(csvText, { header: true }).data;
-            fullCsvData = csvData;
+    parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/trainingcentres_od.parquet')
+        .then(table => {
+            console.log(`Loaded ${table.numRows} journey time records from parquet`);
             
-            if (csvData.length === 0) {
-                updateAmenitiesCatchmentLayer.isRunning = false;
+            const journeyTimeData = [];
+            for (let i = 0; i < table.numRows; i++) {
+                const row = table.get(i);
+                journeyTimeData.push({
+                    origin: row.origin,
+                    destination: row.destination,
+                    totaltime: row.totaltime,
+                    services: row.services
+                });
+            }
+            
+            fullCsvData = journeyTimeData;
+            
+            if (journeyTimeData.length === 0) {
+                isUpdatingCatchmentLayer = false;
                 return;
             }
             
-            const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+            const csvDestinationIds = new Set(journeyTimeData.map(row => row.destination).filter(Boolean));
             
             const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
             
             if (matchingIds.length === 0) {
-                updateAmenitiesCatchmentLayer.isRunning = false;
+                isUpdatingCatchmentLayer = false;
                 return;
             }
             
@@ -4369,7 +4520,7 @@ function updateAmenitiesCatchmentLayer() {
                 });
             }
             
-            csvData.forEach(row => {
+            journeyTimeData.forEach(row => {
                 const originId = row.origin;
                 const destinationId = row.destination;
                 const totalTime = parseFloat(row.totaltime);
@@ -4434,12 +4585,10 @@ function updateAmenitiesCatchmentLayer() {
                   updateSummaryStatistics(getCurrentFeatures());
               }
               isUpdatingCatchmentLayer = false;
-              //hideLoadingOverlay();
         })
         .catch(error => {
             console.error("Error loading journey time data:", error);
             isUpdatingCatchmentLayer = false;
-            //hideLoadingOverlay();
         });
 }
 
