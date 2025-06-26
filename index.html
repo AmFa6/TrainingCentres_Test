@@ -16,58 +16,72 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
-  <!-- DuckDB WASM for high-performance data processing -->
-  <script type="module">
-    // Try multiple CDN sources for DuckDB
-    const duckdbSources = [
-      'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser.mjs',
-      'https://unpkg.com/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser.mjs',
-      'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser.mjs',
-      'https://unpkg.com/@duckdb/duckdb-wasm@latest/dist/duckdb-browser.mjs'
-    ];
-    
-    async function loadDuckDB() {
-      for (const source of duckdbSources) {
-        try {
-          console.log(`Trying to load DuckDB from: ${source}`);
-          const duckdb = await import(source);
-          window.duckdb = duckdb;
-          window.duckdbLoaded = true;
-          console.log(`✅ DuckDB loaded successfully from: ${source}`);
-          window.dispatchEvent(new CustomEvent('duckdbLoaded'));
-          return;
-        } catch (error) {
-          console.log(`❌ Failed to load DuckDB from ${source}:`, error.message);
-        }
+  <script src="https://cdn.jsdelivr.net/npm/apache-arrow@17.0.0/dist/umd/apache-arrow.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-eh.wasm.js"></script>
+  <script>
+  async function loadDuckDB() {
+    try {
+      console.log('Initializing DuckDB...');
+      
+      // Wait for DuckDB to be available
+      if (typeof duckdb === 'undefined') {
+        throw new Error('DuckDB not loaded');
       }
       
-      // If all sources fail, try the blocking version as fallback
-      try {
-        console.log('Trying blocking version as fallback...');
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-blocking.cjs';
-        document.head.appendChild(script);
-        
-        await new Promise((resolve, reject) => {
-          script.onload = () => {
-            if (window.duckdb) {
-              window.duckdbLoaded = true;
-              console.log('✅ DuckDB loaded from blocking version');
-              window.dispatchEvent(new CustomEvent('duckdbLoaded'));
-              resolve();
-            } else {
-              reject(new Error('DuckDB not available after loading'));
-            }
-          };
-          script.onerror = reject;
-        });
-      } catch (error) {
-        console.error('❌ All DuckDB loading attempts failed:', error);
-        window.duckdbLoaded = false;
-      }
+      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+      const worker_url = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], {type: 'text/javascript'})
+      );
+      
+      const worker = new Worker(worker_url);
+      const logger = new duckdb.ConsoleLogger();
+      const db = new duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      // Make DuckDB available globally
+      window.duckdb = duckdb;
+      window.db = db;
+      window.isDuckDBReady = true;
+      
+      console.log('✅ DuckDB initialized successfully');
+      showDuckDBStatus(true);
+      
+      // Trigger DuckDB ready event
+      window.dispatchEvent(new CustomEvent('duckdbReady'));
+      
+    } catch (error) {
+      console.error('❌ DuckDB initialization failed:', error);
+      window.isDuckDBReady = false;
+      showDuckDBStatus(false);
     }
-    
+  }
+
+  function showDuckDBStatus(isReady) {
+    const indicator = document.getElementById('duckdb-status');
+    if (indicator) {
+      if (isReady) {
+        indicator.textContent = '⚡ DuckDB Active';
+        indicator.style.background = 'rgba(0, 128, 0, 0.9)';
+        indicator.style.display = 'block';
+      } else {
+        indicator.textContent = '⚠️ JavaScript Fallback';
+        indicator.style.background = 'rgba(255, 165, 0, 0.9)';
+        indicator.style.display = 'block';
+      }
+      
+      // Hide after 5 seconds
+      setTimeout(() => {
+        indicator.style.display = 'none';
+      }, 5000);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', loadDuckDB);
+  } else {
     loadDuckDB();
+  }
   </script>
   <style>
   html, body {
@@ -900,6 +914,7 @@
   </style>
 </head>
 <body>
+  <div id="duckdb-status" class="performance-indicator" style="display: none;"></div>
   <div id="map"></div>
   <div id="panel-container">
     <div id="Amenities" class="panel">
