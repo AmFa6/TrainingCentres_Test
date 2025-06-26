@@ -16,6 +16,29 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
+  <!-- DuckDB-WASM for Parquet processing -->
+  <script src="https://unpkg.com/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js"></script>
+  <script>
+    // Initialize DuckDB-WASM availability check
+    console.log('Checking DuckDB-WASM availability...');
+    
+    // Wait for DuckDB to be available and log its status
+    let duckdbCheckInterval = setInterval(() => {
+      if (window.duckdb) {
+        console.log('DuckDB-WASM is available');
+        console.log('DuckDB methods:', Object.keys(window.duckdb));
+        clearInterval(duckdbCheckInterval);
+      }
+    }, 100);
+    
+    // Clear interval after 5 seconds to avoid infinite checking
+    setTimeout(() => {
+      clearInterval(duckdbCheckInterval);
+      if (!window.duckdb) {
+        console.warn('DuckDB-WASM not detected after 5 seconds');
+      }
+    }, 5000);
+  </script>
   <style>
   html, body {
     height: 100%;
