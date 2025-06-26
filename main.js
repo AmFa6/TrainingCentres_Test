@@ -942,6 +942,21 @@ async function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
   try {
+    console.log('=== loadGridData called ===');
+    
+    // Wait a bit to ensure DuckDB has had time to load
+    console.log('Waiting for DuckDB to be available...');
+    let waitAttempts = 0;
+    while (!window.duckdb && waitAttempts < 30) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+      waitAttempts++;
+      console.log(`Waiting attempt ${waitAttempts}/30 for DuckDB...`);
+    }
+    
+    if (!window.duckdb) {
+      console.warn('DuckDB still not available after waiting, but proceeding with initialization...');
+    }
+    
     // Initialize DuckDB-WASM if not already done
     if (!window.duckdb) {
       console.log('Initializing DuckDB-WASM...');
@@ -1009,38 +1024,125 @@ async function loadGridData() {
  */
 async function initializeDuckDB() {
   try {
+    console.log('=== DuckDB-WASM Initialization Debug ===');
+    console.log('window.duckdb available:', !!window.duckdb);
+    console.log('typeof window.duckdb:', typeof window.duckdb);
+    
     // Check if DuckDB-WASM is already loaded (should be pre-loaded in HTML)
     if (!window.duckdb) {
-      throw new Error('DuckDB-WASM not available. Make sure it is loaded in the HTML file.');
+      console.log('DuckDB-WASM not immediately available, trying dynamic loading...');
+      
+      // Try dynamic loading as fallback
+      const duckdbSources = [
+        'https://unpkg.com/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js',
+        'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js',
+        'https://unpkg.com/@duckdb/duckdb-wasm@1.27.0/dist/duckdb-browser-eh.js'
+      ];
+      
+      for (const src of duckdbSources) {
+        try {
+          console.log(`Attempting to load DuckDB from: ${src}`);
+          
+          const script = document.createElement('script');
+          script.src = src;
+          
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => {
+              reject(new Error('Script load timeout'));
+            }, 15000); // 15 second timeout
+            
+            script.onload = () => {
+              clearTimeout(timeout);
+              console.log(`✅ Script loaded from: ${src}`);
+              resolve();
+            };
+            
+            script.onerror = (error) => {
+              clearTimeout(timeout);
+              console.log(`❌ Failed to load from: ${src}`, error);
+              reject(error);
+            };
+            
+            document.head.appendChild(script);
+          });
+          
+          // Wait for DuckDB to become available
+          let attempts = 0;
+          while (!window.duckdb && attempts < 30) {
+            await new Promise(resolve => setTimeout(resolve, 200));
+            attempts++;
+            console.log(`Waiting for DuckDB... attempt ${attempts}/30`);
+          }
+          
+          if (window.duckdb) {
+            console.log(`✅ DuckDB-WASM loaded successfully from: ${src}`);
+            break;
+          }
+          
+        } catch (error) {
+          console.log(`Failed to load from ${src}:`, error.message);
+          continue;
+        }
+      }
+      
+      if (!window.duckdb) {
+        throw new Error('Failed to load DuckDB-WASM from all sources. Please check your internet connection and try refreshing the page.');
+      }
+    }
+    
+    // Debug DuckDB object
+    console.log('DuckDB object inspection:');
+    console.log('- typeof:', typeof window.duckdb);
+    console.log('- constructor:', window.duckdb.constructor?.name);
+    console.log('- keys:', Object.keys(window.duckdb));
+    
+    // Check required methods
+    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'createWorker', 'AsyncDuckDB', 'ConsoleLogger'];
+    const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
+    
+    if (missingMethods.length > 0) {
+      console.error('Missing required DuckDB methods:', missingMethods);
+      throw new Error(`DuckDB-WASM is missing required methods: ${missingMethods.join(', ')}`);
     }
     
     // Initialize DuckDB instance if not already done
     if (!window.duckdbInstance) {
       console.log('Initializing DuckDB-WASM instance...');
       
-      // Check if required methods are available
-      if (!window.duckdb.getJsDelivrBundles) {
-        throw new Error('DuckDB-WASM getJsDelivrBundles method not available');
-      }
-      
+      console.log('Getting bundles...');
       const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
+      console.log('Available bundles:', JSDELIVR_BUNDLES);
+      
+      console.log('Selecting bundle...');
       const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
+      console.log('Selected bundle:', bundle);
       
-      console.log('Creating DuckDB worker...');
+      console.log('Creating worker...');
       const worker = await window.duckdb.createWorker(bundle.mainWorker);
-      const logger = new window.duckdb.ConsoleLogger();
-      const db = new window.duckdb.AsyncDuckDB(logger, worker);
+      console.log('Worker created successfully');
       
-      console.log('Instantiating DuckDB...');
+      console.log('Creating logger...');
+      const logger = new window.duckdb.ConsoleLogger();
+      console.log('Logger created successfully');
+      
+      console.log('Creating AsyncDuckDB instance...');
+      const db = new window.duckdb.AsyncDuckDB(logger, worker);
+      console.log('AsyncDuckDB instance created');
+      
+      console.log('Instantiating database...');
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      console.log('Database instantiated successfully');
       
       window.duckdbInstance = db;
-      console.log('DuckDB-WASM initialized successfully');
+      console.log('✅ DuckDB-WASM initialized successfully');
+    } else {
+      console.log('✅ DuckDB-WASM instance already exists');
     }
     
     return window.duckdbInstance;
   } catch (error) {
-    console.error('Failed to initialize DuckDB-WASM:', error);
+    console.error('❌ Failed to initialize DuckDB-WASM:', error);
+    console.error('Error stack:', error.stack);
     throw error;
   }
 }
