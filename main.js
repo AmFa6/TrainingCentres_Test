@@ -1135,60 +1135,75 @@ async function loadGridDataWithDuckDB() {
     await conn.query("INSTALL spatial;");
     await conn.query("LOAD spatial;");
     
-    // Read the parquet file directly from URL
+    // Read the parquet file directly from URL with optimized settings
     const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
     
-    // Create a view from the parquet file
+    // Create a view from the parquet file with optimized query
+    const startTime = performance.now();
     await conn.query(`
       CREATE VIEW grid_data AS 
-      SELECT * FROM read_parquet('${parquetUrl}');
+      SELECT * FROM read_parquet('${parquetUrl}')
+      WHERE geometry IS NOT NULL;
     `);
     
-    // Query the data and convert geometry to GeoJSON format
+    // Query the data with optimized geometry handling
     const result = await conn.query(`
       SELECT 
-        *,
+        OriginId_tracc,
+        pop,
+        pop_growth,
+        imd_score_mhclg,
+        imd_decile_mhclg,
+        hh_caravail_ts045,
         ST_AsGeoJSON(geometry) as geojson_geom
       FROM grid_data
+      ORDER BY OriginId_tracc
     `);
     
-    console.log(`Successfully loaded ${result.numRows} rows from parquet file`);
+    const loadTime = performance.now() - startTime;
+    console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
     
-    // Convert result to GeoJSON FeatureCollection
+    // Convert result to GeoJSON FeatureCollection using batch processing
     const features = [];
+    const batchSize = 1000;
     
-    for (let i = 0; i < result.numRows; i++) {
-      const row = result.get(i);
-      const rowObj = row.toJSON();
+    for (let batchStart = 0; batchStart < result.numRows; batchStart += batchSize) {
+      const batchEnd = Math.min(batchStart + batchSize, result.numRows);
+      const batchFeatures = [];
       
-      // Parse the geometry
-      let geometry;
-      try {
-        geometry = JSON.parse(rowObj.geojson_geom);
-      } catch (e) {
-        console.warn(`Failed to parse geometry for row ${i}:`, e);
-        continue;
-      }
-      
-      // Create properties object (exclude geometry columns)
-      const properties = { ...rowObj };
-      delete properties.geometry;
-      delete properties.geojson_geom;
-      
-      // Add centroid calculation
-      try {
+      for (let i = batchStart; i < batchEnd; i++) {
+        const row = result.get(i);
+        const rowObj = row.toJSON();
+        
+        // Parse the geometry
+        let geometry;
+        try {
+          geometry = JSON.parse(rowObj.geojson_geom);
+        } catch (e) {
+          console.warn(`Failed to parse geometry for row ${i}:`, e);
+          continue;
+        }
+        
+        // Create properties object (exclude geometry columns)
+        const properties = { ...rowObj };
+        delete properties.geometry;
+        delete properties.geojson_geom;
+        
+        // Create feature without expensive centroid calculation initially
         const feature = {
           type: 'Feature',
           geometry: geometry,
           properties: properties
         };
         
-        const centroid = turf.centroid(feature);
-        feature.properties._centroid = centroid.geometry.coordinates;
-        
-        features.push(feature);
-      } catch (e) {
-        console.warn(`Failed to create feature for row ${i}:`, e);
+        batchFeatures.push(feature);
+      }
+      
+      features.push(...batchFeatures);
+      
+      // Allow UI to breathe between batches
+      if (batchStart + batchSize < result.numRows) {
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
     }
     
@@ -4836,11 +4851,11 @@ function updateAmenitiesCatchmentLayer() {
             fullCsvData = csvData;
             
             if (csvData.length === 0) {
-                updateAmenitiesCatchmentLayer.isRunning = false;
+                isUpdatingCatchmentLayer = false;
                 return;
             }
             
-            const csvDestinationIds = new Set(journeyTimeData.map(row => row.destination).filter(Boolean));
+            const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
             
             const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
             
@@ -4891,7 +4906,7 @@ function updateAmenitiesCatchmentLayer() {
                 });
             }
             
-            journeyTimeData.forEach(row => {
+            csvData.forEach(row => {
                 const originId = row.origin;
                 const destinationId = row.destination;
                 const totalTime = parseFloat(row.totaltime);
@@ -4920,20 +4935,45 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             if (needToCreateNewLayer) {
+                console.log("Creating new AmenitiesCatchmentLayer with", grid.features.length, "features");
+                console.log("Sample gridTimeMap entries:", Object.keys(gridTimeMap).slice(0, 5).map(k => `${k}: ${gridTimeMap[k]}`));
+                
                 if (AmenitiesCatchmentLayer) {
                     map.removeLayer(AmenitiesCatchmentLayer);
                 }
                 
                 AmenitiesCatchmentLayer = L.geoJSON(grid, {
                     pane: 'polygonLayers',
-                    style: function() {
+                    style: function(feature) {
+                        const OriginId_tracc = feature.properties.OriginId_tracc;
+                        const time = gridTimeMap[OriginId_tracc];
+                        
+                        let fillColor = 'transparent';
+                        let fillOpacity = 0;
+                        
+                        if (time !== undefined && time < 120) {
+                            if (time <= 10) fillColor = '#fde725';
+                            else if (time <= 20) fillColor = '#8fd744';
+                            else if (time <= 30) fillColor = '#35b779';
+                            else if (time <= 40) fillColor = '#21908d';
+                            else if (time <= 50) fillColor = '#31688e';
+                            else if (time <= 60) fillColor = '#443a82';
+                            else fillColor = '#440154';
+                            fillOpacity = 0.7;
+                        }
+                        
                         return {
-                            weight: 0,
-                            fillOpacity: 0,
-                            opacity: 0
+                            weight: 0.5,
+                            fillOpacity: fillOpacity,
+                            opacity: fillOpacity > 0 ? 0.8 : 0,
+                            fillColor: fillColor,
+                            color: '#ffffff'
                         };
                     }
                 }).addTo(map);
+                
+                console.log("AmenitiesCatchmentLayer created and added to map");
+                console.log("Layer feature count:", AmenitiesCatchmentLayer.getLayers().length);
                 
                 AmenitiesCatchmentLayer.eachLayer(layer => {
                     layer.feature.properties._opacity = undefined;
