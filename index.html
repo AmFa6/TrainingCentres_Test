@@ -17,13 +17,22 @@
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
   <script src="https://cdn.jsdelivr.net/npm/apache-arrow@17.0.0/dist/umd/apache-arrow.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-eh.wasm.js"></script>
   <script>
   async function loadDuckDB() {
     try {
       console.log('Initializing DuckDB...');
       
-      // Wait for DuckDB to be available
+      // GitHub Pages compatibility check - skip DuckDB entirely
+      const isGitHubPages = window.location.hostname.includes('github.io');
+      if (isGitHubPages) {
+        console.log('GitHub Pages detected - skipping DuckDB initialization');
+        window.isDuckDBReady = false;
+        showDuckDBStatus(false);
+        window.dispatchEvent(new CustomEvent('duckdbReady'));
+        return;
+      }
+      
+      // Check if DuckDB is available
       if (typeof duckdb === 'undefined') {
         throw new Error('DuckDB not loaded');
       }
@@ -54,6 +63,8 @@
       console.error('❌ DuckDB initialization failed:', error);
       window.isDuckDBReady = false;
       showDuckDBStatus(false);
+      // Still dispatch the event so the app continues
+      window.dispatchEvent(new CustomEvent('duckdbReady'));
     }
   }
 
@@ -70,17 +81,27 @@
         indicator.style.display = 'block';
       }
       
-      // Hide after 5 seconds
+      // Hide after 3 seconds
       setTimeout(() => {
         indicator.style.display = 'none';
-      }, 5000);
+      }, 3000);
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadDuckDB);
+  // Only try to load DuckDB if not on GitHub Pages
+  if (window.location.hostname.includes('github.io')) {
+    console.log('GitHub Pages detected - DuckDB disabled for compatibility');
+    window.isDuckDBReady = false;
+    document.addEventListener('DOMContentLoaded', () => {
+      showDuckDBStatus(false);
+      window.dispatchEvent(new CustomEvent('duckdbReady'));
+    });
   } else {
-    loadDuckDB();
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', loadDuckDB);
+    } else {
+      loadDuckDB();
+    }
   }
   </script>
   <style>
@@ -1276,33 +1297,21 @@
     ];
     const ladCodes = ['E06000022', 'E06000023', 'E06000024', 'E06000025'];
     
-    // Performance indicator management
-    function updatePerformanceIndicator(mode) {
-      const indicator = document.getElementById('performance-indicator');
-      if (mode === 'duckdb') {
-        indicator.textContent = '🚀 High-Performance Mode: DuckDB Active';
-        indicator.style.background = 'rgba(0, 100, 200, 0.9)';
-        indicator.style.display = 'block';
-      } else if (mode === 'javascript') {
-        indicator.textContent = '⚠️ Standard Mode: JavaScript Fallback';
-        indicator.style.background = 'rgba(200, 100, 0, 0.9)';
-        indicator.style.display = 'block';
-      } else {
-        indicator.style.display = 'none';
-      }
-    }
-    
-    // Show performance indicator based on DuckDB availability after load
-    window.addEventListener('load', () => {
+    // Show GitHub Pages optimized mode indicator
+    window.addEventListener('DOMContentLoaded', () => {
       setTimeout(() => {
-        if (window.isDuckDBReady) {
-          updatePerformanceIndicator('duckdb');
-          console.log('✅ DuckDB is active - Expecting 10-50x performance improvement on data operations');
-        } else {
-          updatePerformanceIndicator('javascript');
-          console.log('⚠️ DuckDB initialization failed - Using JavaScript fallback');
+        const indicator = document.getElementById('performance-indicator');
+        if (indicator) {
+          indicator.textContent = '🌐 GitHub Pages Optimized Mode';
+          indicator.style.background = 'rgba(0, 150, 50, 0.9)';
+          indicator.style.display = 'block';
+          
+          // Hide after 3 seconds
+          setTimeout(() => {
+            indicator.style.display = 'none';
+          }, 3000);
         }
-      }, 3000); // Give time for DuckDB to initialize
+      }, 1000);
     });
   </script>
   <script src="main.js"></script>
