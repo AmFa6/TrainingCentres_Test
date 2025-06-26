@@ -16,6 +16,59 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
+  <!-- DuckDB WASM for high-performance data processing -->
+  <script type="module">
+    // Try multiple CDN sources for DuckDB
+    const duckdbSources = [
+      'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser.mjs',
+      'https://unpkg.com/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser.mjs',
+      'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser.mjs',
+      'https://unpkg.com/@duckdb/duckdb-wasm@latest/dist/duckdb-browser.mjs'
+    ];
+    
+    async function loadDuckDB() {
+      for (const source of duckdbSources) {
+        try {
+          console.log(`Trying to load DuckDB from: ${source}`);
+          const duckdb = await import(source);
+          window.duckdb = duckdb;
+          window.duckdbLoaded = true;
+          console.log(`✅ DuckDB loaded successfully from: ${source}`);
+          window.dispatchEvent(new CustomEvent('duckdbLoaded'));
+          return;
+        } catch (error) {
+          console.log(`❌ Failed to load DuckDB from ${source}:`, error.message);
+        }
+      }
+      
+      // If all sources fail, try the blocking version as fallback
+      try {
+        console.log('Trying blocking version as fallback...');
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.29.0/dist/duckdb-browser-blocking.cjs';
+        document.head.appendChild(script);
+        
+        await new Promise((resolve, reject) => {
+          script.onload = () => {
+            if (window.duckdb) {
+              window.duckdbLoaded = true;
+              console.log('✅ DuckDB loaded from blocking version');
+              window.dispatchEvent(new CustomEvent('duckdbLoaded'));
+              resolve();
+            } else {
+              reject(new Error('DuckDB not available after loading'));
+            }
+          };
+          script.onerror = reject;
+        });
+      } catch (error) {
+        console.error('❌ All DuckDB loading attempts failed:', error);
+        window.duckdbLoaded = false;
+      }
+    }
+    
+    loadDuckDB();
+  </script>
   <style>
   html, body {
     height: 100%;
