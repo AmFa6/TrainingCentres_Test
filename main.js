@@ -6,6 +6,9 @@ const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/lig
 
 const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
+// Legacy ParquetProcessor class - now replaced by DuckDB-WASM
+// This class was used for Apache Arrow-based Parquet processing
+// It's kept here for reference but is no longer used
 class ParquetProcessor {
   constructor() {
     this.cache = new Map();
@@ -207,7 +210,8 @@ class ParquetProcessor {
   }
 }
 
-const parquetProcessor = new ParquetProcessor();
+// Legacy ParquetProcessor instantiation - no longer needed with DuckDB-WASM
+// const parquetProcessor = new ParquetProcessor();
 
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
@@ -932,100 +936,53 @@ function loadBackgroundData() {
 }
 
 /**
- * Loads grid data from a single parquet file in the background
+ * Loads grid data from a single parquet file in the background using DuckDB-WASM
  */
-function loadGridData() {
+async function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
-  // Try different ways to access Apache Arrow
-  const Arrow = window.Arrow || window.apache_arrow || window.Apache;
-  
-  if (!Arrow) {
-    console.warn('Apache Arrow not available. Trying alternative loading methods...');
-    
-    // Try multiple CDN sources for Apache Arrow
-    const arrowSources = [
-      'https://ga.jspm.io/npm:apache-arrow@14.0.1/dist/umd/Arrow.js',
-      'https://unpkg.com/apache-arrow@13.0.0/dist/umd/Arrow.js',
-      'https://unpkg.com/apache-arrow@12.0.1/dist/umd/Arrow.js',
-      'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/umd/Arrow.js'
-    ];
-    
-    let sourceIndex = 0;
-    
-    function tryLoadArrow() {
-      if (sourceIndex >= arrowSources.length) {
-        console.error('All Apache Arrow sources failed to load, trying GeoJSON fallback...');
-        
-        // If Apache Arrow can't be loaded, try GeoJSON fallback
-        fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson')
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-          })
-          .then(geojsonData => {
-            console.log("Successfully loaded grid data from GeoJSON (Arrow unavailable)");
-            grid = geojsonData;
-            
-            calculateGridStatistics(grid);
-            
-            updateFilterDropdown();
-            updateFilterValues();
-            
-            if (initialLoadComplete) {
-              updateSummaryStatistics(grid.features);
-            }
-            
-            hideBackgroundLoadingIndicator();
-            console.log("Grid data loading complete (using GeoJSON, Arrow unavailable)");
-          })
-          .catch(geoJsonError => {
-            console.error("GeoJSON fallback also failed:", geoJsonError);
-            hideBackgroundLoadingIndicator();
-            showErrorNotification("Apache Arrow library and GeoJSON fallback both failed to load. Grid data features will be unavailable, but training centers will still work.");
-          });
-        return;
-      }
-      
-      const script = document.createElement('script');
-      script.src = arrowSources[sourceIndex];
-      script.onload = function() {
-        console.log(`Apache Arrow loaded successfully from source ${sourceIndex + 1}`);
-        // Give it a moment to initialize
-        setTimeout(() => {
-          window.Arrow = window.Arrow || window.apache_arrow || window.Apache;
-          if (window.Arrow) {
-            loadGridData(); // Retry after loading
-          } else {
-            sourceIndex++;
-            tryLoadArrow(); // Try next source
-          }
-        }, 200);
-      };
-      script.onerror = function() {
-        console.warn(`Failed to load Apache Arrow from source ${sourceIndex + 1}: ${arrowSources[sourceIndex]}`);
-        sourceIndex++;
-        tryLoadArrow(); // Try next source
-      };
-      document.head.appendChild(script);
+  try {
+    // Initialize DuckDB-WASM if not already done
+    if (!window.duckdb) {
+      console.log('Initializing DuckDB-WASM...');
+      await initializeDuckDB();
     }
     
-    tryLoadArrow();
-    return;
-  }
-  
-  console.log('Apache Arrow is available, proceeding with grid data loading...');
-  
-  // Load single parquet file
-  parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/grid_combined.parquet')
-    .then(table => {
-      console.log("Processing grid data from parquet file...");
-      return processGridDataFromParquet(table);
-    })
-    .then(processedGrid => {
-      grid = processedGrid;
+    console.log('DuckDB-WASM is available, proceeding with grid data loading...');
+    
+    // Load and process the parquet file using DuckDB-WASM
+    const processedGrid = await loadGridDataWithDuckDB();
+    
+    grid = processedGrid;
+    
+    calculateGridStatistics(grid);
+    
+    updateFilterDropdown();
+    updateFilterValues();
+    
+    if (initialLoadComplete) {
+      updateSummaryStatistics(grid.features);
+    }
+    
+    hideBackgroundLoadingIndicator();
+    console.log("Grid data loading and processing complete using DuckDB-WASM");
+    
+  } catch (error) {
+    console.error("Error loading grid data with DuckDB-WASM:", error);
+    
+    // Fallback to GeoJSON format
+    console.log("Trying fallback to GeoJSON format...");
+    
+    try {
+      const response = await fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const geojsonData = await response.json();
+      console.log("Successfully loaded grid data from GeoJSON fallback");
+      
+      grid = geojsonData;
       
       calculateGridStatistics(grid);
       
@@ -1037,53 +994,149 @@ function loadGridData() {
       }
       
       hideBackgroundLoadingIndicator();
-      console.log("Grid data loading and processing complete");
-    })
-    .catch(error => {
-      console.error("Error loading grid data:", error);
+      console.log("Grid data loading complete (using GeoJSON fallback)");
       
-      // Check if it's an Arrow-related error or file loading error
-      if (error.message && error.message.includes('Arrow')) {
-        console.log("Trying fallback to GeoJSON format...");
-        
-        // Try to load a GeoJSON version as fallback
-        fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson')
-          .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            return response.json();
-          })
-          .then(geojsonData => {
-            console.log("Successfully loaded grid data from GeoJSON fallback");
-            grid = geojsonData;
-            
-            calculateGridStatistics(grid);
-            
-            updateFilterDropdown();
-            updateFilterValues();
-            
-            if (initialLoadComplete) {
-              updateSummaryStatistics(grid.features);
-            }
-            
-            hideBackgroundLoadingIndicator();
-            console.log("Grid data loading complete (using GeoJSON fallback)");
-          })
-          .catch(fallbackError => {
-            console.error("Fallback GeoJSON loading also failed:", fallbackError);
-            hideBackgroundLoadingIndicator();
-            showErrorNotification("Grid data could not be loaded in any format. Grid-based features will be unavailable.");
-          });
-      } else {
-        hideBackgroundLoadingIndicator();
-        showErrorNotification("Error loading grid data file. Please check your internet connection and try refreshing the page.");
-      }
-    });
+    } catch (fallbackError) {
+      console.error("Fallback GeoJSON loading also failed:", fallbackError);
+      hideBackgroundLoadingIndicator();
+      showErrorNotification("Grid data could not be loaded in any format. Grid-based features will be unavailable.");
+    }
+  }
 }
 
 /**
- * Processes grid data from parquet table
+ * Initialize DuckDB-WASM
+ */
+async function initializeDuckDB() {
+  try {
+    // Load DuckDB-WASM if not already loaded
+    if (!window.duckdb) {
+      const duckdbScript = document.createElement('script');
+      duckdbScript.src = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js';
+      
+      await new Promise((resolve, reject) => {
+        duckdbScript.onload = resolve;
+        duckdbScript.onerror = reject;
+        document.head.appendChild(duckdbScript);
+      });
+      
+      // Wait for DuckDB to be available
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    
+    // Initialize DuckDB instance if not already done
+    if (!window.duckdbInstance) {
+      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+      const worker = await duckdb.createWorker(bundle.mainWorker);
+      const logger = new duckdb.ConsoleLogger();
+      const db = new duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      window.duckdbInstance = db;
+      console.log('DuckDB-WASM initialized successfully');
+    }
+    
+    return window.duckdbInstance;
+  } catch (error) {
+    console.error('Failed to initialize DuckDB-WASM:', error);
+    throw error;
+  }
+}
+
+/**
+ * Load grid data using DuckDB-WASM
+ */
+async function loadGridDataWithDuckDB() {
+  const db = window.duckdbInstance;
+  const conn = await db.connect();
+  
+  try {
+    console.log("Loading parquet file with DuckDB-WASM...");
+    
+    // Install and load spatial extension for geometry processing
+    await conn.query("INSTALL spatial;");
+    await conn.query("LOAD spatial;");
+    
+    // Read the parquet file directly from URL
+    const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
+    
+    // Create a view from the parquet file
+    await conn.query(`
+      CREATE VIEW grid_data AS 
+      SELECT * FROM read_parquet('${parquetUrl}');
+    `);
+    
+    // Query the data and convert geometry to GeoJSON format
+    const result = await conn.query(`
+      SELECT 
+        *,
+        ST_AsGeoJSON(geometry) as geojson_geom
+      FROM grid_data
+    `);
+    
+    console.log(`Successfully loaded ${result.numRows} rows from parquet file`);
+    
+    // Convert result to GeoJSON FeatureCollection
+    const features = [];
+    
+    for (let i = 0; i < result.numRows; i++) {
+      const row = result.get(i);
+      const rowObj = row.toJSON();
+      
+      // Parse the geometry
+      let geometry;
+      try {
+        geometry = JSON.parse(rowObj.geojson_geom);
+      } catch (e) {
+        console.warn(`Failed to parse geometry for row ${i}:`, e);
+        continue;
+      }
+      
+      // Create properties object (exclude geometry columns)
+      const properties = { ...rowObj };
+      delete properties.geometry;
+      delete properties.geojson_geom;
+      
+      // Add centroid calculation
+      try {
+        const feature = {
+          type: 'Feature',
+          geometry: geometry,
+          properties: properties
+        };
+        
+        const centroid = turf.centroid(feature);
+        feature.properties._centroid = centroid.geometry.coordinates;
+        
+        features.push(feature);
+      } catch (e) {
+        console.warn(`Failed to create feature for row ${i}:`, e);
+      }
+    }
+    
+    await conn.close();
+    
+    const combinedData = {
+      type: 'FeatureCollection',
+      features: features
+    };
+    
+    console.log(`Processed ${features.length} features from parquet data`);
+    return combinedData;
+    
+  } catch (error) {
+    await conn.close();
+    throw error;
+  }
+}
+
+// The following functions were used for Apache Arrow processing and are now replaced by DuckDB-WASM
+// They are kept here for reference but are no longer called
+
+/**
+ * Legacy function: Processes grid data from parquet table using Apache Arrow
+ * NOTE: This function is deprecated in favor of DuckDB-WASM processing
  * @param {Object} table Arrow table from parquet file
  * @returns {Promise} Promise that resolves with the processed grid data
  */
@@ -1116,7 +1169,8 @@ function processGridDataFromParquet(table) {
 }
 
 /**
- * Process parquet data in batches to prevent UI blocking
+ * Legacy function: Process parquet data in batches to prevent UI blocking
+ * NOTE: This function is deprecated in favor of DuckDB-WASM processing
  * @param {Object} table Arrow table
  * @param {Number} startIndex Starting index for the batch
  * @param {Number} batchSize Number of rows to process in each batch
@@ -1195,7 +1249,8 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
 }
 
 /**
- * Simple WKT parser for POLYGON geometries
+ * Legacy helper: Simple WKT parser for POLYGON geometries
+ * NOTE: This function is deprecated in favor of DuckDB-WASM spatial functions
  * @param {String} wkt WKT string
  * @returns {Object} GeoJSON geometry object
  */
@@ -1227,7 +1282,8 @@ function parseWKT(wkt) {
 }
 
 /**
- * Try to extract coordinates from row if stored as separate columns
+ * Legacy helper: Try to extract coordinates from row if stored as separate columns
+ * NOTE: This function is deprecated in favor of DuckDB-WASM processing
  * @param {Object} row Data row
  * @returns {Array|null} Coordinate array or null if not found
  */
