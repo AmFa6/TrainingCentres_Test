@@ -78,7 +78,7 @@ let isUpdatingOpacityOutlineFields = false;
 
 
 function convertMultiPolygonToPolygons(geoJson) {
-  console.log('Converting MultiPolygon to Polygon...');
+  // console.log('Converting MultiPolygon to Polygon...');
   return new Promise((resolve) => {
     const features = [];
     const featureCounts = {};
@@ -239,7 +239,7 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
  * Using a phased loading approach to improve perceived performance
  */
 document.addEventListener('DOMContentLoaded', (event) => {
-  console.log('DOM fully loaded, starting application initialization...');
+  // console.log('DOM fully loaded, starting application initialization...');
   //showoadingOverlay();
   initializeUI();
   setupMapPanes();
@@ -253,7 +253,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   initializeCollapsiblePanels();
   
   loadBaseLayers().then(() => {
-    console.log('Base layers loaded successfully');
+    // console.log('Base layers loaded successfully');
     
     map.fire('baselayersloaded');
     initialLoadComplete = true;
@@ -271,7 +271,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
  * This is the first function called during application initialization
  */
 function initializeUI() {
-  console.log('Initializing user interface components...');
+  // console.log('Initializing user interface components...');
 
   createStaticLegendControls();
 
@@ -302,7 +302,7 @@ function setupAdditionalUIListeners() {
  * Creates and sets up event listeners for static legend controls
  */
 function createStaticLegendControls() {
-  console.log('Creating static legend controls...');
+  // console.log('Creating static legend controls...');
   
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   if (amenitiesCheckbox) {
@@ -399,7 +399,7 @@ function createStaticLegendControls() {
  * Initializes collapsible legend controls
  */
 function initializeLegendControls() {
-  console.log('Initializing legend controls...');
+  // console.log('Initializing legend controls...');
   
   document.querySelectorAll('.legend-category-header').forEach(header => {
     header.addEventListener('click', function() {
@@ -539,7 +539,7 @@ function initializeCollapsiblePanels() {
  * Creates and sets up map panes with appropriate z-index values
  */
 function setupMapPanes() {
-  console.log('Setting up map panes...');
+  // console.log('Setting up map panes...');
   const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
   existingPanes.forEach(pane => {
     if (pane.className.includes('custom-pane')) {
@@ -559,7 +559,7 @@ function setupMapPanes() {
  * @returns {Promise} A promise that resolves when all base layers are loaded
  */
 function loadBaseLayers() {
-  console.log('Loading base map layers...');
+  // console.log('Loading base map layers...');
   showBackgroundLoadingIndicator('Loading map layers...');
   
   return Promise.all([
@@ -575,7 +575,7 @@ function loadBaseLayers() {
  * @returns {Promise} A promise that resolves when boundary data is loaded
  */
 function loadBoundaryData() {
-  console.log('Loading boundary data...');
+  // console.log('Loading boundary data...');
   const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
   
   return Promise.all([
@@ -583,7 +583,6 @@ function loadBoundaryData() {
       .then(response => response.json())
       .then(data => {
         return convertMultiPolygonToPolygons(data).then(convertedData => {
-          // Populate LAD code to name lookup map
           convertedData.features.forEach(feature => {
             const code = feature.properties.LAD24CD;
             const name = feature.properties.LAD24NM;
@@ -591,7 +590,7 @@ function loadBoundaryData() {
               ladCodeToNameMap[code] = name;
             }
           });
-          console.log('LAD lookup map populated:', ladCodeToNameMap);
+          // console.log('LAD lookup map populated:', ladCodeToNameMap);
           
           uaBoundariesLayer = L.geoJSON(convertedData, {
             pane: 'boundaryLayers',
@@ -622,8 +621,8 @@ function loadBoundaryData() {
                 wardCodeToNameMap[code] = name;
               }
             });
-            console.log('Ward lookup map populated:', wardCodeToNameMap);
-            console.log('Ward lookup map size:', Object.keys(wardCodeToNameMap).length);
+            // console.log('Ward lookup map populated:', wardCodeToNameMap);
+            // console.log('Ward lookup map size:', Object.keys(wardCodeToNameMap).length);
             
             const wardGeoJson = {
               type: 'FeatureCollection',
@@ -641,7 +640,7 @@ function loadBoundaryData() {
                 };
               },
             }).addTo(map);
-            console.log("Ward boundaries layer added to map.");
+            // console.log("Ward boundaries layer added to map.");
           });
       })
   ]).catch(error => {
@@ -654,7 +653,7 @@ function loadBoundaryData() {
  * @returns {Promise} A promise that resolves when transport infrastructure is loaded
  */
 function loadTransportInfrastructure() {
-  console.log('Loading transport infrastructure...');
+  // console.log('Loading transport infrastructure...');
   
   return Promise.all([
     fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
@@ -731,12 +730,12 @@ function loadTransportInfrastructure() {
  * Loads heavier data (grid, training centers) in the background
  */
 function loadBackgroundData() {
-  console.log('Starting background data loading...');
+  // console.log('Starting background data loading...');
   
   showBackgroundLoadingIndicator('Loading facilities data...');
   loadTrainingCentres()
     .then(() => {
-      console.log('Training centers loaded successfully');
+      // console.log('Training centers loaded successfully');
       hideBackgroundLoadingIndicator();
       
       initializeTrainingCentres();
@@ -759,19 +758,16 @@ async function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
   try {
-    console.log('=== loadGridData called ===');
+    // console.log('=== loadGridData called ===');
     
-    // Wait for DuckDB-WASM to be available (loaded via ES module)
-    console.log('Waiting for DuckDB-WASM ES module to be available...');
+    // console.log('Waiting for DuckDB-WASM ES module to be available...');
     
     await waitForDuckDBModule();
     
-    console.log('DuckDB-WASM is available, proceeding with grid data loading...');
+    // console.log('DuckDB-WASM is available, proceeding with grid data loading...');
     
-    // Initialize DuckDB-WASM if not already done
     await initializeDuckDB();
     
-    // Load and process the parquet file using DuckDB-WASM
     const processedGrid = await loadGridDataWithDuckDB();
     
     grid = processedGrid;
@@ -786,14 +782,11 @@ async function loadGridData() {
     }
     
     hideBackgroundLoadingIndicator();
-    console.log("Grid data loading and processing complete using DuckDB-WASM");
+    // console.log("Grid data loading and processing complete using DuckDB-WASM");
     
   } catch (error) {
     console.error("Error loading grid data with DuckDB-WASM:", error);
-    
-    // Fallback to GeoJSON format
-    console.log("Trying fallback to GeoJSON format...");
-    
+    // console.log("Trying fallback to GeoJSON format...");
     try {
       const response = await fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson');
       if (!response.ok) {
@@ -801,7 +794,7 @@ async function loadGridData() {
       }
       
       const geojsonData = await response.json();
-      console.log("Successfully loaded grid data from GeoJSON fallback");
+      // console.log("Successfully loaded grid data from GeoJSON fallback");
       
       grid = geojsonData;
       
@@ -815,7 +808,7 @@ async function loadGridData() {
       }
       
       hideBackgroundLoadingIndicator();
-      console.log("Grid data loading complete (using GeoJSON fallback)");
+      // console.log("Grid data loading complete (using GeoJSON fallback)");
       
     } catch (fallbackError) {
       console.error("Fallback GeoJSON loading also failed:", fallbackError);
@@ -830,16 +823,14 @@ async function loadGridData() {
  */
 async function waitForDuckDBModule() {
   return new Promise((resolve, reject) => {
-    // If already loaded, resolve immediately
     if (window.duckdb && window.duckdbLoaded) {
-      console.log('DuckDB-WASM already available');
+      // console.log('DuckDB-WASM already available');
       resolve();
       return;
     }
     
-    // Listen for the custom event dispatched when DuckDB loads
     const handleDuckDBReady = (event) => {
-      console.log('DuckDB-WASM ready event received:', event.detail);
+      // console.log('DuckDB-WASM ready event received:', event.detail);
       window.removeEventListener('duckdb-ready', handleDuckDBReady);
       window.removeEventListener('duckdb-error', handleDuckDBError);
       resolve();
@@ -855,7 +846,6 @@ async function waitForDuckDBModule() {
     window.addEventListener('duckdb-ready', handleDuckDBReady);
     window.addEventListener('duckdb-error', handleDuckDBError);
     
-    // Timeout after 30 seconds
     setTimeout(() => {
       window.removeEventListener('duckdb-ready', handleDuckDBReady);
       window.removeEventListener('duckdb-error', handleDuckDBError);
@@ -869,18 +859,16 @@ async function waitForDuckDBModule() {
  */
 async function initializeDuckDB() {
   try {
-    console.log('=== DuckDB-WASM Initialization ===');
+    // console.log('=== DuckDB-WASM Initialization ===');
     
     if (!window.duckdb) {
       throw new Error('DuckDB-WASM module not available');
     }
     
-    // Debug DuckDB object
-    console.log('DuckDB object inspection:');
-    console.log('- typeof:', typeof window.duckdb);
-    console.log('- keys:', Object.keys(window.duckdb));
+    // console.log('DuckDB object inspection:');
+    // console.log('- typeof:', typeof window.duckdb);
+    // console.log('- keys:', Object.keys(window.duckdb));
     
-    // Check required methods
     const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'ConsoleLogger'];
     const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
     
@@ -889,45 +877,43 @@ async function initializeDuckDB() {
       throw new Error(`DuckDB-WASM is missing required methods: ${missingMethods.join(', ')}`);
     }
     
-    // Initialize DuckDB instance if not already done
     if (!window.duckdbInstance) {
-      console.log('Initializing DuckDB-WASM instance...');
+      // console.log('Initializing DuckDB-WASM instance...');
       
-      console.log('Getting bundles...');
+      // console.log('Getting bundles...');
       const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
-      console.log('Available bundles:', JSDELIVR_BUNDLES);
+      // console.log('Available bundles:', JSDELIVR_BUNDLES);
       
-      console.log('Selecting bundle...');
+      // console.log('Selecting bundle...');
       const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
-      console.log('Selected bundle:', bundle);
+      // console.log('Selected bundle:', bundle);
       
-      console.log('Creating worker...');
+      // console.log('Creating worker...');
       const worker_url = URL.createObjectURL(
         new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
       );
       const worker = new Worker(worker_url);
-      console.log('Worker created successfully');
+      // console.log('Worker created successfully');
       
-      console.log('Creating logger...');
+      // console.log('Creating logger...');
       const logger = new window.duckdb.ConsoleLogger();
-      console.log('Logger created successfully');
+      // console.log('Logger created successfully');
       
-      console.log('Creating AsyncDuckDB instance...');
+      // console.log('Creating AsyncDuckDB instance...');
       const db = new window.duckdb.AsyncDuckDB(logger, worker);
-      console.log('AsyncDuckDB instance created');
+      // console.log('AsyncDuckDB instance created');
       
-      console.log('Instantiating database...');
+      // console.log('Instantiating database...');
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       
-      // Clean up the blob URL
       URL.revokeObjectURL(worker_url);
       
-      console.log('Database instantiated successfully');
+      // console.log('Database instantiated successfully');
       
       window.duckdbInstance = db;
-      console.log('✅ DuckDB-WASM initialized successfully');
+      // console.log('✅ DuckDB-WASM initialized successfully');
     } else {
-      console.log('✅ DuckDB-WASM instance already exists');
+      // console.log('✅ DuckDB-WASM instance already exists');
     }
     
     return window.duckdbInstance;
@@ -946,16 +932,13 @@ async function loadGridDataWithDuckDB() {
   const conn = await db.connect();
   
   try {
-    console.log("Loading parquet file with DuckDB-WASM...");
+    // console.log("Loading parquet file with DuckDB-WASM...");
     
-    // Install and load spatial extension for geometry processing
     await conn.query("INSTALL spatial;");
     await conn.query("LOAD spatial;");
     
-    // Read the parquet file directly from URL with optimized settings
     const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
     
-    // Create a view from the parquet file with optimized query
     const startTime = performance.now();
     await conn.query(`
       CREATE VIEW grid_data AS 
@@ -963,7 +946,6 @@ async function loadGridDataWithDuckDB() {
       WHERE geometry IS NOT NULL;
     `);
     
-    // Query the data with optimized geometry handling
     const result = await conn.query(`
       SELECT 
         OriginId_tracc,
@@ -980,9 +962,8 @@ async function loadGridDataWithDuckDB() {
     `);
     
     const loadTime = performance.now() - startTime;
-    console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
+    // console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
     
-    // Convert result to GeoJSON FeatureCollection using batch processing
     const features = [];
     const batchSize = 1000;
     
@@ -994,7 +975,6 @@ async function loadGridDataWithDuckDB() {
         const row = result.get(i);
         const rowObj = row.toJSON();
         
-        // Parse the geometry
         let geometry;
         try {
           geometry = JSON.parse(rowObj.geojson_geom);
@@ -1003,12 +983,10 @@ async function loadGridDataWithDuckDB() {
           continue;
         }
         
-        // Create properties object (exclude geometry columns)
         const properties = { ...rowObj };
         delete properties.geometry;
         delete properties.geojson_geom;
         
-        // Create feature without expensive centroid calculation initially
         const feature = {
           type: 'Feature',
           geometry: geometry,
@@ -1020,7 +998,6 @@ async function loadGridDataWithDuckDB() {
       
       features.push(...batchFeatures);
       
-      // Allow UI to breathe between batches
       if (batchStart + batchSize < result.numRows) {
         await new Promise(resolve => setTimeout(resolve, 10));
       }
@@ -1033,7 +1010,7 @@ async function loadGridDataWithDuckDB() {
       features: features
     };
     
-    console.log(`Processed ${features.length} features from parquet data`);
+    // console.log(`Processed ${features.length} features from parquet data`);
     return combinedData;
     
   } catch (error) {
@@ -1041,9 +1018,6 @@ async function loadGridDataWithDuckDB() {
     throw error;
   }
 }
-
-// The following functions were used for Apache Arrow processing and are now replaced by DuckDB-WASM
-// They are kept here for reference but are no longer called
 
 /**
  * Legacy function: Processes grid data from parquet table using Apache Arrow
@@ -1053,22 +1027,20 @@ async function loadGridDataWithDuckDB() {
  */
 function processGridDataFromParquet(table) {
   return new Promise((resolve) => {
-    console.log("Starting to process grid data from parquet table...");
+    // console.log("Starting to process grid data from parquet table...");
     
     const batchSize = 5000;
     const totalRows = table.numRows;
     let processedFeatures = [];
     
-    console.log(`Processing ${totalRows} rows from parquet file`);
+    // console.log(`Processing ${totalRows} rows from parquet file`);
     
-    // Process in batches to avoid UI blocking
     processParquetBatch(table, 0, batchSize, processedFeatures, () => {
       const combinedData = {
         type: 'FeatureCollection',
         features: processedFeatures
       };
       
-      // Add centroids to features
       combinedData.features.forEach(feature => {
         const centroid = turf.centroid(feature);
         feature.properties._centroid = centroid.geometry.coordinates;
@@ -1094,15 +1066,12 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
   for (let i = startIndex; i < endIndex; i++) {
     const row = table.get(i);
     
-    // Extract geometry (assuming it's stored as WKT or coordinates)
     let geometry;
     
-    // Try to get geometry from different possible column names
     const geometryColumn = row.geometry || row.geom || row.wkt;
     
     if (geometryColumn) {
       if (typeof geometryColumn === 'string') {
-        // If it's WKT format, parse it
         try {
           geometry = parseWKT(geometryColumn);
         } catch (e) {
@@ -1110,11 +1079,9 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
           continue;
         }
       } else if (geometryColumn.coordinates) {
-        // If it's already a geometry object
         geometry = geometryColumn;
       }
     } else {
-      // Try to construct geometry from coordinate columns if available
       const coords = getCoordinatesFromRow(row);
       if (coords) {
         geometry = {
@@ -1127,7 +1094,6 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
       }
     }
     
-    // Extract properties (all non-geometry columns)
     const properties = {};
     const schema = table.schema;
     
@@ -1138,7 +1104,6 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
       }
     });
     
-    // Create feature
     const feature = {
       type: 'Feature',
       geometry: geometry,
@@ -1147,9 +1112,7 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
     
     results.push(feature);
   }
-  
-  const progressPercent = Math.round((endIndex / table.numRows) * 100);
-  
+
   if (endIndex < table.numRows) {
     setTimeout(() => {
       processParquetBatch(table, endIndex, batchSize, results, onComplete);
@@ -1166,11 +1129,9 @@ function processParquetBatch(table, startIndex, batchSize, results, onComplete) 
  * @returns {Object} GeoJSON geometry object
  */
 function parseWKT(wkt) {
-  // Remove extra whitespace and convert to uppercase
   wkt = wkt.trim().toUpperCase();
   
   if (wkt.startsWith('POLYGON')) {
-    // Extract coordinates from POLYGON ((x1 y1, x2 y2, ...))
     const coordsMatch = wkt.match(/POLYGON\s*\(\s*\(([^)]+)\)\s*\)/);
     if (coordsMatch) {
       const coordPairs = coordsMatch[1].split(',');
@@ -1185,7 +1146,6 @@ function parseWKT(wkt) {
       };
     }
   } else if (wkt.startsWith('MULTIPOLYGON')) {
-    // Handle MULTIPOLYGON if needed
     throw new Error('MULTIPOLYGON parsing not implemented');
   }
   
@@ -1199,13 +1159,11 @@ function parseWKT(wkt) {
  * @returns {Array|null} Coordinate array or null if not found
  */
 function getCoordinatesFromRow(row) {
-  // Check for common coordinate column patterns
   const coordFields = ['coordinates', 'coords', 'polygon_coords'];
   
   for (const field of coordFields) {
     if (row[field]) {
       try {
-        // If it's a string, try to parse as JSON
         if (typeof row[field] === 'string') {
           return JSON.parse(row[field]);
         } else if (Array.isArray(row[field])) {
@@ -1227,7 +1185,7 @@ function getCoordinatesFromRow(row) {
 function calculateGridStatistics(gridData) {
   if (!gridData || !gridData.features || gridData.features.length === 0) return;
   
-  console.log("Calculating grid statistics for optimization...");
+  // console.log("Calculating grid statistics for optimization...");
   
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
@@ -1263,7 +1221,7 @@ function calculateGridStatistics(gridData) {
     if (batchIndex + 1 < totalBatches) {
       setTimeout(() => processBatch(batchIndex + 1), 0);
     } else {
-      console.log("Grid statistics calculation complete:", gridStatistics);
+      // console.log("Grid statistics calculation complete:", gridStatistics);
       
       updateSliderRanges('Amenities', 'Opacity');
       updateSliderRanges('Amenities', 'Outline');
@@ -1409,25 +1367,25 @@ const toTitleCase = (str) => {
  * @returns {Array} Array of journey time records sorted by total time
  */
 function getJourneyTimeData(originId) {
-  console.log('getJourneyTimeData called with originId:', originId);
+  // console.log('getJourneyTimeData called with originId:', originId);
   
   if (!fullCsvData || !originId) {
-    console.log('No fullCsvData or originId missing');
+    // console.log('No fullCsvData or originId missing');
     return [];
   }
   
   const originIdStr = String(originId);
   const originIdNum = Number(originId);
   
-  console.log('Searching for origin:', { originIdStr, originIdNum });
-  console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
+  // console.log('Searching for origin:', { originIdStr, originIdNum });
+  // console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
   
   const filteredTrainingCentres = filterTrainingCentres();
   const allowedDestinationIds = new Set(
     filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
   );
   
-  console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
+  // console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
   
   const originRecords = fullCsvData.filter(row => {
     if (!row.origin || !row.destination || !row.totaltime) {
@@ -1446,12 +1404,12 @@ function getJourneyTimeData(originId) {
     return isOriginMatch && isDestinationAllowed && hasValidTime;
   });
   
-  console.log(`Found ${originRecords.length} records for origin ${originId} with current filtering`);
+  // console.log(`Found ${originRecords.length} records for origin ${originId} with current filtering`);
   
   if (originRecords.length === 0) {
     const availableOrigins = [...new Set(fullCsvData.map(row => row.origin))].slice(0, 10);
-    console.log('Sample available origins in CSV:', availableOrigins);
-    console.log('Number of allowed destinations:', allowedDestinationIds.size);
+    // console.log('Sample available origins in CSV:', availableOrigins);
+    // console.log('Number of allowed destinations:', allowedDestinationIds.size);
     return [];
   }
   
@@ -1481,7 +1439,7 @@ function getJourneyTimeData(originId) {
           destinationLocation = postcode;
         }
       } else {
-        console.log('No matching center found for destination:', record.destination);
+        // console.log('No matching center found for destination:', record.destination);
       }
     }
     
@@ -1499,7 +1457,7 @@ function getJourneyTimeData(originId) {
     };
   });
   
-  console.log('Journey time data processed:', journeyTimeData);
+  // console.log('Journey time data processed:', journeyTimeData);
   return journeyTimeData;
 }
 
@@ -1509,7 +1467,7 @@ function getJourneyTimeData(originId) {
  * @returns {string} HTML content for the journey time section
  */
 function createJourneyTimeContent(journeyTimeData) {
-  console.log('createJourneyTimeContent called with data:', journeyTimeData);
+  // console.log('createJourneyTimeContent called with data:', journeyTimeData);
   
   if (!journeyTimeData || journeyTimeData.length === 0) {
     return '<p>No journey time data available</p>';
@@ -1561,10 +1519,10 @@ function createJourneyTimeContent(journeyTimeData) {
  * @param {number} direction -1 for previous, 1 for next
  */
 function navigateJourneyTime(direction) {
-  console.log('navigateJourneyTime called with direction:', direction);
+  // console.log('navigateJourneyTime called with direction:', direction);
   
   if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
-    console.log('No journey time data available for navigation');
+    // console.log('No journey time data available for navigation');
     return;
   }
   
@@ -1577,7 +1535,7 @@ function navigateJourneyTime(direction) {
   window.currentJourneyTimeIndex = newIndex;
   const record = window.currentJourneyTimeData[newIndex];
   
-  console.log('Updating to record:', record, 'at index:', newIndex);
+  // console.log('Updating to record:', record, 'at index:', newIndex);
   
   const currentIndexEl = document.getElementById('journey-current-index');
   const destinationEl = document.getElementById('journey-destination');
@@ -1688,7 +1646,6 @@ map.on('click', function (e) {
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
         const properties = layer.feature.properties;
         
-        // Get LAD name from code using lookup map
         const ladCode = properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         if (ladName) {
@@ -1696,7 +1653,6 @@ map.on('click', function (e) {
           popupContent.Geographies.push(`<strong>Local Authority:</strong> ${ladName}`);
         }
         
-        // Get Ward name from code using lookup map
         const wardCode = properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         if (wardName) {
@@ -1720,10 +1676,10 @@ map.on('click', function (e) {
           `);
 
           if (properties.OriginId_tracc) {
-            console.log('Requesting journey time data for:', properties.OriginId_tracc);
+            // console.log('Requesting journey time data for:', properties.OriginId_tracc);
             
             if (!fullCsvData) {
-              console.log('CSV data not loaded yet, attempting to load...');
+              // console.log('CSV data not loaded yet, attempting to load...');
               const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
               
               fetch(csvPath)
@@ -1731,8 +1687,8 @@ map.on('click', function (e) {
                 .then(csvText => {
                   const csvData = Papa.parse(csvText, { header: true }).data;
                   fullCsvData = csvData;
-                  console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
-                  console.log('Sample CSV row:', fullCsvData[0]);
+                  // console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
+                  // console.log('Sample CSV row:', fullCsvData[0]);
                   
                   const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
                   if (journeyTimeData.length > 0) {
@@ -1759,7 +1715,7 @@ map.on('click', function (e) {
                   console.error('Error loading CSV for popup:', error);
                 });
             } else {
-              console.log('Using existing CSV data');
+              // console.log('Using existing CSV data');
               const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
               if (journeyTimeData.length > 0) {
                 popupContent.JourneyTime = journeyTimeData;
@@ -1770,13 +1726,11 @@ map.on('click', function (e) {
       }
     });
   } else if (grid) {
-    // Fallback for when grid layer is not available but grid data exists
     grid.features.forEach(feature => {
       const polygon = turf.polygon(feature.geometry.coordinates);
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
         const properties = feature.properties;
         
-        // Get LAD name from code using lookup map
         const ladCode = properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         if (ladName) {
@@ -1784,7 +1738,6 @@ map.on('click', function (e) {
           popupContent.Geographies.push(`<strong>Local Authority:</strong> ${ladName}`);
         }
         
-        // Get Ward name from code using lookup map
         const wardCode = properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         if (wardName) {
@@ -1809,7 +1762,6 @@ map.on('click', function (e) {
     });
   }
   
-  // Exit if not within LEP area
   if (!isWithinLEP) {
     return;
   }
@@ -1832,7 +1784,7 @@ map.on('click', function (e) {
 });
 
 function initializeFileUpload() {
-  console.log('Initializing file upload...');
+  // console.log('Initializing file upload...');
   const fileInput = document.getElementById('fileUpload');
   const fileNameDisplay = document.getElementById('fileNameDisplay');
   const uploadButton = document.getElementById('uploadButton');
@@ -1887,7 +1839,7 @@ function initializeFileUpload() {
 }
 
 function loadTrainingCentres() {
-  console.log('Loading training centres...');
+  // console.log('Loading training centres...');
   return fetch(AmenitiesFiles[0].path)
     .then(response => response.json())
     .then(data => {
@@ -1897,7 +1849,7 @@ function loadTrainingCentres() {
 }
 
 function setupSubjectAndAimLevelCheckboxes() {
-  console.log('Setting up subject and aim level checkboxes...');
+  // console.log('Setting up subject and aim level checkboxes...');
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   
@@ -1954,25 +1906,25 @@ function setupSubjectAndAimLevelCheckboxes() {
 }
 
 function filterTrainingCentres() {
-  console.log('=== FILTERING TRAINING CENTRES ===');
+  // console.log('=== FILTERING TRAINING CENTRES ===');
   if (!amenityLayers['TrainingCentres']) {
-    console.log('No training centres data available');
+    // console.log('No training centres data available');
     return [];
   }
   
   const totalTrainingCentres = amenityLayers['TrainingCentres'].features.length;
-  console.log('Total training centres before filtering:', totalTrainingCentres);
+  // console.log('Total training centres before filtering:', totalTrainingCentres);
   
   const selectedYear = AmenitiesYear.value;
   const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-  console.log('Selected year:', selectedYear, '| Year prefix:', yearPrefix);
+  // console.log('Selected year:', selectedYear, '| Year prefix:', yearPrefix);
   
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
   const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
   
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
   const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-  console.log('Subject filter - All selected:', isAllSubjectsSelected, '| Specific subjects:', selectedSubjects);
+  // console.log('Subject filter - All selected:', isAllSubjectsSelected, '| Specific subjects:', selectedSubjects);
   
   const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
   const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
@@ -1980,7 +1932,7 @@ function filterTrainingCentres() {
   const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
   const selectedAimLevels = isAllAimLevelsSelected ? [] : 
     Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-  console.log('Aim level filter - All selected:', isAllAimLevelsSelected, '| Specific levels:', selectedAimLevels);
+  // console.log('Aim level filter - All selected:', isAllAimLevelsSelected, '| Specific levels:', selectedAimLevels);
   
   let filteredCount = 0;
   let excludedByAimLevel = 0;
@@ -2050,12 +2002,12 @@ function filterTrainingCentres() {
     }
   });
   
-  console.log('Training centre filtering results:');
-  console.log('  - Total centres:', totalTrainingCentres);
-  console.log('  - Passed all filters:', filteredCount);
-  console.log('  - Excluded by aim level:', excludedByAimLevel);
-  console.log('  - Excluded by subject/year:', excludedBySubjectYear);
-  console.log('=== END TRAINING CENTRE FILTERING ===');
+  // console.log('Training centre filtering results:');
+  // console.log('  - Total centres:', totalTrainingCentres);
+  // console.log('  - Passed all filters:', filteredCount);
+  // console.log('  - Excluded by aim level:', excludedByAimLevel);
+  // console.log('  - Excluded by subject/year:', excludedBySubjectYear);
+  // console.log('=== END TRAINING CENTRE FILTERING ===');
   
   return {
     type: "FeatureCollection",
@@ -2064,7 +2016,7 @@ function filterTrainingCentres() {
 }
 
 function getTrainingCenterPopupContent(properties) {
-  console.log('Generating popup content for training center...');
+  // console.log('Generating popup content for training center...');
   
   const deliveryPostcode = properties['Delivery Postcode'] || '';
   const postcode = properties.postcode || '';
@@ -2120,7 +2072,7 @@ function getTrainingCenterPopupContent(properties) {
 }
 
 function setupTrainingCenterFilters() {
-    console.log('Setting up training center filters...');
+    // console.log('Setting up training center filters...');
     
     const debouncedHandler = debounce(() => {
         drawSelectedAmenities();
@@ -2144,7 +2096,7 @@ function setupTrainingCenterFilters() {
 }
 
 function updateSubjectDropdownLabel() {
-  console.log('Updating subject dropdown label...');
+  // console.log('Updating subject dropdown label...');
   const subjectDropdown = document.getElementById('subjectDropdown');
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   const allCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
@@ -2162,7 +2114,7 @@ function updateSubjectDropdownLabel() {
 }
 
 function updateAimLevelDropdownLabel() {
-  console.log('Updating aim level dropdown label...');
+  // console.log('Updating aim level dropdown label...');
   const aimLevelDropdown = document.getElementById('aimlevelDropdown');
   const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   const allCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
@@ -2180,7 +2132,7 @@ function updateAimLevelDropdownLabel() {
 }
 
 function initializeTrainingCentres() {
-    console.log('Initializing training centres...');
+    // console.log('Initializing training centres...');
     
     if (amenityLayers['TrainingCentres']) {
         setupTrainingCentersUI();
@@ -2234,7 +2186,7 @@ function initializeTrainingCentres() {
 }
 
 function addUserLayer(data, fileName) {
-  console.log('Adding user layer from file:', fileName);
+  // console.log('Adding user layer from file:', fileName);
   
   try {
     const layerId = `userLayer_${userLayerCount++}`;
@@ -2381,7 +2333,7 @@ function addUserLayer(data, fileName) {
 }
 
 function applySimpleStyle(layerId, color) {
-  console.log('Applying simple style to layer:', layerId, 'with color:', color);
+  // console.log('Applying simple style to layer:', layerId, 'with color:', color);
   const userLayer = userLayers.find(l => l.id === layerId);
   if (!userLayer) return;
   
@@ -2431,7 +2383,7 @@ function applySimpleStyle(layerId, color) {
 }
 
 function openStyleDialog(layerId) {
-  console.log('Opening style dialog for layer:', layerId);
+  // console.log('Opening style dialog for layer:', layerId);
   const userLayer = userLayers.find(l => l.id === layerId);
   if (!userLayer) return;
 
@@ -2471,7 +2423,7 @@ function openStyleDialog(layerId) {
 }
 
 function setupDrawingTools() {
-  console.log('Setting up drawing tools...');
+  // console.log('Setting up drawing tools...');
   
   const drawPointBtn = document.getElementById('drawPointBtn');
   const drawLineBtn = document.getElementById('drawLineBtn');
@@ -3569,7 +3521,7 @@ function continueDrawing() {
 }
 
 function populateUserLayerFilterValues(userLayer, fieldName) {
-  console.log('populateUserLayerFilterValues');
+  // console.log('populateUserLayerFilterValues');
   const filterValueContainer = document.getElementById('filterValueContainer');
   const filterCheckboxesSection = document.createElement('div');
   filterCheckboxesSection.className = 'filter-checkboxes-section';
@@ -3887,7 +3839,7 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
 }
 
 function updateSliderRanges(type, scaleType) {
-  console.log('Updating slider ranges...');
+  // console.log('Updating slider ranges...');
 
   if (isUpdatingSliders) return;
   isUpdatingSliders = true;
@@ -3974,7 +3926,7 @@ function updateSliderRanges(type, scaleType) {
 }
 
 function toggleInverseScale(type, scaleType) {
-  console.log('Toggling inverse scale...');
+  // console.log('Toggling inverse scale...');
   
   let isInverse, rangeElement;
 
@@ -4066,7 +4018,7 @@ function isClassVisible(value, selectedYear) {
 }
 
 function updateLegend() {
-    console.log('Updating legend...');
+    // console.log('Updating legend...');
     const legendContent = document.getElementById("legend-content");
     
     const dataLayerCategory = document.getElementById('data-layer-category');
@@ -4153,7 +4105,7 @@ function updateLegend() {
 }
 
 function findNearbyInfrastructure(latlng, maxPixelDistance = 10, targetLayer = null) {
-  console.log('Finding nearby infrastructure...');
+  // console.log('Finding nearby infrastructure...');
   const results = {
     busStops: [],
     busLines: [],
@@ -4387,7 +4339,7 @@ function findNearbyInfrastructure(latlng, maxPixelDistance = 10, targetLayer = n
 }
 
 function formatFeatureProperties(feature, featureType) {
-  console.log('Formatting feature properties...');
+  // console.log('Formatting feature properties...');
   if (!feature || !feature.properties) return '<p>No data available</p>';
   
   let html = '<table class="popup-table">';
@@ -4566,7 +4518,7 @@ function showInfrastructurePopup(latlng, nearbyFeatures) {
 }
 
 function showAmenityCatchment(amenityType, amenityId) {
-  console.log('showAmenityCatchment called');
+  // console.log('showAmenityCatchment called');
   const panelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
   panelHeaders.forEach(header => {
@@ -4608,7 +4560,7 @@ function showAmenityCatchment(amenityType, amenityId) {
 }
 
 function drawSelectedAmenities() {
-  console.log('drawSelectedAmenities called');
+  // console.log('drawSelectedAmenities called');
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   amenitiesLayerGroup.clearLayers();
 
@@ -4676,17 +4628,17 @@ function drawSelectedAmenities() {
  * Update the journey time data loading to work with parquet data
  */
 function updateAmenitiesCatchmentLayer() {
-    console.log("=== updateAmenitiesCatchmentLayer called ===");
+    // console.log("=== updateAmenitiesCatchmentLayer called ===");
     
     if (isUpdatingCatchmentLayer) {
-        console.log("Already updating catchment layer, skipping duplicate call");
+        // console.log("Already updating catchment layer, skipping duplicate call");
         return;
     }
     
     isUpdatingCatchmentLayer = true;
 
     if (!initialLoadComplete || !grid) {
-        console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
+        // console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
         isUpdatingCatchmentLayer = false;
         return;
     }
@@ -4695,36 +4647,36 @@ function updateAmenitiesCatchmentLayer() {
         .classList.contains("collapsed") === false;
     
     if (!amenitiesPanelOpen) {
-        console.log("Amenities panel not open, skipping update");
+        // console.log("Amenities panel not open, skipping update");
         isUpdatingCatchmentLayer = false;
         return;
     }
 
     const selectedYear = AmenitiesYear.value;
-    console.log("Selected year:", selectedYear);
+    // console.log("Selected year:", selectedYear);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
     const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-    console.log("Subject selection:", {isAllSubjectsSelected, selectedSubjects, totalSubjectCheckboxes: subjectCheckboxes.length});
+    // console.log("Subject selection:", {isAllSubjectsSelected, selectedSubjects, totalSubjectCheckboxes: subjectCheckboxes.length});
     
     const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
     const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
     const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-    console.log("Aim level selection:", {isAllAimLevelsSelected, selectedAimLevels, totalAimLevelCheckboxes: aimLevelCheckboxes.length});
+    // console.log("Aim level selection:", {isAllAimLevelsSelected, selectedAimLevels, totalAimLevelCheckboxes: aimLevelCheckboxes.length});
     
     const filteredTrainingCentres = filterTrainingCentres();
-    console.log("Filtered training centres count:", filteredTrainingCentres.features.length);
+    // console.log("Filtered training centres count:", filteredTrainingCentres.features.length);
     
     const filteredTrainingCenterIds = filteredTrainingCentres.features
         .map(feature => feature.properties.DestinationId_tracc)
         .filter(id => id !== undefined);
-    console.log("Training center IDs:", filteredTrainingCenterIds);
+    // console.log("Training center IDs:", filteredTrainingCenterIds);
         
     if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-        console.log("No year selected or no training centers found, clearing layer");
+        // console.log("No year selected or no training centers found, clearing layer");
         if (AmenitiesCatchmentLayer) {
             map.removeLayer(AmenitiesCatchmentLayer);
             AmenitiesCatchmentLayer = null;
@@ -4751,13 +4703,13 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-            console.log("CSV destination IDs count:", csvDestinationIds.size);
+            // console.log("CSV destination IDs count:", csvDestinationIds.size);
             
             const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-            console.log("Matching IDs between filtered training centres and CSV:", matchingIds);
+            // console.log("Matching IDs between filtered training centres and CSV:", matchingIds);
             
             if (matchingIds.length === 0) {
-                console.log("No matching IDs found, clearing amenities layer");
+                // console.log("No matching IDs found, clearing amenities layer");
                 if (AmenitiesCatchmentLayer) {
                     map.removeLayer(AmenitiesCatchmentLayer);
                     AmenitiesCatchmentLayer = null;
@@ -4773,7 +4725,7 @@ function updateAmenitiesCatchmentLayer() {
             
             const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
             const eligibleDestinations = new Set();
-            console.log("Processing training centres for eligibility with year prefix:", yearPrefix);
+            // console.log("Processing training centres for eligibility with year prefix:", yearPrefix);
             
             if (amenityLayers['TrainingCentres']) {
                 amenityLayers['TrainingCentres'].features.forEach(feature => {
@@ -4810,17 +4762,16 @@ function updateAmenitiesCatchmentLayer() {
                     
                     if (hasSelectedSubject) {
                         eligibleDestinations.add(destinationId);
-                        console.log("Added eligible destination:", destinationId, props.name || 'Unnamed');
+                        // console.log("Added eligible destination:", destinationId, props.name || 'Unnamed');
                     } else {
-                        console.log("Training centre excluded by subject/year filter:", destinationId, props.name || 'Unnamed');
+                        // console.log("Training centre excluded by subject/year filter:", destinationId, props.name || 'Unnamed');
                     }
                 });
             }
             
-            console.log("Final eligible destinations count:", eligibleDestinations.size);
-            console.log("Eligible destination IDs:", Array.from(eligibleDestinations));
+            // console.log("Final eligible destinations count:", eligibleDestinations.size);
+            // console.log("Eligible destination IDs:", Array.from(eligibleDestinations));
             
-            // Reset gridTimeMap before processing
             gridTimeMap = {};
             
             csvData.forEach(row => {
@@ -4839,8 +4790,8 @@ function updateAmenitiesCatchmentLayer() {
                 }
             });
             
-            console.log("Grid time map entries after CSV processing:", Object.keys(gridTimeMap).length);
-            console.log("Sample grid time entries:", Object.keys(gridTimeMap).slice(0, 10).map(k => `${k}: ${gridTimeMap[k]}`));
+            // console.log("Grid time map entries after CSV processing:", Object.keys(gridTimeMap).length);
+            // console.log("Sample grid time entries:", Object.keys(gridTimeMap).slice(0, 10).map(k => `${k}: ${gridTimeMap[k]}`));
             
             grid.features.forEach(feature => {
                 const originId = feature.properties.OriginId_tracc;
@@ -4855,13 +4806,13 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             if (needToCreateNewLayer) {
-                console.log("=== CREATING NEW AMENITIES CATCHMENT LAYER ===");
-                console.log("Grid features count:", grid.features.length);
-                console.log("GridTimeMap entries:", Object.keys(gridTimeMap).length);
-                console.log("Sample gridTimeMap entries:", Object.keys(gridTimeMap).slice(0, 5).map(k => `${k}: ${gridTimeMap[k]}`));
+                // console.log("=== CREATING NEW AMENITIES CATCHMENT LAYER ===");
+                // console.log("Grid features count:", grid.features.length);
+                // console.log("GridTimeMap entries:", Object.keys(gridTimeMap).length);
+                // console.log("Sample gridTimeMap entries:", Object.keys(gridTimeMap).slice(0, 5).map(k => `${k}: ${gridTimeMap[k]}`));
                 
                 if (AmenitiesCatchmentLayer) {
-                    console.log("Removing existing AmenitiesCatchmentLayer");
+                    // console.log("Removing existing AmenitiesCatchmentLayer");
                     map.removeLayer(AmenitiesCatchmentLayer);
                 }
                 
@@ -4895,8 +4846,8 @@ function updateAmenitiesCatchmentLayer() {
                     }
                 }).addTo(map);
                 
-                console.log("AmenitiesCatchmentLayer created and added to map");
-                console.log("Layer feature count:", AmenitiesCatchmentLayer.getLayers().length);
+                // console.log("AmenitiesCatchmentLayer created and added to map");
+                // console.log("Layer feature count:", AmenitiesCatchmentLayer.getLayers().length);
                 
                 AmenitiesCatchmentLayer.eachLayer(layer => {
                     layer.feature.properties._opacity = undefined;
@@ -4919,15 +4870,15 @@ function updateAmenitiesCatchmentLayer() {
                   updateSummaryStatistics(getCurrentFeatures());
               }
               
-              console.log("=== AMENITIES CATCHMENT LAYER UPDATE COMPLETE ===");
-              console.log("Final eligible destinations:", eligibleDestinations.size);
-              console.log("Final grid time map entries:", Object.keys(gridTimeMap).length);
-              console.log("Amenities layer features:", AmenitiesCatchmentLayer ? AmenitiesCatchmentLayer.getLayers().length : 0);
-              console.log("Layer successfully reflects training centre filtering based on:");
-              console.log("  - Year:", selectedYear);
-              console.log("  - Subjects:", isAllSubjectsSelected ? 'All' : selectedSubjects);
-              console.log("  - Aim levels:", isAllAimLevelsSelected ? 'All' : selectedAimLevels);
-              console.log("=== END AMENITIES CATCHMENT LAYER UPDATE ===");
+              // console.log("=== AMENITIES CATCHMENT LAYER UPDATE COMPLETE ===");
+              // console.log("Final eligible destinations:", eligibleDestinations.size);
+              // console.log("Final grid time map entries:", Object.keys(gridTimeMap).length);
+              // console.log("Amenities layer features:", AmenitiesCatchmentLayer ? AmenitiesCatchmentLayer.getLayers().length : 0);
+              // console.log("Layer successfully reflects training centre filtering based on:");
+              // console.log("  - Year:", selectedYear);
+              // console.log("  - Subjects:", isAllSubjectsSelected ? 'All' : selectedSubjects);
+              // console.log("  - Aim levels:", isAllAimLevelsSelected ? 'All' : selectedAimLevels);
+              // console.log("=== END AMENITIES CATCHMENT LAYER UPDATE ===");
               
               isUpdatingCatchmentLayer = false;
         })
@@ -4938,17 +4889,17 @@ function updateAmenitiesCatchmentLayer() {
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
-    console.log("applyAmenitiesCatchmentLayerStyling called");
+    // console.log("applyAmenitiesCatchmentLayerStyling called");
     
     if (!AmenitiesCatchmentLayer) {
-        console.log("No AmenitiesCatchmentLayer, returning early");
+        // console.log("No AmenitiesCatchmentLayer, returning early");
         return;
     }
     
-    console.log("Processing layer styling");
+    // console.log("Processing layer styling");
     
     const featureCount = AmenitiesCatchmentLayer.getLayers().length;
-    console.log(`Styling ${featureCount} features`);
+    // console.log(`Styling ${featureCount} features`);
     
     try {
         AmenitiesCatchmentLayer.eachLayer(layer => {
@@ -4991,7 +4942,7 @@ function applyAmenitiesCatchmentLayerStyling() {
         const hasLegendCheckboxes = legendCheckboxes.length > 0;
         const hasAnyVisibleRanges = visibleRanges.length > 0;
         
-        console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
+        // console.log(`Found ${legendCheckboxes.length} legend checkboxes, ${visibleRanges.length} are visible`);
         
         AmenitiesCatchmentLayer.setStyle(function(feature) {
             const range = feature.properties._range;
@@ -5009,7 +4960,7 @@ function applyAmenitiesCatchmentLayerStyling() {
             };
         });
         
-        console.log("Layer styling completed successfully");
+        // console.log("Layer styling completed successfully");
     } catch (error) {
         console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
         console.error("Error stack:", error.stack);
@@ -5022,7 +4973,7 @@ function updateOpacityAndOutlineFields() {
     }
     
     isUpdatingOpacityOutlineFields = true;
-    console.log("updateOpacityAndOutlineFields called");
+    // console.log("updateOpacityAndOutlineFields called");
     
     if (!AmenitiesCatchmentLayer) {
         isUpdatingOpacityOutlineFields = false;
@@ -5231,7 +5182,7 @@ function updateFilterDropdown() {
     isUpdatingFilters = false;
     return;
   }
-  console.log('updateFilterDropdown');
+  // console.log('updateFilterDropdown');
 
   const currentValue = filterTypeDropdown.value;
   
@@ -5274,7 +5225,14 @@ function updateFilterDropdown() {
 
 function updateFilterValues(source = 'filter') {
   if (isUpdatingFilterValues) return;
-  console.log('updateFilterValues called from:', source);
+  // console.log('=== updateFilterValues called ===');
+  // console.log('Called from:', source);
+  // console.log('Current filter type:', filterTypeDropdown.value);
+  // console.log('uaBoundariesLayer available:', !!uaBoundariesLayer);
+  // console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
+  // console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
+  // console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
+  
   isUpdatingFilterValues = true;
 
   try {
@@ -5434,6 +5392,7 @@ function updateFilterValues(source = 'filter') {
     filterValueContainer.appendChild(selectAllLabel);
 
     const previouslySelected = previousFilterSelections[currentFilterType] || [];
+    // console.log('updateFilterValues - Previous selections for', currentFilterType, ':', previouslySelected);
 
     const checkboxes = [];
     options.forEach((option, index) => {
@@ -5445,9 +5404,17 @@ function updateFilterValues(source = 'filter') {
       checkbox.id = `filter-${option.replace(/\s+/g, '-').replace(/[^\w-]/g, '')}`;
       checkbox.value = option;
       
-      checkbox.checked = previouslySelected.length > 0 ? 
-        previouslySelected.includes(option) : 
-        index === 0;
+      if (previouslySelected.length > 0) {
+        checkbox.checked = previouslySelected.includes(option);
+      } else {
+        if (currentFilterType === 'LA') {
+          checkbox.checked = (option === 'MCA');
+        } else {
+          checkbox.checked = (index === 0);
+        }
+      }
+      
+      // console.log('Setting checkbox for', option, 'to', checkbox.checked);
       
       checkbox.className = 'filter-value-checkbox';
       checkboxes.push(checkbox);
@@ -5486,6 +5453,7 @@ function updateFilterValues(source = 'filter') {
         .map(cb => cb.value);
       
       previousFilterSelections[currentFilterType] = currentSelections;
+      // console.log('Updated stored selections for', currentFilterType, ':', currentSelections);
     }
     
     function updateFilterButtonText() {
@@ -5493,11 +5461,15 @@ function updateFilterValues(source = 'filter') {
         .filter(cb => cb.checked)
         .map(cb => cb.value);
       
+      // console.log('Updating filter button text with values:', selectedValues);
+      
       if (selectedValues.length === 0) {
         filterValueButton.textContent = '\u00A0';
         filterValueButton.style.minHeight = '28px';
+        // console.log('No values selected, clearing button text');
       } else {
         filterValueButton.textContent = selectedValues.join(', ');
+        // console.log('Filter button text set to:', filterValueButton.textContent);
       }
     }
     
@@ -5505,6 +5477,11 @@ function updateFilterValues(source = 'filter') {
     const anyChecked = checkboxes.some(cb => cb.checked);
     selectAllCheckbox.checked = allChecked;
     selectAllCheckbox.indeterminate = anyChecked && !allChecked;
+    
+    if (previouslySelected.length === 0) {
+      updateStoredSelections();
+      // console.log('Stored initial default selections for', currentFilterType);
+    }
     
     updateFilterButtonText();
     updateSummaryStatistics(getCurrentFeatures());
@@ -5516,23 +5493,23 @@ function updateFilterValues(source = 'filter') {
 
 async function updateSummaryStatistics(features, source = 'filter') {
   if (isCalculatingStats) {
-    console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
+    // console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
     return;
   }
   isCalculatingStats = true;
   
-  console.log('=== updateSummaryStatistics Debug ===');
-  console.log('Called from:', source);
-  console.log('Input features count:', features ? features.length : 'null/undefined');
-  console.log('Grid available:', !!grid);
-  console.log('Grid features count:', grid ? grid.features.length : 'N/A');
-  console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
-  console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
-  console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
+  // console.log('=== updateSummaryStatistics Debug ===');
+  // console.log('Called from:', source);
+  // console.log('Input features count:', features ? features.length : 'null/undefined');
+  // console.log('Grid available:', !!grid);
+  // console.log('Grid features count:', grid ? grid.features.length : 'N/A');
+  // console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
+  // console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
+  // console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
     
   try {
     if (!grid && (!features || features.length === 0)) {
-      console.log('No grid and no features, displaying empty statistics');
+      // console.log('No grid and no features, displaying empty statistics');
       displayEmptyStatistics();
       //hideLoadingOverlay();
       return;
@@ -5543,40 +5520,40 @@ async function updateSummaryStatistics(features, source = 'filter') {
       const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
         .map(checkbox => checkbox.value);
       
-      console.log('Selected filter values:', selectedValues);
+      // console.log('Selected filter values:', selectedValues);
       
       if (selectedValues.length === 0) {
-        console.log('No filter values selected, displaying empty statistics');
+        // console.log('No filter values selected, displaying empty statistics');
         displayEmptyStatistics();
         //hideLoadingOverlay();
         return;
       }
     }
     
-    console.log('Applying filters to features...');
+    // console.log('Applying filters to features...');
     const filteredFeatures = applyFilters(features);
-    console.log('Filtered features count:', filteredFeatures ? filteredFeatures.length : 'null/undefined');
+    // console.log('Filtered features count:', filteredFeatures ? filteredFeatures.length : 'null/undefined');
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
-      console.log('No features after filtering, displaying empty statistics');
+      // console.log('No features after filtering, displaying empty statistics');
       displayEmptyStatistics();
       //hideLoadingOverlay();
       return;
     }
 
-    console.log('Calculating base statistics...');
+    // console.log('Calculating base statistics...');
     const baseStats = await calculateBaseStatistics(filteredFeatures);
-    console.log('Base stats calculated:', baseStats);
+    // console.log('Base stats calculated:', baseStats);
     
     if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
-      console.log('Calculating time statistics...');
+      // console.log('Calculating time statistics...');
       const timeStats = calculateTimeStatistics(filteredFeatures);
-      console.log('Time stats calculated:', timeStats);
+      // console.log('Time stats calculated:', timeStats);
       const stats = {...baseStats, ...timeStats};
-      console.log('Combined stats:', stats);
+      // console.log('Combined stats:', stats);
       updateStatisticsUI(stats);
     } else {
-      console.log('Using base stats only');
+      // console.log('Using base stats only');
       updateStatisticsUI(baseStats);
     }
     //hideLoadingOverlay();
@@ -5586,12 +5563,12 @@ async function updateSummaryStatistics(features, source = 'filter') {
     //hideLoadingOverlay();
   } finally {
     isCalculatingStats = false;
-    console.log('=== updateSummaryStatistics completed ===');
+    // console.log('=== updateSummaryStatistics completed ===');
   }
 }
 
 function displayEmptyStatistics() {
-  console.log('displayEmptyStatistics');
+  // console.log('displayEmptyStatistics');
   const statisticIds = [
     'total-population', 'min-population', 'max-population',
     'avg-imd-score', 'min-imd-score', 'max-imd-score',
@@ -5607,17 +5584,17 @@ function displayEmptyStatistics() {
 }
 
 function applyFilters(features) {
-  console.log('=== applyFilters Debug ===');
+  // console.log('=== applyFilters Debug ===');
   const filterType = filterTypeDropdown.value;
-  console.log('Filter type:', filterType);
+  // console.log('Filter type:', filterType);
   
   let filteredFeatures = features && features.length ? features : (grid ? grid.features : []);
-  console.log('Initial features count:', filteredFeatures.length);
-  console.log('Initial features source:', features && features.length ? 'input parameter' : 'grid data');
+  // console.log('Initial features count:', filteredFeatures.length);
+  // console.log('Initial features source:', features && features.length ? 'input parameter' : 'grid data');
   
   if ((AmenitiesCatchmentLayer) && (!features || features.length === 0)) {
     filteredFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
-    console.log('Using AmenitiesCatchmentLayer features:', filteredFeatures.length);
+    // console.log('Using AmenitiesCatchmentLayer features:', filteredFeatures.length);
   }
   
   if (filterType.startsWith('UserLayer_')) {
@@ -5765,13 +5742,12 @@ function applyFilters(features) {
     
     filteredFeatures = combinedFeatures; 
   } else if (filterType === 'LA' || filterType === 'Ward') {
-    console.log('=== Geographic Filter Debug ===');
-    console.log('Filter type:', filterType);
-    console.log('Input features count:', filteredFeatures.length);
-    console.log('LAD lookup map size:', Object.keys(ladCodeToNameMap).length);
-    console.log('Ward lookup map size:', Object.keys(wardCodeToNameMap).length);
+    // console.log('=== Geographic Filter Debug ===');
+    // console.log('Filter type:', filterType);
+    // console.log('Input features count:', filteredFeatures.length);
+    // console.log('LAD lookup map size:', Object.keys(ladCodeToNameMap).length);
+    // console.log('Ward lookup map size:', Object.keys(wardCodeToNameMap).length);
     
-    // Check if lookup maps are populated
     if (filterType === 'LA' && Object.keys(ladCodeToNameMap).length === 0) {
       console.warn('LAD lookup map is empty! Geographic filtering may not work.');
     }
@@ -5781,78 +5757,69 @@ function applyFilters(features) {
     
     const filterValueContainer = document.getElementById('filterValueContainer');
     if (!filterValueContainer) {
-      console.log('No filter value container found');
+      // console.log('No filter value container found');
       return filteredFeatures;
     }
 
     const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
       .map(cb => cb.value);
     
-    console.log('Selected filter values:', selectedValues);
+    // console.log('Selected filter values:', selectedValues);
 
     if (selectedValues.length === 0) {
-      console.log('No values selected, returning empty array');
+      // console.log('No values selected, returning empty array');
       return [];
     }
 
     const selectedSet = new Set(selectedValues);
 
     if (filterType === 'LA') {
-      console.log('Processing LA filter');
+      // console.log('Processing LA filter');
       if (selectedSet.has('LEP')) {
-        console.log('LEP selected, returning all features');
+        // console.log('LEP selected, returning all features');
         return filteredFeatures;
       }
       if (selectedSet.has('MCA')) {
-        console.log('MCA selected, filtering out North Somerset');
-        // For MCA filter, need to filter based on codes and lookup names
+        // console.log('MCA selected, filtering out North Somerset');
         const mcaFiltered = filteredFeatures.filter(f => {
           const ladCode = f.properties.lad24cd;
           const ladName = ladCodeToNameMap[ladCode];
           const result = ladCode && ladName && ladName !== 'North Somerset';
           return result;
         });
-        console.log('MCA filtered features count:', mcaFiltered.length);
+        // console.log('MCA filtered features count:', mcaFiltered.length);
         return mcaFiltered;
       }
-      // For specific LA selection, match codes to names
-      console.log('Specific LA selected, filtering by codes');
+      // console.log('Specific LA selected, filtering by codes');
       const laFiltered = filteredFeatures.filter(f => {
         const ladCode = f.properties.lad24cd;
         const ladName = ladCodeToNameMap[ladCode];
         const result = ladCode && ladName && selectedSet.has(ladName);
-        if (!result) {
-          console.log('LA filter - Feature code/name:', ladCode, ladName, 'Selected:', selectedValues);
-          // Debug: show what codes are actually available in first few features
-          if (!ladCode) {
-            console.log('Feature missing LAD24CD:', Object.keys(f.properties).filter(k => k.includes('LAD')));
-          }
-        }
         return result;
       });
-      console.log('LA filtered features count:', laFiltered.length);
+      // console.log('LA filtered features count:', laFiltered.length);
       return laFiltered;
     } else if (filterType === 'Ward') {
-      console.log('Processing Ward filter');
+      // console.log('Processing Ward filter');
       const wardFiltered = filteredFeatures.filter(f => {
         const wardCode = f.properties.wd24cd;
         const wardName = wardCodeToNameMap[wardCode];
         const result = wardCode && wardName && selectedSet.has(wardName);
         return result;
       });
-      console.log('Ward filtered features count:', wardFiltered.length);
+      // console.log('Ward filtered features count:', wardFiltered.length);
       return wardFiltered;
     }
   }
 
-  console.log('=== applyFilters returning ===');
-  console.log('Final filtered features count:', filteredFeatures.length);
-  console.log('Filter type processed:', filterType);
+  // console.log('=== applyFilters returning ===');
+  // console.log('Final filtered features count:', filteredFeatures.length);
+  // console.log('Filter type processed:', filterType);
   return filteredFeatures;
 }
 
 function applyRangeFilter(features, filterValue) {
-  console.log('applyRangeFilter');
+  // console.log('applyRangeFilter');
   if (AmenitiesCatchmentLayer) {
     return filterByJourneyTime(features, filterValue);
   }
@@ -5860,7 +5827,7 @@ function applyRangeFilter(features, filterValue) {
 }
 
 async function calculateStatistics(features) {
-  console.log(`Calculating statistics for ${features.length} features`);
+  // console.log(`Calculating statistics for ${features.length} features`);
   
   const baseStats = await calculateBaseStatistics(features);
   
@@ -5884,7 +5851,7 @@ function calculateBaseStatistics(features) {
     };
   }
 
-  console.log('Calculating stats for', features.length, 'features');
+  // console.log('Calculating stats for', features.length, 'features');
   
   const BATCH_SIZE = 5000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
@@ -6023,7 +5990,7 @@ function calculateBaseStatistics(features) {
 }
 
 function calculateTimeStatistics(features) {
-  console.log('calculateTimeStatistics: Starting calculation with', features.length, 'features');
+  // console.log('calculateTimeStatistics: Starting calculation with', features.length, 'features');
   
   let totalWeightedTime = 0;
   let totalPopulation = 0;
@@ -6076,7 +6043,7 @@ function calculateTimeStatistics(features) {
 }
 
 function updateStatisticsUI(stats) {
-  console.log('updateStatisticsUI');
+  // console.log('updateStatisticsUI');
   document.getElementById('total-population').textContent = formatValue(stats.totalPopulation, 10);
   document.getElementById('min-population').textContent = formatValue(stats.minPopulation, 10);
   document.getElementById('max-population').textContent = formatValue(stats.maxPopulation, 10);
@@ -6098,7 +6065,7 @@ function updateStatisticsUI(stats) {
 }
 
 function filterByJourneyTime(features, filterValue) {
-  console.log('filterByJourneyTime');
+  // console.log('filterByJourneyTime');
   if (filterValue === '>60') {
     return features.filter(feature => {
       const OriginId_tracc = feature.properties.OriginId_tracc;
@@ -6122,7 +6089,7 @@ function calculateWeightedAverage(values, weights) {
 }
 
 function getCurrentFeatures() {
-  console.log('getCurrentFeatures');
+  // console.log('getCurrentFeatures');
   const filterType = filterTypeDropdown.value;
   
   let sourceFeatures = [];
