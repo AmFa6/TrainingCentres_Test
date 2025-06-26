@@ -227,6 +227,9 @@ let isInverseAmenitiesOpacity = false;
 let isInverseAmenitiesOutline = false;
 let uaBoundariesLayer;
 let wardBoundariesLayer;
+// Lookup maps for boundary code to name mapping
+let ladCodeToNameMap = {};
+let wardCodeToNameMap = {};
 let AmenitiesCatchmentLayer = null;
 let gridTimeMap = {};
 let csvDataCache = {};
@@ -788,6 +791,16 @@ function loadBoundaryData() {
       .then(response => response.json())
       .then(data => {
         return convertMultiPolygonToPolygons(data).then(convertedData => {
+          // Populate LAD code to name lookup map
+          convertedData.features.forEach(feature => {
+            const code = feature.properties.LAD24CD;
+            const name = feature.properties.LAD24NM;
+            if (code && name) {
+              ladCodeToNameMap[code] = name;
+            }
+          });
+          console.log('LAD lookup map populated:', ladCodeToNameMap);
+          
           uaBoundariesLayer = L.geoJSON(convertedData, {
             pane: 'boundaryLayers',
             style: function (feature) {
@@ -808,6 +821,17 @@ function loadBoundaryData() {
         return convertMultiPolygonToPolygons(data)
           .then(convertedData => {
             const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
+            
+            // Populate ward code to name lookup map
+            filteredFeatures.forEach(feature => {
+              const code = feature.properties.WD24CD || feature.properties.WD21CD; // Handle both possible field names
+              const name = feature.properties.WD24NM || feature.properties.WD21NM; // Handle both possible field names
+              if (code && name) {
+                wardCodeToNameMap[code] = name;
+              }
+            });
+            console.log('Ward lookup map populated:', wardCodeToNameMap);
+            
             const wardGeoJson = {
               type: 'FeatureCollection',
               features: filteredFeatures
@@ -1155,6 +1179,8 @@ async function loadGridDataWithDuckDB() {
         imd_score_mhclg,
         imd_decile_mhclg,
         hh_caravail_ts045,
+        LAD24CD,
+        WD21CD,
         ST_AsGeoJSON(geometry) as geojson_geom
       FROM grid_data
       ORDER BY OriginId_tracc
@@ -1861,35 +1887,30 @@ map.on('click', function (e) {
   };
 
   let isWithinLEP = false;
-  if (uaBoundariesLayer) {
-    uaBoundariesLayer.eachLayer(layer => {
-      const polygon = turf.polygon(layer.feature.geometry.coordinates);
-      if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
-        isWithinLEP = true;
-        popupContent.Geographies.push(`<strong>Local Authority:</strong> ${layer.feature.properties.LAD24NM}`);
-      }
-    });
-  }
-
-  if (!isWithinLEP) {
-    return;
-  }
-
-  if (wardBoundariesLayer) {
-    wardBoundariesLayer.eachLayer(layer => {
-      const polygon = turf.polygon(layer.feature.geometry.coordinates);
-      if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
-        popupContent.Geographies.push(`<strong>Ward:</strong> ${layer.feature.properties.WD24NM}`);
-      }
-    });
-  }
 
   if (AmenitiesCatchmentLayer) {
     const gridLayer = AmenitiesCatchmentLayer;
     gridLayer.eachLayer(layer => {
       const polygon = turf.polygon(layer.feature.geometry.coordinates);
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
-        const properties = layer.feature.properties;        if (AmenitiesCatchmentLayer) {
+        const properties = layer.feature.properties;
+        
+        // Get LAD name from code using lookup map
+        const ladCode = properties.LAD24CD;
+        const ladName = ladCodeToNameMap[ladCode];
+        if (ladName) {
+          isWithinLEP = true;
+          popupContent.Geographies.push(`<strong>Local Authority:</strong> ${ladName}`);
+        }
+        
+        // Get Ward name from code using lookup map
+        const wardCode = properties.WD21CD;
+        const wardName = wardCodeToNameMap[wardCode];
+        if (wardName) {
+          popupContent.Geographies.push(`<strong>Ward:</strong> ${wardName}`);
+        }
+        
+        if (AmenitiesCatchmentLayer) {
           const population = formatValue(properties.pop, 10);
           const imdScore = formatValue(properties.imd_score_mhclg, 0.1);
           const imdDecile = formatValue(properties.imd_decile_mhclg, 1);
@@ -1956,10 +1977,27 @@ map.on('click', function (e) {
       }
     });
   } else if (grid) {
+    // Fallback for when grid layer is not available but grid data exists
     grid.features.forEach(feature => {
       const polygon = turf.polygon(feature.geometry.coordinates);
       if (turf.booleanPointInPolygon(clickedPoint, polygon)) {
         const properties = feature.properties;
+        
+        // Get LAD name from code using lookup map
+        const ladCode = properties.LAD24CD;
+        const ladName = ladCodeToNameMap[ladCode];
+        if (ladName) {
+          isWithinLEP = true;
+          popupContent.Geographies.push(`<strong>Local Authority:</strong> ${ladName}`);
+        }
+        
+        // Get Ward name from code using lookup map
+        const wardCode = properties.WD21CD;
+        const wardName = wardCodeToNameMap[wardCode];
+        if (wardName) {
+          popupContent.Geographies.push(`<strong>Ward:</strong> ${wardName}`);
+        }
+        
         const population = formatValue(properties.pop, 10);
         const imdScore = formatValue(properties.imd_score_mhclg, 0.1);
         const imdDecile = formatValue(properties.imd_decile_mhclg, 1);
@@ -1977,6 +2015,12 @@ map.on('click', function (e) {
       }
     });
   }
+  
+  // Exit if not within LEP area
+  if (!isWithinLEP) {
+    return;
+  }
+  
   const content = `
     <div>
       <h4 style="text-decoration: underline;">Geographies</h4>
