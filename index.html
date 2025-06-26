@@ -16,28 +16,69 @@
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
   <script src="https://unpkg.com/proj4"></script>
   <script src="https://unpkg.com/proj4leaflet"></script>
-  <!-- DuckDB-WASM for Parquet processing -->
-  <script src="https://unpkg.com/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js"></script>
+  <!-- DuckDB-WASM for Parquet processing - trying multiple sources -->
+  <script src="https://unpkg.com/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js" 
+          onload="console.log('DuckDB script 1 loaded successfully')" 
+          onerror="console.error('DuckDB script 1 failed to load')"></script>
+  <!-- Backup script tag -->
+  <script src="https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@1.28.0/dist/duckdb-browser-eh.js" 
+          onload="console.log('DuckDB script 2 loaded successfully')" 
+          onerror="console.error('DuckDB script 2 failed to load')"></script>
   <script>
-    // Initialize DuckDB-WASM availability check
+    // Enhanced DuckDB-WASM availability check with detailed debugging
+    console.log('=== DuckDB-WASM Loading Debug ===');
     console.log('Checking DuckDB-WASM availability...');
+    console.log('Initial window.duckdb:', window.duckdb);
+    console.log('Available window properties:', Object.keys(window).filter(key => key.toLowerCase().includes('duck')));
     
-    // Wait for DuckDB to be available and log its status
+    let checkCount = 0;
+    const maxChecks = 50; // Check for 5 seconds (50 * 100ms)
+    
+    // Enhanced availability check with more detailed logging
     let duckdbCheckInterval = setInterval(() => {
+      checkCount++;
+      console.log(`Check ${checkCount}/${maxChecks} - window.duckdb:`, !!window.duckdb);
+      
       if (window.duckdb) {
-        console.log('DuckDB-WASM is available');
-        console.log('DuckDB methods:', Object.keys(window.duckdb));
+        console.log('✅ DuckDB-WASM is available');
+        console.log('DuckDB object type:', typeof window.duckdb);
+        console.log('DuckDB constructor:', window.duckdb.constructor?.name);
+        
+        try {
+          console.log('DuckDB methods:', Object.keys(window.duckdb));
+          console.log('Has getJsDelivrBundles:', typeof window.duckdb.getJsDelivrBundles);
+          console.log('Has selectBundle:', typeof window.duckdb.selectBundle);
+          console.log('Has createWorker:', typeof window.duckdb.createWorker);
+          console.log('Has AsyncDuckDB:', typeof window.duckdb.AsyncDuckDB);
+          console.log('Has ConsoleLogger:', typeof window.duckdb.ConsoleLogger);
+        } catch (e) {
+          console.error('Error inspecting DuckDB object:', e);
+        }
+        
+        clearInterval(duckdbCheckInterval);
+      } else if (checkCount >= maxChecks) {
+        console.error('❌ DuckDB-WASM not detected after', maxChecks * 100, 'ms');
+        console.log('Final window properties containing "duck":', 
+          Object.keys(window).filter(key => key.toLowerCase().includes('duck')));
         clearInterval(duckdbCheckInterval);
       }
     }, 100);
     
-    // Clear interval after 5 seconds to avoid infinite checking
-    setTimeout(() => {
-      clearInterval(duckdbCheckInterval);
-      if (!window.duckdb) {
-        console.warn('DuckDB-WASM not detected after 5 seconds');
-      }
-    }, 5000);
+    // Also check when the page is fully loaded
+    window.addEventListener('load', () => {
+      console.log('=== Page Fully Loaded ===');
+      console.log('window.duckdb after page load:', !!window.duckdb);
+    });
+    
+    // Check if scripts are loading properly
+    document.addEventListener('DOMContentLoaded', () => {
+      const scripts = document.querySelectorAll('script[src*="duckdb"]');
+      console.log('Found DuckDB scripts:', scripts.length);
+      scripts.forEach((script, index) => {
+        console.log(`Script ${index + 1}:`, script.src);
+        console.log(`Script ${index + 1} loaded:`, script.readyState);
+      });
+    });
   </script>
   <style>
   html, body {
