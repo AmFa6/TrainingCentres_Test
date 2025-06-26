@@ -6,6 +6,13 @@ const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/lig
 
 const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
+// DuckDB instance for high-performance data processing
+let db = null;
+let isDuckDBReady = false;
+
+// Expose isDuckDBReady globally for performance monitoring
+window.isDuckDBReady = false;
+
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
   imd_score_mhclg: { min: Infinity, max: -Infinity },
@@ -74,6 +81,133 @@ let lastAmenitiesState = {
 let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
 
+
+/**
+ * Initializes DuckDB for high-performance data processing
+ * @returns {Promise} Promise that resolves when DuckDB is ready
+ */
+async function initializeDuckDB() {
+  try {
+    console.log('Initializing DuckDB for high-performance data processing...');
+    
+    // Load DuckDB from CDN
+    if (typeof duckdb === 'undefined') {
+      console.log('Loading DuckDB library...');
+      const script = document.createElement('script');
+      script.src = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js';
+      document.head.appendChild(script);
+      
+      // Wait for script to load
+      await new Promise((resolve, reject) => {
+        script.onload = resolve;
+        script.onerror = reject;
+      });
+    }
+    
+    // Initialize DuckDB
+    const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
+    const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
+    const worker = new Worker(bundle.mainWorker);
+    const logger = new duckdb.ConsoleLogger();
+    db = new duckdb.AsyncDuckDB(logger, worker);
+    await db.instantiate(bundle.mainModule);
+    
+    // Install and load spatial extension for geospatial operations
+    console.log('Loading DuckDB spatial extension...');
+    await db.query("INSTALL spatial; LOAD spatial;");
+    
+    // Install and load httpfs extension for remote file access
+    await db.query("INSTALL httpfs; LOAD httpfs;");
+    
+    isDuckDBReady = true;
+    window.isDuckDBReady = true; // Update global reference
+    console.log('DuckDB initialized successfully with spatial support');
+    
+    return true;
+  } catch (error) {
+    console.error('Failed to initialize DuckDB:', error);
+    console.log('Falling back to JavaScript-based processing...');
+    isDuckDBReady = false;
+    return false;
+  }
+}
+
+/**
+ * Loads grid and journey time data into DuckDB for optimized querying
+ * @returns {Promise} Promise that resolves when data is loaded
+ */
+async function loadDataIntoDuckDB() {
+  if (!isDuckDBReady) {
+    console.log('DuckDB not ready, skipping DuckDB data loading');
+    return false;
+  }
+  
+  try {
+    console.log('Loading data into DuckDB for optimized processing...');
+    
+    // Load journey time CSV data
+    console.log('Loading journey time data into DuckDB...');
+    await db.query(`
+      CREATE OR REPLACE TABLE journey_times AS 
+      SELECT * FROM read_csv('https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv', 
+        auto_detect=true, header=true)
+    `);
+    
+    // Load grid CSV data parts
+    console.log('Loading grid CSV data into DuckDB...');
+    await db.query(`
+      CREATE OR REPLACE TABLE grid_data_1 AS 
+      SELECT * FROM read_csv('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv', 
+        auto_detect=true, header=true)
+    `);
+    
+    await db.query(`
+      CREATE OR REPLACE TABLE grid_data_2 AS 
+      SELECT * FROM read_csv('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv', 
+        auto_detect=true, header=true)
+    `);
+    
+    // Combine grid data
+    await db.query(`
+      CREATE OR REPLACE TABLE grid_csv_combined AS 
+      SELECT * FROM grid_data_1
+      UNION ALL
+      SELECT * FROM grid_data_2
+    `);
+    
+    // Pre-compute grid statistics for faster range calculations
+    console.log('Pre-computing grid statistics...');
+    await db.query(`
+      CREATE OR REPLACE TABLE grid_statistics AS
+      SELECT 
+        MIN(CAST(pop AS DOUBLE)) as pop_min, 
+        MAX(CAST(pop AS DOUBLE)) as pop_max,
+        MIN(CAST(imd_score_mhclg AS DOUBLE)) as imd_min, 
+        MAX(CAST(imd_score_mhclg AS DOUBLE)) as imd_max,
+        MIN(CAST(hh_caravail_ts045 AS DOUBLE)) as car_min, 
+        MAX(CAST(hh_caravail_ts045 AS DOUBLE)) as car_max,
+        MIN(CAST(pop_growth AS DOUBLE)) as growth_min, 
+        MAX(CAST(pop_growth AS DOUBLE)) as growth_max,
+        MIN(CAST(imd_decile_mhclg AS DOUBLE)) as decile_min, 
+        MAX(CAST(imd_decile_mhclg AS DOUBLE)) as decile_max
+      FROM grid_csv_combined
+      WHERE pop IS NOT NULL AND pop != ''
+    `);
+    
+    // Create indexes for faster querying
+    console.log('Creating indexes for optimized queries...');
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_journey_origin ON journey_times(origin)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_journey_destination ON journey_times(destination)`);
+    await db.query(`CREATE INDEX IF NOT EXISTS idx_grid_origin ON grid_csv_combined(OriginId_tracc)`);
+    
+    console.log('DuckDB data loading completed successfully');
+    return true;
+    
+  } catch (error) {
+    console.error('Error loading data into DuckDB:', error);
+    return false;
+  }
+}
 
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
@@ -239,6 +373,17 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
 document.addEventListener('DOMContentLoaded', (event) => {
   console.log('DOM fully loaded, starting application initialization...');
   //showoadingOverlay();
+  
+  // Initialize DuckDB early for performance benefits
+  initializeDuckDB().then(() => {
+    console.log('DuckDB initialization completed');
+    if (isDuckDBReady) {
+      loadDataIntoDuckDB().then(() => {
+        console.log('DuckDB data loading completed');
+      });
+    }
+  });
+  
   initializeUI();
   setupMapPanes();
   
@@ -767,16 +912,98 @@ function loadGridData() {
 
 /**
  * Processes grid data in batches to avoid UI blocking
+ * Uses DuckDB for CSV data joining when available for better performance
  * @param {Object} data1 First part of grid GeoJSON
  * @param {Object} data2 Second part of grid GeoJSON
  * @param {String} csvText1 CSV data for first grid part
  * @param {String} csvText2 CSV data for second grid part
  * @returns {Promise} Promise that resolves with the processed grid data
  */
-function processGridData(data1, data2, csvText1, csvText2) {
-  return new Promise((resolve) => {
+async function processGridData(data1, data2, csvText1, csvText2) {
+  return new Promise(async (resolve) => {
     console.log("Starting to process grid GeoJSON and CSV data...");
     
+    // Try DuckDB approach first for much better performance
+    if (isDuckDBReady) {
+      try {
+        console.log("Using DuckDB for high-performance grid data processing...");
+        
+        // Create a temporary table with the GeoJSON features and their OriginId_tracc
+        const allFeatures = [...data1.features, ...data2.features];
+        
+        // Process features in batches and add CSV data from DuckDB
+        const batchSize = 1000;
+        const processedFeatures = [];
+        
+        for (let i = 0; i < allFeatures.length; i += batchSize) {
+          const batch = allFeatures.slice(i, i + batchSize);
+          const originIds = batch
+            .map(f => f.properties.OriginId_tracc)
+            .filter(id => id)
+            .map(id => `'${id}'`)
+            .join(',');
+          
+          if (originIds.length > 0) {
+            try {
+              const csvDataResult = await db.query(`
+                SELECT * FROM grid_csv_combined 
+                WHERE OriginId_tracc IN (${originIds})
+              `);
+              
+              const csvLookup = {};
+              csvDataResult.toArray().forEach(row => {
+                if (row.OriginId_tracc) {
+                  csvLookup[row.OriginId_tracc] = row;
+                }
+              });
+              
+              // Merge CSV data with GeoJSON features
+              batch.forEach(feature => {
+                const originId = feature.properties.OriginId_tracc;
+                if (originId && csvLookup[originId]) {
+                  Object.keys(csvLookup[originId]).forEach(key => {
+                    if (key !== 'OriginId_tracc') {
+                      feature.properties[key] = csvLookup[originId][key];
+                    }
+                  });
+                  processedFeatures.push(feature);
+                }
+              });
+              
+            } catch (error) {
+              console.warn('DuckDB batch processing failed for batch', i, error);
+              // Fall back to including features without CSV data
+              processedFeatures.push(...batch);
+            }
+          }
+          
+          // Show progress
+          const progressPercent = Math.round(((i + batchSize) / allFeatures.length) * 100);
+          console.log(`DuckDB processing progress: ${Math.min(progressPercent, 100)}%`);
+        }
+        
+        // Add centroids
+        processedFeatures.forEach(feature => {
+          const centroid = turf.centroid(feature);
+          feature.properties._centroid = centroid.geometry.coordinates;
+        });
+        
+        const combinedData = {
+          type: 'FeatureCollection',
+          features: processedFeatures
+        };
+        
+        console.log(`DuckDB grid processing completed: ${processedFeatures.length} features processed`);
+        resolve(combinedData);
+        return;
+        
+      } catch (error) {
+        console.warn("DuckDB grid processing failed, falling back to JavaScript:", error);
+      }
+    }
+    
+    // Fallback to JavaScript-based processing
+    console.log("Using JavaScript for grid data processing...");
     const csvData1 = Papa.parse(csvText1, { header: true }).data;
     const csvData2 = Papa.parse(csvText2, { header: true }).data;
     
@@ -857,13 +1084,42 @@ function processFeaturesBatch(features, csvLookup, startIndex, batchSize, result
 
 /**
  * Calculates and stores min/max values for important grid attributes
+ * Uses DuckDB for high-performance computation when available
  * @param {Object} gridData The grid GeoJSON data
  */
-function calculateGridStatistics(gridData) {
+async function calculateGridStatistics(gridData) {
   if (!gridData || !gridData.features || gridData.features.length === 0) return;
   
   console.log("Calculating grid statistics for optimization...");
   
+  // Try DuckDB first for much faster computation
+  if (isDuckDBReady) {
+    try {
+      console.log("Using DuckDB for high-performance statistics calculation...");
+      const result = await db.query(`SELECT * FROM grid_statistics LIMIT 1`);
+      const stats = result.toArray()[0];
+      
+      if (stats) {
+        gridStatistics = {
+          pop: { min: stats.pop_min, max: stats.pop_max },
+          imd_score_mhclg: { min: stats.imd_min, max: stats.imd_max },
+          hh_caravail_ts045: { min: stats.car_min, max: stats.car_max },
+          pop_growth: { min: stats.growth_min, max: stats.growth_max },
+          imd_decile_mhclg: { min: stats.decile_min, max: stats.decile_max }
+        };
+        
+        console.log("Grid statistics calculated with DuckDB:", gridStatistics);
+        updateSliderRanges('Amenities', 'Opacity');
+        updateSliderRanges('Amenities', 'Outline');
+        return;
+      }
+    } catch (error) {
+      console.warn("DuckDB statistics calculation failed, falling back to JavaScript:", error);
+    }
+  }
+  
+  // Fallback to JavaScript-based calculation
+  console.log("Using JavaScript for statistics calculation...");
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
     imd_score_mhclg: { min: Infinity, max: -Infinity },
@@ -1040,15 +1296,116 @@ const toTitleCase = (str) => {
 
 /**
  * Get journey time data for a specific origin, sorted by travel time (closest first)
+ * Uses DuckDB for high-performance queries when available
  * Only includes destinations that match current filtering criteria
  * @param {string} originId The OriginId_tracc to get journey time data for
  * @returns {Array} Array of journey time records sorted by total time
  */
-function getJourneyTimeData(originId) {
+async function getJourneyTimeData(originId) {
   console.log('getJourneyTimeData called with originId:', originId);
   
-  if (!fullCsvData || !originId) {
-    console.log('No fullCsvData or originId missing');
+  if (!originId) {
+    console.log('originId missing');
+    return [];
+  }
+  
+  // Get filtered training centres for destination filtering
+  const filteredTrainingCentres = filterTrainingCentres();
+  const allowedDestinationIds = new Set(
+    filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
+  );
+  
+  console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
+  
+  // Try DuckDB first for much faster querying
+  if (isDuckDBReady) {
+    try {
+      console.log('Using DuckDB for high-performance journey time query...');
+      
+      const allowedDestinationsStr = Array.from(allowedDestinationIds).map(id => `'${id}'`).join(',');
+      
+      if (allowedDestinationsStr.length === 0) {
+        console.log('No allowed destinations found');
+        return [];
+      }
+      
+      const query = `
+        SELECT 
+          origin,
+          destination,
+          totaltime,
+          services
+        FROM journey_times 
+        WHERE CAST(origin AS VARCHAR) = ? 
+          AND CAST(destination AS VARCHAR) IN (${allowedDestinationsStr})
+          AND totaltime IS NOT NULL 
+          AND totaltime != ''
+        ORDER BY CAST(totaltime AS DOUBLE) ASC
+      `;
+      
+      const result = await db.query(query, [String(originId)]);
+      const originRecords = result.toArray();
+      
+      console.log(`DuckDB found ${originRecords.length} records for origin ${originId}`);
+      
+      if (originRecords.length === 0) {
+        return [];
+      }
+      
+      // Process the results to match the expected format
+      const journeyTimeData = originRecords.map(record => {
+        let destinationLocation = 'Unknown';
+        
+        if (amenityLayers['TrainingCentres']) {
+          const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
+            const featureFid = String(feature.properties.fid);
+            const recordDestination = String(record.destination);
+            return featureFid === recordDestination;
+          });
+          
+          if (matchingCenter && matchingCenter.properties) {
+            const deliveryPostcode = matchingCenter.properties['Delivery Postcode'] || '';
+            const postcode = matchingCenter.properties.postcode || '';
+            
+            const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
+            
+            if (formattedDeliveryPostcode && postcode) {
+              destinationLocation = `${formattedDeliveryPostcode}, ${postcode}`;
+            } else if (formattedDeliveryPostcode) {
+              destinationLocation = formattedDeliveryPostcode;
+            } else if (postcode) {
+              destinationLocation = postcode;
+            }
+          }
+        }
+        
+        let services = record.services || '';
+        if (!services || services.trim() === '' || services.toLowerCase() === 'n/a') {
+          services = 'walking only';
+        } else {
+          services = services.replace(/_/g, ' + ');
+        }
+        
+        return {
+          destination: destinationLocation,
+          journeyTime: Math.round(parseFloat(record.totaltime)),
+          services: services
+        };
+      });
+      
+      console.log('DuckDB journey time data processed:', journeyTimeData.length, 'records');
+      return journeyTimeData;
+      
+    } catch (error) {
+      console.warn('DuckDB journey time query failed, falling back to JavaScript:', error);
+    }
+  }
+  
+  // Fallback to JavaScript-based processing
+  console.log('Using JavaScript for journey time data processing...');
+  
+  if (!fullCsvData) {
+    console.log('No fullCsvData available');
     return [];
   }
   
@@ -1057,13 +1414,6 @@ function getJourneyTimeData(originId) {
   
   console.log('Searching for origin:', { originIdStr, originIdNum });
   console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
-  
-  const filteredTrainingCentres = filterTrainingCentres();
-  const allowedDestinationIds = new Set(
-    filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
-  );
-  
-  console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
   
   const originRecords = fullCsvData.filter(row => {
     if (!row.origin || !row.destination || !row.totaltime) {
@@ -1365,49 +1715,67 @@ map.on('click', function (e) {
           if (properties.OriginId_tracc) {
             console.log('Requesting journey time data for:', properties.OriginId_tracc);
             
-            if (!fullCsvData) {
-              console.log('CSV data not loaded yet, attempting to load...');
-              const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-              
-              fetch(csvPath)
-                .then(response => response.text())
-                .then(csvText => {
-                  const csvData = Papa.parse(csvText, { header: true }).data;
-                  fullCsvData = csvData;
-                  console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
-                  console.log('Sample CSV row:', fullCsvData[0]);
-                  
-                  const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
-                  if (journeyTimeData.length > 0) {
-                    popupContent.JourneyTime = journeyTimeData;
-                    
-                    const content = `
-                      <div>
-                        <h4 style="text-decoration: underline;">Geographies</h4>
-                        ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
-                        <h4 style="text-decoration: underline;">GridCell</h4>
-                        ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
-                        <h4 style="text-decoration: underline;">Journey Time</h4>
-                        ${createJourneyTimeContent(journeyTimeData)}
-                      </div>
-                    `;
-                    
-                    L.popup()
-                      .setLatLng(clickedLatLng)
-                      .setContent(content)
-                      .openOn(map);
-                  }
-                })
-                .catch(error => {
-                  console.error('Error loading CSV for popup:', error);
-                });
-            } else {
-              console.log('Using existing CSV data');
-              const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
+            // Use async journey time data retrieval for better performance
+            getJourneyTimeData(properties.OriginId_tracc).then(journeyTimeData => {
               if (journeyTimeData.length > 0) {
                 popupContent.JourneyTime = journeyTimeData;
+                
+                const content = `
+                  <div>
+                    <h4 style="text-decoration: underline;">Geographies</h4>
+                    ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
+                    <h4 style="text-decoration: underline;">GridCell</h4>
+                    ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
+                    <h4 style="text-decoration: underline;">Journey Time</h4>
+                    ${createJourneyTimeContent(journeyTimeData)}
+                  </div>
+                `;
+                
+                L.popup()
+                  .setLatLng(clickedLatLng)
+                  .setContent(content)
+                  .openOn(map);
+              } else {
+                // Show popup without journey time data if none found
+                const content = `
+                  <div>
+                    <h4 style="text-decoration: underline;">Geographies</h4>
+                    ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
+                    <h4 style="text-decoration: underline;">GridCell</h4>
+                    ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
+                    <h4 style="text-decoration: underline;">Journey Time</h4>
+                    No journey time data available
+                  </div>
+                `;
+                
+                L.popup()
+                  .setLatLng(clickedLatLng)
+                  .setContent(content)
+                  .openOn(map);
               }
-            }
+            }).catch(error => {
+              console.error('Error getting journey time data:', error);
+              
+              // Show popup without journey time data on error
+              const content = `
+                <div>
+                  <h4 style="text-decoration: underline;">Geographies</h4>
+                  ${popupContent.Geographies.length > 0 ? popupContent.Geographies.join('<br>') : '-'}
+                  <h4 style="text-decoration: underline;">GridCell</h4>
+                  ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
+                  <h4 style="text-decoration: underline;">Journey Time</h4>
+                  Error loading journey time data
+                </div>
+              `;
+              
+              L.popup()
+                .setLatLng(clickedLatLng)
+                .setContent(content)
+                .openOn(map);
+            });
+            
+            // Return early to avoid showing popup twice
+            return;
           }
         }
       }
@@ -5053,7 +5421,8 @@ async function updateSummaryStatistics(features, source = 'filter') {
       return;
     }
 
-    const baseStats = await calculateBaseStatistics(filteredFeatures);
+    // Use DuckDB for much faster statistics calculation when available
+    const baseStats = await calculateBaseStatisticsOptimized(filteredFeatures);
     
     if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
       const timeStats = calculateTimeStatistics(filteredFeatures);
@@ -5070,6 +5439,92 @@ async function updateSummaryStatistics(features, source = 'filter') {
   } finally {
     isCalculatingStats = false;
   }
+}
+
+/**
+ * Calculate base statistics using DuckDB for high performance when available
+ * Falls back to JavaScript calculation if DuckDB is not available
+ */
+async function calculateBaseStatisticsOptimized(features) {
+  console.log('calculateBaseStatisticsOptimized called with', features.length, 'features');
+  
+  // Try DuckDB first for much faster computation
+  if (isDuckDBReady && features.length > 100) {
+    try {
+      console.log('Using DuckDB for high-performance statistics calculation...');
+      
+      // Extract OriginId_tracc values from features
+      const originIds = features
+        .map(f => f.properties.OriginId_tracc)
+        .filter(id => id)
+        .map(id => `'${id}'`)
+        .join(',');
+      
+      if (originIds.length === 0) {
+        console.log('No valid origin IDs found, falling back to JavaScript');
+        return await calculateBaseStatistics(features);
+      }
+      
+      // Query DuckDB for statistics
+      const query = `
+        SELECT 
+          COUNT(*) as count,
+          SUM(CAST(pop AS DOUBLE)) as total_population,
+          MIN(CAST(pop AS DOUBLE)) as min_population,
+          MAX(CAST(pop AS DOUBLE)) as max_population,
+          AVG(CAST(imd_score_mhclg AS DOUBLE)) as avg_imd_score,
+          MIN(CAST(imd_score_mhclg AS DOUBLE)) as min_imd_score,
+          MAX(CAST(imd_score_mhclg AS DOUBLE)) as max_imd_score,
+          AVG(CAST(imd_decile_mhclg AS DOUBLE)) as avg_imd_decile,
+          MIN(CAST(imd_decile_mhclg AS DOUBLE)) as min_imd_decile,
+          MAX(CAST(imd_decile_mhclg AS DOUBLE)) as max_imd_decile,
+          AVG(CAST(hh_caravail_ts045 AS DOUBLE)) as avg_car_availability,
+          MIN(CAST(hh_caravail_ts045 AS DOUBLE)) as min_car_availability,
+          MAX(CAST(hh_caravail_ts045 AS DOUBLE)) as max_car_availability,
+          SUM(CAST(pop_growth AS DOUBLE)) as total_growth_pop,
+          MIN(CAST(pop_growth AS DOUBLE)) as min_growth_pop,
+          MAX(CAST(pop_growth AS DOUBLE)) as max_growth_pop
+        FROM grid_csv_combined 
+        WHERE OriginId_tracc IN (${originIds})
+          AND pop IS NOT NULL AND pop != ''
+          AND CAST(pop AS DOUBLE) > 0
+      `;
+      
+      const result = await db.query(query);
+      const stats = result.toArray()[0];
+      
+      if (stats && stats.count > 0) {
+        console.log(`DuckDB calculated statistics for ${stats.count} features in high performance mode`);
+        
+        return {
+          totalPopulation: Math.round(stats.total_population || 0),
+          minPopulation: Math.round(stats.min_population || 0),
+          maxPopulation: Math.round(stats.max_population || 0),
+          avgIMDScore: parseFloat((stats.avg_imd_score || 0).toFixed(2)),
+          minIMDScore: parseFloat((stats.min_imd_score || 0).toFixed(2)),
+          maxIMDScore: parseFloat((stats.max_imd_score || 0).toFixed(2)),
+          avgIMDDecile: parseFloat((stats.avg_imd_decile || 0).toFixed(1)),
+          minIMDDecile: Math.round(stats.min_imd_decile || 0),
+          maxIMDDecile: Math.round(stats.max_imd_decile || 0),
+          avgCarAvailability: parseFloat((stats.avg_car_availability || 0).toFixed(4)),
+          minCarAvailability: parseFloat((stats.min_car_availability || 0).toFixed(4)),
+          maxCarAvailability: parseFloat((stats.max_car_availability || 0).toFixed(4)),
+          totalGrowthPop: Math.round(stats.total_growth_pop || 0),
+          minGrowthPop: Math.round(stats.min_growth_pop || 0),
+          maxGrowthPop: Math.round(stats.max_growth_pop || 0)
+        };
+      } else {
+        console.log('DuckDB returned no results, falling back to JavaScript');
+      }
+      
+    } catch (error) {
+      console.warn('DuckDB statistics calculation failed, falling back to JavaScript:', error);
+    }
+  }
+  
+  // Fallback to JavaScript-based calculation
+  console.log('Using JavaScript for statistics calculation...');
+  return await calculateBaseStatistics(features);
 }
 
 function displayEmptyStatistics() {
