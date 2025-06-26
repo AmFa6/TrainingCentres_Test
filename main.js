@@ -23,7 +23,7 @@ let wardBoundariesLayer;
 let AmenitiesCatchmentLayer = null;
 let gridTimeMap = {};
 let csvDataCache = {};
-let fullCsvData = null; // Store full CSV data for journey time popup
+let fullCsvData = null;
 let amenitiesLayerGroup = L.featureGroup();
 let selectedAmenitiesAmenities = [];
 let selectingFromMap = false;
@@ -1037,14 +1037,12 @@ function getJourneyTimeData(originId) {
     return [];
   }
   
-  // Convert originId to string and number for comparison
   const originIdStr = String(originId);
   const originIdNum = Number(originId);
   
   console.log('Searching for origin:', { originIdStr, originIdNum });
   console.log('Sample CSV rows:', fullCsvData.slice(0, 3));
   
-  // Get currently filtered training centers to limit destinations
   const filteredTrainingCentres = filterTrainingCentres();
   const allowedDestinationIds = new Set(
     filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
@@ -1052,7 +1050,6 @@ function getJourneyTimeData(originId) {
   
   console.log('Allowed destination IDs based on current filters:', Array.from(allowedDestinationIds).slice(0, 5));
   
-  // Filter CSV data for this specific origin - handle both string and number comparisons
   const originRecords = fullCsvData.filter(row => {
     if (!row.origin || !row.destination || !row.totaltime) {
       return false;
@@ -1061,7 +1058,6 @@ function getJourneyTimeData(originId) {
     const rowOrigin = String(row.origin).trim();
     const isOriginMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
     
-    // Check if destination is in the filtered training centers
     const destinationId = String(row.destination);
     const isDestinationAllowed = allowedDestinationIds.has(destinationId);
     
@@ -1074,21 +1070,17 @@ function getJourneyTimeData(originId) {
   console.log(`Found ${originRecords.length} records for origin ${originId} with current filtering`);
   
   if (originRecords.length === 0) {
-    // Debug: Show what origins are actually in the CSV
     const availableOrigins = [...new Set(fullCsvData.map(row => row.origin))].slice(0, 10);
     console.log('Sample available origins in CSV:', availableOrigins);
     console.log('Number of allowed destinations:', allowedDestinationIds.size);
     return [];
   }
   
-  // Sort by total time (closest first)
   originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
   
-  // Match destinations with training centers to get postcodes
   const journeyTimeData = originRecords.map(record => {
     let destinationPostcode = 'Unknown';
     
-    // Find matching training center by destination ID (match destination with fid)
     if (amenityLayers['TrainingCentres']) {
       const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
         const featureFid = String(feature.properties.fid);
@@ -1099,15 +1091,21 @@ function getJourneyTimeData(originId) {
       if (matchingCenter && matchingCenter.properties.postcode) {
         destinationPostcode = matchingCenter.properties.postcode;
       } else {
-        // Debug: log the destination we're looking for
         console.log('No matching center found for destination:', record.destination);
       }
+    }
+    
+    let services = record.services || '';
+    if (!services || services.trim() === '' || services.toLowerCase() === 'n/a') {
+      services = 'walking only';
+    } else {
+      services = services.replace(/_/g, ' + ');
     }
     
     return {
       destination: destinationPostcode,
       journeyTime: Math.round(parseFloat(record.totaltime)),
-      services: record.services || 'N/A'
+      services: services
     };
   });
   
@@ -1146,7 +1144,6 @@ function createJourneyTimeContent(journeyTimeData) {
         </div>
   `;
   
-  // Add navigation buttons if there are multiple records
   if (totalRecords > 1) {
     html += `
       <div style="display: flex; justify-content: space-between; margin-top: 8px;">
@@ -1164,7 +1161,6 @@ function createJourneyTimeContent(journeyTimeData) {
   
   html += `</div></div>`;
   
-  // Store journey time data globally for navigation
   window.currentJourneyTimeData = journeyTimeData;
   window.currentJourneyTimeIndex = 0;
   
@@ -1186,7 +1182,6 @@ function navigateJourneyTime(direction) {
   const totalRecords = window.currentJourneyTimeData.length;
   let newIndex = window.currentJourneyTimeIndex + direction;
   
-  // Ensure index stays within bounds
   if (newIndex < 0) newIndex = 0;
   if (newIndex >= totalRecords) newIndex = totalRecords - 1;
   
@@ -1195,7 +1190,6 @@ function navigateJourneyTime(direction) {
   
   console.log('Updating to record:', record, 'at index:', newIndex);
   
-  // Update the display
   const currentIndexEl = document.getElementById('journey-current-index');
   const destinationEl = document.getElementById('journey-destination');
   const timeEl = document.getElementById('journey-time');
@@ -1206,7 +1200,6 @@ function navigateJourneyTime(direction) {
   if (timeEl) timeEl.textContent = record.journeyTime;
   if (servicesEl) servicesEl.textContent = record.services;
   
-  // Update button states
   const prevBtn = document.getElementById('journey-prev-btn');
   const nextBtn = document.getElementById('journey-next-btn');
   
@@ -1345,10 +1338,8 @@ map.on('click', function (e) {
           if (properties.OriginId_tracc) {
             console.log('Requesting journey time data for:', properties.OriginId_tracc);
             
-            // If fullCsvData is not loaded, try to use it or load it
             if (!fullCsvData) {
               console.log('CSV data not loaded yet, attempting to load...');
-              // Try to get it from the cache first
               const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
               
               fetch(csvPath)
@@ -1363,7 +1354,6 @@ map.on('click', function (e) {
                   if (journeyTimeData.length > 0) {
                     popupContent.JourneyTime = journeyTimeData;
                     
-                    // Update the popup content with journey time data
                     const content = `
                       <div>
                         <h4 style="text-decoration: underline;">Geographies</h4>
@@ -2017,7 +2007,6 @@ function setupDrawingTools() {
   const drawingNameInput = document.getElementById('drawingNameInput');
   const saveDrawingContainer = document.getElementById('save-drawing-container');
   
-  // Set up attribute editor modal event listeners
   const addAttributeFieldBtn = document.getElementById('add-attribute-field');
   const saveAttributesBtn = document.getElementById('save-attributes');
   const cancelAttributesBtn = document.getElementById('cancel-attributes');
@@ -4274,7 +4263,7 @@ function updateAmenitiesCatchmentLayer() {
     fetch(csvPath)
         .then(response => response.text())        .then(csvText => {
             const csvData = Papa.parse(csvText, { header: true }).data;
-            fullCsvData = csvData; // Store full CSV data globally
+            fullCsvData = csvData;
             
             if (csvData.length === 0) {
                 updateAmenitiesCatchmentLayer.isRunning = false;
