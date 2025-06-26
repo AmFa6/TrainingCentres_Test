@@ -945,9 +945,10 @@ function loadGridData() {
     
     // Try multiple CDN sources for Apache Arrow
     const arrowSources = [
-      'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/umd/Arrow.js',
-      'https://unpkg.com/apache-arrow@14.0.1/dist/umd/Arrow.js',
-      'https://cdn.jsdelivr.net/npm/apache-arrow@13.0.0/dist/umd/Arrow.js'
+      'https://ga.jspm.io/npm:apache-arrow@14.0.1/dist/umd/Arrow.js',
+      'https://unpkg.com/apache-arrow@13.0.0/dist/umd/Arrow.js',
+      'https://unpkg.com/apache-arrow@12.0.1/dist/umd/Arrow.js',
+      'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/umd/Arrow.js'
     ];
     
     let sourceIndex = 0;
