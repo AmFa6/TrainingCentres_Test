@@ -18,9 +18,16 @@ class ParquetProcessor {
 
     try {
       console.log(`Loading Parquet file: ${url}`);
+      
+      // Check if Arrow is available
+      const Arrow = window.Arrow || window.apache_arrow;
+      if (!Arrow) {
+        throw new Error('Apache Arrow library not loaded. Please check the script tag.');
+      }
+      
       const response = await fetch(url);
       const arrayBuffer = await response.arrayBuffer();
-      const table = arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+      const table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
       
       this.cache.set(url, table);
       return table;
@@ -31,14 +38,29 @@ class ParquetProcessor {
   }
 
   filterAndAggregate(table, filters = {}) {
+    const Arrow = window.Arrow || window.apache_arrow;
+    if (!Arrow) {
+      throw new Error('Apache Arrow library not available');
+    }
+    
     let filteredData = table;
     
     Object.entries(filters).forEach(([column, condition]) => {
       if (condition.min !== undefined || condition.max !== undefined) {
-        filteredData = filteredData.filter(arrow.predicate.and(
-          condition.min !== undefined ? arrow.predicate.gteq(column, condition.min) : null,
-          condition.max !== undefined ? arrow.predicate.lteq(column, condition.max) : null
-        ).filter(Boolean));
+        const predicates = [];
+        if (condition.min !== undefined) {
+          predicates.push(Arrow.predicate.gteq(column, condition.min));
+        }
+        if (condition.max !== undefined) {
+          predicates.push(Arrow.predicate.lteq(column, condition.max));
+        }
+        
+        if (predicates.length > 0) {
+          const combinedPredicate = predicates.length === 1 ? 
+            predicates[0] : 
+            Arrow.predicate.and(...predicates);
+          filteredData = filteredData.filter(combinedPredicate);
+        }
       }
     });
 
@@ -50,19 +72,70 @@ class ParquetProcessor {
   }
 
   calculateStats(table) {
+    const Arrow = window.Arrow || window.apache_arrow;
+    if (!Arrow) {
+      throw new Error('Apache Arrow library not available');
+    }
+    
     const stats = {};
     table.schema.fields.forEach(field => {
-      if (field.type.typeId === arrow.Type.Float || field.type.typeId === arrow.Type.Int) {
+      if (field.type.typeId === Arrow.Type.Float || 
+          field.type.typeId === Arrow.Type.Int32 || 
+          field.type.typeId === Arrow.Type.Int64) {
         const column = table.getChild(field.name);
-        stats[field.name] = {
-          min: arrow.util.min(column),
-          max: arrow.util.max(column),
-          sum: arrow.util.sum(column),
-          mean: arrow.util.mean(column)
-        };
+        try {
+          stats[field.name] = {
+            min: this.calculateMin(column),
+            max: this.calculateMax(column),
+            sum: this.calculateSum(column),
+            mean: this.calculateMean(column)
+          };
+        } catch (e) {
+          console.warn(`Could not calculate stats for column ${field.name}:`, e);
+          stats[field.name] = { min: 0, max: 0, sum: 0, mean: 0 };
+        }
       }
     });
     return stats;
+  }
+
+  // Helper methods for calculations since arrow.util might not be available
+  calculateMin(column) {
+    let min = Infinity;
+    for (let i = 0; i < column.length; i++) {
+      const val = column.get(i);
+      if (val !== null && val !== undefined && val < min) {
+        min = val;
+      }
+    }
+    return min === Infinity ? 0 : min;
+  }
+
+  calculateMax(column) {
+    let max = -Infinity;
+    for (let i = 0; i < column.length; i++) {
+      const val = column.get(i);
+      if (val !== null && val !== undefined && val > max) {
+        max = val;
+      }
+    }
+    return max === -Infinity ? 0 : max;
+  }
+
+  calculateSum(column) {
+    let sum = 0;
+    for (let i = 0; i < column.length; i++) {
+      const val = column.get(i);
+      if (val !== null && val !== undefined) {
+        sum += val;
+      }
+    }
+    return sum;
+  }
+
+  calculateMean(column) {
+    const sum = this.calculateSum(column);
+    return sum / column.length;
   }
 }
 
@@ -796,6 +869,13 @@ function loadBackgroundData() {
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
+  // Check if Arrow is available, fallback to alternative if not
+  const Arrow = window.Arrow || window.apache_arrow;
+  if (!Arrow) {
+    console.warn('Apache Arrow not available, falling back to alternative data loading method');
+    return;
+  }
+  
   // Load single parquet file instead of multiple files
   parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/grid_combined.parquet')
     .then(table => {
@@ -821,6 +901,7 @@ function loadGridData() {
       console.error("Error loading grid data:", error);
       hideBackgroundLoadingIndicator();
       showErrorNotification("Error loading grid data. Some features may be limited.");
+      
     });
 }
 
