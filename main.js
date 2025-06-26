@@ -11,6 +11,10 @@ class ParquetProcessor {
     this.cache = new Map();
   }
 
+  getArrowLibrary() {
+    return window.Arrow || window.apache_arrow || window.Apache;
+  }
+
   async loadParquetFile(url) {
     if (this.cache.has(url)) {
       return this.cache.get(url);
@@ -19,7 +23,7 @@ class ParquetProcessor {
     try {
       console.log(`Loading Parquet file: ${url}`);
       
-      const Arrow = window.Arrow || window.apache_arrow || window.Apache;
+      const Arrow = this.getArrowLibrary();
       if (!Arrow) {
         throw new Error('Apache Arrow library not loaded. Please check the script tag.');
       }
@@ -30,7 +34,20 @@ class ParquetProcessor {
       }
       
       const arrayBuffer = await response.arrayBuffer();
-      const table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+      
+      // Try different methods to parse the parquet file
+      let table;
+      try {
+        table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
+      } catch (e) {
+        console.log('tableFromIPC failed, trying readParquet...');
+        try {
+          table = Arrow.readParquet(arrayBuffer);
+        } catch (e2) {
+          console.log('readParquet failed, trying Table.from...');
+          table = Arrow.Table.from(arrayBuffer);
+        }
+      }
       
       this.cache.set(url, table);
       return table;
@@ -41,7 +58,7 @@ class ParquetProcessor {
   }
 
   filterAndAggregate(table, filters = {}) {
-    const Arrow = window.Arrow || window.apache_arrow;
+    const Arrow = this.getArrowLibrary();
     if (!Arrow) {
       throw new Error('Apache Arrow library not available');
     }
@@ -75,7 +92,7 @@ class ParquetProcessor {
   }
 
   calculateStats(table) {
-    const Arrow = window.Arrow || window.apache_arrow;
+    const Arrow = this.getArrowLibrary();
     if (!Arrow) {
       throw new Error('Apache Arrow library not available');
     }
@@ -872,9 +889,27 @@ function loadBackgroundData() {
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
-  const Arrow = window.Arrow || window.apache_arrow;
+  // Try different ways to access Apache Arrow
+  const Arrow = window.Arrow || window.apache_arrow || window.Apache;
+  
   if (!Arrow) {
-    console.warn('Apache Arrow not available');
+    console.warn('Apache Arrow not available. Trying to load it...');
+    
+    // Try to dynamically load Apache Arrow if not available
+    const script = document.createElement('script');
+    script.src = 'https://cdn.jsdelivr.net/npm/apache-arrow@14.0.1/dist/Arrow.es2015.min.js';
+    script.onload = function() {
+      console.log('Apache Arrow loaded dynamically');
+      setTimeout(() => {
+        loadGridData(); // Retry after loading
+      }, 100);
+    };
+    script.onerror = function() {
+      console.error('Failed to load Apache Arrow dynamically');
+      hideBackgroundLoadingIndicator();
+      showErrorNotification("Apache Arrow library could not be loaded. Grid data features will be limited.");
+    };
+    document.head.appendChild(script);
     return;
   }
   
@@ -903,7 +938,6 @@ function loadGridData() {
       console.error("Error loading grid data:", error);
       hideBackgroundLoadingIndicator();
       showErrorNotification("Error loading grid data. Some features may be limited.");
-      
     });
 }
 
