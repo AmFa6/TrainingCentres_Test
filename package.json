@@ -1,0 +1,45 @@
+{
+  "name": "training-centres-app",
+  "version": "1.0.0",
+  "description": "Interactive mapping application for training centres in West of England Combined Authority area",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "dev": "python -m http.server 8000",
+    "build": "echo 'No build step required for static web app'",
+    "test": "echo 'No tests specified'"
+  },
+  "keywords": [
+    "mapping",
+    "training-centres",
+    "duckdb",
+    "leaflet",
+    "geospatial",
+    "west-of-england"
+  ],
+  "author": "West of England Combined Authority",
+  "license": "MIT",
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.0",
+    "apache-arrow": "^latest",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "local"
+  },
+  "bugs": {
+    "url": "local"
+  },
+  "homepage": ".",
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
+}
