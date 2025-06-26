@@ -19,13 +19,16 @@ class ParquetProcessor {
     try {
       console.log(`Loading Parquet file: ${url}`);
       
-      // Check if Arrow is available
-      const Arrow = window.Arrow || window.apache_arrow;
+      const Arrow = window.Arrow || window.apache_arrow || window.Apache;
       if (!Arrow) {
         throw new Error('Apache Arrow library not loaded. Please check the script tag.');
       }
       
       const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const arrayBuffer = await response.arrayBuffer();
       const table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
       
@@ -869,10 +872,9 @@ function loadBackgroundData() {
 function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
-  // Check if Arrow is available, fallback to alternative if not
   const Arrow = window.Arrow || window.apache_arrow;
   if (!Arrow) {
-    console.warn('Apache Arrow not available, falling back to alternative data loading method');
+    console.warn('Apache Arrow not available');
     return;
   }
   
