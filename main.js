@@ -1657,8 +1657,8 @@ function getTrainingCenterPopupContent(properties) {
   let content = `
     <div>
       <h4>Training Centre</h4>
-      <p><strong>Provider:</strong> ${locationString}</p> || 'Unknown Provider'}</p>
-      <p><strong>Aim Levels:</strong> `;
+      <strong>Provider:</strong> ${locationString}
+      <strong>Aim Levels:</strong> `;
   
   const aimLevels = [];
   if (properties.AimLevel_E === "1") aimLevels.push("E");
@@ -1668,9 +1668,10 @@ function getTrainingCenterPopupContent(properties) {
   if (properties.AimLevel_3 === "1") aimLevels.push("3");
   
   content += aimLevels.join(", ") || "None";
-  content += "</p>";
   
-  content += "<p><strong>Available Courses by Year:</strong></p>";
+  content += "<strong>Available Courses by Year:</strong>";
+  content += "</p>";
+
   content += "<table class='popup-table'><tr><th>Year</th><th>Digital</th><th>Engineering</th><th>Construction</th><th>Other</th></tr>";
   
   const years = ["2122", "2223", "2324", "2425"];
