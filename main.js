@@ -1009,28 +1009,29 @@ async function loadGridData() {
  */
 async function initializeDuckDB() {
   try {
-    // Load DuckDB-WASM if not already loaded
+    // Check if DuckDB-WASM is already loaded (should be pre-loaded in HTML)
     if (!window.duckdb) {
-      const duckdbScript = document.createElement('script');
-      duckdbScript.src = 'https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm@latest/dist/duckdb-browser-eh.js';
-      
-      await new Promise((resolve, reject) => {
-        duckdbScript.onload = resolve;
-        duckdbScript.onerror = reject;
-        document.head.appendChild(duckdbScript);
-      });
-      
-      // Wait for DuckDB to be available
-      await new Promise(resolve => setTimeout(resolve, 100));
+      throw new Error('DuckDB-WASM not available. Make sure it is loaded in the HTML file.');
     }
     
     // Initialize DuckDB instance if not already done
     if (!window.duckdbInstance) {
-      const JSDELIVR_BUNDLES = duckdb.getJsDelivrBundles();
-      const bundle = await duckdb.selectBundle(JSDELIVR_BUNDLES);
-      const worker = await duckdb.createWorker(bundle.mainWorker);
-      const logger = new duckdb.ConsoleLogger();
-      const db = new duckdb.AsyncDuckDB(logger, worker);
+      console.log('Initializing DuckDB-WASM instance...');
+      
+      // Check if required methods are available
+      if (!window.duckdb.getJsDelivrBundles) {
+        throw new Error('DuckDB-WASM getJsDelivrBundles method not available');
+      }
+      
+      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
+      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
+      
+      console.log('Creating DuckDB worker...');
+      const worker = await window.duckdb.createWorker(bundle.mainWorker);
+      const logger = new window.duckdb.ConsoleLogger();
+      const db = new window.duckdb.AsyncDuckDB(logger, worker);
+      
+      console.log('Instantiating DuckDB...');
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       
       window.duckdbInstance = db;
