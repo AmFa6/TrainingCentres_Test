@@ -87,72 +87,41 @@ let isUpdatingOpacityOutlineFields = false;
  * @returns {Promise} Promise that resolves when DuckDB is ready
  */
 async function initializeDuckDB() {
-  try {
-    console.log('Initializing DuckDB for high-performance data processing...');
-    
-    // Wait for DuckDB module to be loaded from the HTML module import
-    if (typeof window.duckdb === 'undefined') {
-      console.log('Waiting for DuckDB module to load...');
-      await new Promise((resolve, reject) => {
-        if (window.duckdbLoaded) {
-          resolve();
-        } else {
-          window.addEventListener('duckdbLoaded', resolve);
-          // Timeout after 10 seconds
-          setTimeout(() => reject(new Error('DuckDB module load timeout')), 10000);
-        }
-      });
+  console.log('Checking DuckDB availability...');
+  
+  return new Promise((resolve) => {
+    // Check if DuckDB is already loaded
+    if (window.isDuckDBReady && window.db) {
+      console.log('DuckDB already initialized');
+      resolve();
+      return;
     }
     
-    // Initialize DuckDB with modern approach
-    if (window.duckdb) {
-      console.log('Initializing DuckDB instance...');
-      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
-      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
-      
-      const worker_url = URL.createObjectURL(
-        new Blob([`importScripts("${bundle.mainWorker}");`], {type: 'text/javascript'})
-      );
-      
-      const worker = new Worker(worker_url);
-      const logger = new window.duckdb.ConsoleLogger();
-      db = new window.duckdb.AsyncDuckDB(logger, worker);
-      
-      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      URL.revokeObjectURL(worker_url);
-      
-      // Install and load spatial extension for geospatial operations
-      console.log('Loading DuckDB spatial extension...');
-      try {
-        await db.query("INSTALL spatial; LOAD spatial;");
-        console.log('DuckDB spatial extension loaded successfully');
-      } catch (spatialError) {
-        console.warn('Failed to load spatial extension, continuing without it:', spatialError);
+    // Listen for DuckDB ready event
+    const onDuckDBReady = () => {
+      if (window.isDuckDBReady && window.db) {
+        console.log('DuckDB ready event received');
+        isDuckDBReady = true;
+        db = window.db;
+        resolve();
+      } else {
+        console.log('DuckDB ready event received but not properly initialized');
+        resolve(); // Continue without DuckDB
       }
-      
-      // Install and load httpfs extension for remote file access
-      try {
-        await db.query("INSTALL httpfs; LOAD httpfs;");
-        console.log('DuckDB httpfs extension loaded successfully');
-      } catch (httpfsError) {
-        console.warn('Failed to load httpfs extension, continuing without it:', httpfsError);
-      }
-      
-      isDuckDBReady = true;
-      window.isDuckDBReady = true; // Update global reference
-      console.log('DuckDB initialized successfully');
-    } else {
-      throw new Error('DuckDB module not available');
-    }
+    };
     
-    return true;
-  } catch (error) {
-    console.error('Failed to initialize DuckDB:', error);
-    console.log('Falling back to JavaScript-based processing...');
-    isDuckDBReady = false;
-    window.isDuckDBReady = false; // Update global reference
-    return false;
-  }
+    // Set up event listener
+    window.addEventListener('duckdbReady', onDuckDBReady, { once: true });
+    
+    // Fallback timeout
+    setTimeout(() => {
+      if (!isDuckDBReady) {
+        console.log('DuckDB initialization timeout - continuing with JavaScript fallback');
+        window.removeEventListener('duckdbReady', onDuckDBReady);
+        resolve();
+      }
+    }, 10000); // 10 second timeout
+  });
 }
 
 /**
@@ -229,6 +198,29 @@ async function loadDataIntoDuckDB() {
   } catch (error) {
     console.error('Error loading data into DuckDB:', error);
     return false;
+  }
+}
+
+/**
+ * Updates the DuckDB performance indicator
+ * @param {boolean} isActive Whether DuckDB is actively being used
+ * @param {string} message Optional message to display
+ */
+function updateDuckDBStatus(isActive, message) {
+  const indicator = document.getElementById('duckdb-status');
+  if (indicator && isDuckDBReady) {
+    if (isActive) {
+      indicator.textContent = message || '⚡ DuckDB Processing...';
+      indicator.style.background = 'rgba(0, 128, 0, 0.9)';
+      indicator.style.display = 'block';
+      
+      // Auto-hide after 3 seconds
+      setTimeout(() => {
+        if (indicator.style.display === 'block') {
+          indicator.style.display = 'none';
+        }
+      }, 3000);
+    }
   }
 }
 
