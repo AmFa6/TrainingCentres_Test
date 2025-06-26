@@ -6,213 +6,6 @@ const baseLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/lig
 
 const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
 
-// Legacy ParquetProcessor class - now replaced by DuckDB-WASM
-// This class was used for Apache Arrow-based Parquet processing
-// It's kept here for reference but is no longer used
-class ParquetProcessor {
-  constructor() {
-    this.cache = new Map();
-  }
-
-  getArrowLibrary() {
-    return window.Arrow || window.apache_arrow || window.Apache;
-  }
-
-  async loadParquetFile(url) {
-    if (this.cache.has(url)) {
-      return this.cache.get(url);
-    }
-
-    try {
-      console.log(`Loading Parquet file: ${url}`);
-      
-      const Arrow = this.getArrowLibrary();
-      if (!Arrow) {
-        throw new Error('Apache Arrow library not loaded. Please check the script tag.');
-      }
-      
-      console.log('Arrow methods available:', {
-        tableFromIPC: !!Arrow.tableFromIPC,
-        readParquet: !!Arrow.readParquet,
-        Table: !!Arrow.Table,
-        'Table.from': !!(Arrow.Table && Arrow.Table.from)
-      });
-      
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
-      const arrayBuffer = await response.arrayBuffer();
-      console.log(`Loaded ${arrayBuffer.byteLength} bytes from ${url}`);
-      
-      // Try different methods to parse the parquet file
-      let table;
-      let parseMethod = 'unknown';
-      
-      try {
-        // Method 1: Try tableFromIPC first
-        if (Arrow.tableFromIPC) {
-          table = Arrow.tableFromIPC(new Uint8Array(arrayBuffer));
-          parseMethod = 'tableFromIPC';
-        } else {
-          throw new Error('tableFromIPC not available');
-        }
-      } catch (e) {
-        console.log('tableFromIPC failed:', e.message);
-        try {
-          // Method 2: Try readParquet
-          if (Arrow.readParquet) {
-            table = Arrow.readParquet(arrayBuffer);
-            parseMethod = 'readParquet';
-          } else {
-            throw new Error('readParquet not available');
-          }
-        } catch (e2) {
-          console.log('readParquet failed:', e2.message);
-          try {
-            // Method 3: Try Table.from
-            if (Arrow.Table && Arrow.Table.from) {
-              table = Arrow.Table.from(arrayBuffer);
-              parseMethod = 'Table.from';
-            } else {
-              throw new Error('Table.from not available');
-            }
-          } catch (e3) {
-            console.log('Table.from failed:', e3.message);
-            // Method 4: Try with RecordBatchReader
-            try {
-              if (Arrow.RecordBatchReader) {
-                const reader = Arrow.RecordBatchReader.from(arrayBuffer);
-                table = reader.readAll();
-                parseMethod = 'RecordBatchReader';
-              } else {
-                throw new Error('RecordBatchReader not available');
-              }
-            } catch (e4) {
-              console.error('All parsing methods failed');
-              throw new Error(`Failed to parse parquet file with all available methods. Last error: ${e4.message}`);
-            }
-          }
-        }
-      }
-      
-      console.log(`Successfully parsed parquet file using ${parseMethod}`);
-      console.log(`Table has ${table.numRows} rows and ${table.numCols} columns`);
-      
-      this.cache.set(url, table);
-      return table;
-    } catch (error) {
-      console.error(`Failed to load Parquet file ${url}:`, error);
-      throw error;
-    }
-  }
-
-  filterAndAggregate(table, filters = {}) {
-    const Arrow = this.getArrowLibrary();
-    if (!Arrow) {
-      throw new Error('Apache Arrow library not available');
-    }
-    
-    let filteredData = table;
-    
-    Object.entries(filters).forEach(([column, condition]) => {
-      if (condition.min !== undefined || condition.max !== undefined) {
-        const predicates = [];
-        if (condition.min !== undefined) {
-          predicates.push(Arrow.predicate.gteq(column, condition.min));
-        }
-        if (condition.max !== undefined) {
-          predicates.push(Arrow.predicate.lteq(column, condition.max));
-        }
-        
-        if (predicates.length > 0) {
-          const combinedPredicate = predicates.length === 1 ? 
-            predicates[0] : 
-            Arrow.predicate.and(...predicates);
-          filteredData = filteredData.filter(combinedPredicate);
-        }
-      }
-    });
-
-    return {
-      count: filteredData.numRows,
-      data: filteredData.toArray(),
-      stats: this.calculateStats(filteredData)
-    };
-  }
-
-  calculateStats(table) {
-    const Arrow = this.getArrowLibrary();
-    if (!Arrow) {
-      throw new Error('Apache Arrow library not available');
-    }
-    
-    const stats = {};
-    table.schema.fields.forEach(field => {
-      if (field.type.typeId === Arrow.Type.Float || 
-          field.type.typeId === Arrow.Type.Int32 || 
-          field.type.typeId === Arrow.Type.Int64) {
-        const column = table.getChild(field.name);
-        try {
-          stats[field.name] = {
-            min: this.calculateMin(column),
-            max: this.calculateMax(column),
-            sum: this.calculateSum(column),
-            mean: this.calculateMean(column)
-          };
-        } catch (e) {
-          console.warn(`Could not calculate stats for column ${field.name}:`, e);
-          stats[field.name] = { min: 0, max: 0, sum: 0, mean: 0 };
-        }
-      }
-    });
-    return stats;
-  }
-
-  // Helper methods for calculations since arrow.util might not be available
-  calculateMin(column) {
-    let min = Infinity;
-    for (let i = 0; i < column.length; i++) {
-      const val = column.get(i);
-      if (val !== null && val !== undefined && val < min) {
-        min = val;
-      }
-    }
-    return min === Infinity ? 0 : min;
-  }
-
-  calculateMax(column) {
-    let max = -Infinity;
-    for (let i = 0; i < column.length; i++) {
-      const val = column.get(i);
-      if (val !== null && val !== undefined && val > max) {
-        max = val;
-      }
-    }
-    return max === -Infinity ? 0 : max;
-  }
-
-  calculateSum(column) {
-    let sum = 0;
-    for (let i = 0; i < column.length; i++) {
-      const val = column.get(i);
-      if (val !== null && val !== undefined) {
-        sum += val;
-      }
-    }
-    return sum;
-  }
-
-  calculateMean(column) {
-    const sum = this.calculateSum(column);
-    return sum / column.length;
-  }
-}
-
-// Legacy ParquetProcessor instantiation - no longer needed with DuckDB-WASM
-// const parquetProcessor = new ParquetProcessor();
-
 let gridStatistics = {
   pop: { min: Infinity, max: -Infinity },
   imd_score_mhclg: { min: Infinity, max: -Infinity },
@@ -227,7 +20,6 @@ let isInverseAmenitiesOpacity = false;
 let isInverseAmenitiesOutline = false;
 let uaBoundariesLayer;
 let wardBoundariesLayer;
-// Lookup maps for boundary code to name mapping
 let ladCodeToNameMap = {};
 let wardCodeToNameMap = {};
 let AmenitiesCatchmentLayer = null;
@@ -2161,17 +1953,25 @@ function setupSubjectAndAimLevelCheckboxes() {
 }
 
 function filterTrainingCentres() {
-  console.log('Filtering training centres...');
-  if (!amenityLayers['TrainingCentres']) return [];
+  console.log('=== FILTERING TRAINING CENTRES ===');
+  if (!amenityLayers['TrainingCentres']) {
+    console.log('No training centres data available');
+    return [];
+  }
+  
+  const totalTrainingCentres = amenityLayers['TrainingCentres'].features.length;
+  console.log('Total training centres before filtering:', totalTrainingCentres);
   
   const selectedYear = AmenitiesYear.value;
   const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
+  console.log('Selected year:', selectedYear, '| Year prefix:', yearPrefix);
   
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
   const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
   
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
   const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
+  console.log('Subject filter - All selected:', isAllSubjectsSelected, '| Specific subjects:', selectedSubjects);
   
   const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
   const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
@@ -2179,6 +1979,11 @@ function filterTrainingCentres() {
   const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
   const selectedAimLevels = isAllAimLevelsSelected ? [] : 
     Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
+  console.log('Aim level filter - All selected:', isAllAimLevelsSelected, '| Specific levels:', selectedAimLevels);
+  
+  let filteredCount = 0;
+  let excludedByAimLevel = 0;
+  let excludedBySubjectYear = 0;
   
   const filteredFeatures = amenityLayers['TrainingCentres'].features.filter(feature => {
     const props = feature.properties;
@@ -2186,33 +1991,70 @@ function filterTrainingCentres() {
     const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 || 
       selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
     
-    if (!hasSelectedAimLevel) return false;
+    if (!hasSelectedAimLevel) {
+      excludedByAimLevel++;
+      return false;
+    }
     
     if (!yearPrefix) {
-      if (isAllSubjectsSelected || selectedSubjects.length === 0) return true;
+      if (isAllSubjectsSelected || selectedSubjects.length === 0) {
+        filteredCount++;
+        return true;
+      }
       
       const years = ["2122", "2223", "2324", "2425"];
-      return years.some(year => {
+      const hasMatchingSubject = years.some(year => {
         return selectedSubjects.some(subject => {
           const columnName = `${year}_${subject}`;
           return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
         });
       });
+      
+      if (hasMatchingSubject) {
+        filteredCount++;
+        return true;
+      } else {
+        excludedBySubjectYear++;
+        return false;
+      }
     }
     
     if (isAllSubjectsSelected) {
       const subjectsList = ["construction", "digital", "engineering", 'other'];
-      return subjectsList.some(subject => {
+      const hasAnySubject = subjectsList.some(subject => {
         const columnName = `${yearPrefix}_${subject}`;
         return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
       });
+      
+      if (hasAnySubject) {
+        filteredCount++;
+        return true;
+      } else {
+        excludedBySubjectYear++;
+        return false;
+      }
     }
     
-    return selectedSubjects.some(subject => {
+    const hasSelectedSubject = selectedSubjects.some(subject => {
       const columnName = `${yearPrefix}_${subject}`;
       return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
     });
+    
+    if (hasSelectedSubject) {
+      filteredCount++;
+      return true;
+    } else {
+      excludedBySubjectYear++;
+      return false;
+    }
   });
+  
+  console.log('Training centre filtering results:');
+  console.log('  - Total centres:', totalTrainingCentres);
+  console.log('  - Passed all filters:', filteredCount);
+  console.log('  - Excluded by aim level:', excludedByAimLevel);
+  console.log('  - Excluded by subject/year:', excludedBySubjectYear);
+  console.log('=== END TRAINING CENTRE FILTERING ===');
   
   return {
     type: "FeatureCollection",
@@ -4833,7 +4675,7 @@ function drawSelectedAmenities() {
  * Update the journey time data loading to work with parquet data
  */
 function updateAmenitiesCatchmentLayer() {
-    console.log("updateAmenitiesCatchmentLayer called");
+    console.log("=== updateAmenitiesCatchmentLayer called ===");
     
     if (isUpdatingCatchmentLayer) {
         console.log("Already updating catchment layer, skipping duplicate call");
@@ -4843,6 +4685,7 @@ function updateAmenitiesCatchmentLayer() {
     isUpdatingCatchmentLayer = true;
 
     if (!initialLoadComplete || !grid) {
+        console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
         isUpdatingCatchmentLayer = false;
         return;
     }
@@ -4851,29 +4694,36 @@ function updateAmenitiesCatchmentLayer() {
         .classList.contains("collapsed") === false;
     
     if (!amenitiesPanelOpen) {
+        console.log("Amenities panel not open, skipping update");
         isUpdatingCatchmentLayer = false;
         return;
     }
 
     const selectedYear = AmenitiesYear.value;
+    console.log("Selected year:", selectedYear);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
     const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
+    console.log("Subject selection:", {isAllSubjectsSelected, selectedSubjects, totalSubjectCheckboxes: subjectCheckboxes.length});
     
     const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
     const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
     const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
+    console.log("Aim level selection:", {isAllAimLevelsSelected, selectedAimLevels, totalAimLevelCheckboxes: aimLevelCheckboxes.length});
     
     const filteredTrainingCentres = filterTrainingCentres();
+    console.log("Filtered training centres count:", filteredTrainingCentres.features.length);
     
     const filteredTrainingCenterIds = filteredTrainingCentres.features
         .map(feature => feature.properties.DestinationId_tracc)
         .filter(id => id !== undefined);
+    console.log("Training center IDs:", filteredTrainingCenterIds);
         
     if (!selectedYear || filteredTrainingCenterIds.length === 0) {
+        console.log("No year selected or no training centers found, clearing layer");
         if (AmenitiesCatchmentLayer) {
             map.removeLayer(AmenitiesCatchmentLayer);
             AmenitiesCatchmentLayer = null;
@@ -4900,16 +4750,29 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+            console.log("CSV destination IDs count:", csvDestinationIds.size);
             
             const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
+            console.log("Matching IDs between filtered training centres and CSV:", matchingIds);
             
             if (matchingIds.length === 0) {
+                console.log("No matching IDs found, clearing amenities layer");
+                if (AmenitiesCatchmentLayer) {
+                    map.removeLayer(AmenitiesCatchmentLayer);
+                    AmenitiesCatchmentLayer = null;
+                }
+                drawSelectedAmenities([]);
+                updateLegend();
+                updateFilterDropdown();
+                updateFilterValues();
+                updateSummaryStatistics([]);
                 isUpdatingCatchmentLayer = false;
                 return;
             }
             
             const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
             const eligibleDestinations = new Set();
+            console.log("Processing training centres for eligibility with year prefix:", yearPrefix);
             
             if (amenityLayers['TrainingCentres']) {
                 amenityLayers['TrainingCentres'].features.forEach(feature => {
@@ -4946,9 +4809,18 @@ function updateAmenitiesCatchmentLayer() {
                     
                     if (hasSelectedSubject) {
                         eligibleDestinations.add(destinationId);
+                        console.log("Added eligible destination:", destinationId, props.name || 'Unnamed');
+                    } else {
+                        console.log("Training centre excluded by subject/year filter:", destinationId, props.name || 'Unnamed');
                     }
                 });
             }
+            
+            console.log("Final eligible destinations count:", eligibleDestinations.size);
+            console.log("Eligible destination IDs:", Array.from(eligibleDestinations));
+            
+            // Reset gridTimeMap before processing
+            gridTimeMap = {};
             
             csvData.forEach(row => {
                 const originId = row.origin;
@@ -4966,6 +4838,9 @@ function updateAmenitiesCatchmentLayer() {
                 }
             });
             
+            console.log("Grid time map entries after CSV processing:", Object.keys(gridTimeMap).length);
+            console.log("Sample grid time entries:", Object.keys(gridTimeMap).slice(0, 10).map(k => `${k}: ${gridTimeMap[k]}`));
+            
             grid.features.forEach(feature => {
                 const originId = feature.properties.OriginId_tracc;
                 if (gridTimeMap[originId] === undefined) {
@@ -4979,10 +4854,13 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             if (needToCreateNewLayer) {
-                console.log("Creating new AmenitiesCatchmentLayer with", grid.features.length, "features");
+                console.log("=== CREATING NEW AMENITIES CATCHMENT LAYER ===");
+                console.log("Grid features count:", grid.features.length);
+                console.log("GridTimeMap entries:", Object.keys(gridTimeMap).length);
                 console.log("Sample gridTimeMap entries:", Object.keys(gridTimeMap).slice(0, 5).map(k => `${k}: ${gridTimeMap[k]}`));
                 
                 if (AmenitiesCatchmentLayer) {
+                    console.log("Removing existing AmenitiesCatchmentLayer");
                     map.removeLayer(AmenitiesCatchmentLayer);
                 }
                 
@@ -5039,6 +4917,17 @@ function updateAmenitiesCatchmentLayer() {
                   applyAmenitiesCatchmentLayerStyling();
                   updateSummaryStatistics(getCurrentFeatures());
               }
+              
+              console.log("=== AMENITIES CATCHMENT LAYER UPDATE COMPLETE ===");
+              console.log("Final eligible destinations:", eligibleDestinations.size);
+              console.log("Final grid time map entries:", Object.keys(gridTimeMap).length);
+              console.log("Amenities layer features:", AmenitiesCatchmentLayer ? AmenitiesCatchmentLayer.getLayers().length : 0);
+              console.log("Layer successfully reflects training centre filtering based on:");
+              console.log("  - Year:", selectedYear);
+              console.log("  - Subjects:", isAllSubjectsSelected ? 'All' : selectedSubjects);
+              console.log("  - Aim levels:", isAllAimLevelsSelected ? 'All' : selectedAimLevels);
+              console.log("=== END AMENITIES CATCHMENT LAYER UPDATE ===");
+              
               isUpdatingCatchmentLayer = false;
         })
         .catch(error => {
@@ -5625,13 +5514,24 @@ function updateFilterValues(source = 'filter') {
 }
 
 async function updateSummaryStatistics(features, source = 'filter') {
-  if (isCalculatingStats) return;
+  if (isCalculatingStats) {
+    console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
+    return;
+  }
   isCalculatingStats = true;
   
-  console.log('updateSummaryStatistics called from:', source);  
+  console.log('=== updateSummaryStatistics Debug ===');
+  console.log('Called from:', source);
+  console.log('Input features count:', features ? features.length : 'null/undefined');
+  console.log('Grid available:', !!grid);
+  console.log('Grid features count:', grid ? grid.features.length : 'N/A');
+  console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
+  console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
+  console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
     
   try {
     if (!grid && (!features || features.length === 0)) {
+      console.log('No grid and no features, displaying empty statistics');
       displayEmptyStatistics();
       //hideLoadingOverlay();
       return;
@@ -5642,28 +5542,40 @@ async function updateSummaryStatistics(features, source = 'filter') {
       const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
         .map(checkbox => checkbox.value);
       
+      console.log('Selected filter values:', selectedValues);
+      
       if (selectedValues.length === 0) {
+        console.log('No filter values selected, displaying empty statistics');
         displayEmptyStatistics();
         //hideLoadingOverlay();
         return;
       }
     }
     
+    console.log('Applying filters to features...');
     const filteredFeatures = applyFilters(features);
+    console.log('Filtered features count:', filteredFeatures ? filteredFeatures.length : 'null/undefined');
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
+      console.log('No features after filtering, displaying empty statistics');
       displayEmptyStatistics();
       //hideLoadingOverlay();
       return;
     }
 
+    console.log('Calculating base statistics...');
     const baseStats = await calculateBaseStatistics(filteredFeatures);
+    console.log('Base stats calculated:', baseStats);
     
     if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+      console.log('Calculating time statistics...');
       const timeStats = calculateTimeStatistics(filteredFeatures);
+      console.log('Time stats calculated:', timeStats);
       const stats = {...baseStats, ...timeStats};
+      console.log('Combined stats:', stats);
       updateStatisticsUI(stats);
     } else {
+      console.log('Using base stats only');
       updateStatisticsUI(baseStats);
     }
     //hideLoadingOverlay();
@@ -5673,6 +5585,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
     //hideLoadingOverlay();
   } finally {
     isCalculatingStats = false;
+    console.log('=== updateSummaryStatistics completed ===');
   }
 }
 
@@ -5693,13 +5606,17 @@ function displayEmptyStatistics() {
 }
 
 function applyFilters(features) {
-  console.log('applyFilters');
+  console.log('=== applyFilters Debug ===');
   const filterType = filterTypeDropdown.value;
+  console.log('Filter type:', filterType);
   
   let filteredFeatures = features && features.length ? features : (grid ? grid.features : []);
+  console.log('Initial features count:', filteredFeatures.length);
+  console.log('Initial features source:', features && features.length ? 'input parameter' : 'grid data');
   
   if ((AmenitiesCatchmentLayer) && (!features || features.length === 0)) {
     filteredFeatures = AmenitiesCatchmentLayer.toGeoJSON().features;
+    console.log('Using AmenitiesCatchmentLayer features:', filteredFeatures.length);
   }
   
   if (filterType.startsWith('UserLayer_')) {
@@ -5847,32 +5764,75 @@ function applyFilters(features) {
     
     filteredFeatures = combinedFeatures; 
   } else if (filterType === 'LA' || filterType === 'Ward') {
+    console.log('=== Geographic Filter Debug ===');
+    console.log('Filter type:', filterType);
+    console.log('Input features count:', filteredFeatures.length);
+    
     const filterValueContainer = document.getElementById('filterValueContainer');
-    if (!filterValueContainer) return filteredFeatures;
+    if (!filterValueContainer) {
+      console.log('No filter value container found');
+      return filteredFeatures;
+    }
 
     const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
       .map(cb => cb.value);
+    
+    console.log('Selected filter values:', selectedValues);
 
-    if (selectedValues.length === 0) return [];
+    if (selectedValues.length === 0) {
+      console.log('No values selected, returning empty array');
+      return [];
+    }
 
     const selectedSet = new Set(selectedValues);
 
     if (filterType === 'LA') {
+      console.log('Processing LA filter');
       if (selectedSet.has('LEP')) {
+        console.log('LEP selected, returning all features');
         return filteredFeatures;
       }
       if (selectedSet.has('MCA')) {
-        return filteredFeatures.filter(f =>
-          f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
-        );
+        console.log('MCA selected, filtering out North Somerset');
+        // For MCA filter, need to filter based on codes and lookup names
+        const mcaFiltered = filteredFeatures.filter(f => {
+          const ladCode = f.properties.LAD24CD;
+          const ladName = ladCodeToNameMap[ladCode];
+          const result = ladCode && ladName && ladName !== 'North Somerset';
+          if (!result) {
+            console.log('Filtered out feature:', ladCode, ladName);
+          }
+          return result;
+        });
+        console.log('MCA filtered features count:', mcaFiltered.length);
+        return mcaFiltered;
       }
-      return filteredFeatures.filter(f =>
-        f.properties.LAD24NM && selectedSet.has(f.properties.LAD24NM)
-      );
+      // For specific LA selection, match codes to names
+      console.log('Specific LA selected, filtering by codes');
+      const laFiltered = filteredFeatures.filter(f => {
+        const ladCode = f.properties.LAD24CD;
+        const ladName = ladCodeToNameMap[ladCode];
+        const result = ladCode && ladName && selectedSet.has(ladName);
+        if (!result) {
+          console.log('LA filter - Feature code/name:', ladCode, ladName, 'Selected:', selectedValues);
+        }
+        return result;
+      });
+      console.log('LA filtered features count:', laFiltered.length);
+      return laFiltered;
     } else if (filterType === 'Ward') {
-      return filteredFeatures.filter(f =>
-        f.properties.WD24NM && selectedSet.has(f.properties.WD24NM)
-      );
+      console.log('Processing Ward filter');
+      const wardFiltered = filteredFeatures.filter(f => {
+        const wardCode = f.properties.WD21CD;
+        const wardName = wardCodeToNameMap[wardCode];
+        const result = wardCode && wardName && selectedSet.has(wardName);
+        if (!result) {
+          console.log('Ward filter - Feature code/name:', wardCode, wardName, 'Selected:', selectedValues);
+        }
+        return result;
+      });
+      console.log('Ward filtered features count:', wardFiltered.length);
+      return wardFiltered;
     }
   }
 
@@ -5881,23 +5841,39 @@ function applyFilters(features) {
 
 function applyGeographicFilter(features, filterType, filterValue) {
   console.log('applyGeographicFilter', filterType, filterValue);
+  console.log('Input features count:', features.length);
+  
   if (filterType === 'LA') {
     if (filterValue === 'MCA') {
-      return features.filter(f =>
-        f.properties.LAD24NM && f.properties.LAD24NM !== 'North Somerset'
-      );
+      const mcaFiltered = features.filter(f => {
+        const ladCode = f.properties.LAD24CD;
+        const ladName = ladCodeToNameMap[ladCode];
+        return ladCode && ladName && ladName !== 'North Somerset';
+      });
+      console.log('MCA filtered count:', mcaFiltered.length);
+      return mcaFiltered;
     } else if (filterValue === 'LEP') {
+      console.log('LEP filter - returning all features');
       return features;
     } else {
-      return features.filter(f =>
-        f.properties.LAD24NM === filterValue
-      );
+      const laFiltered = features.filter(f => {
+        const ladCode = f.properties.LAD24CD;
+        const ladName = ladCodeToNameMap[ladCode];
+        return ladCode && ladName && ladName === filterValue;
+      });
+      console.log('Specific LA filtered count:', laFiltered.length);
+      return laFiltered;
     }
   } else if (filterType === 'Ward') {
-    return features.filter(f =>
-      f.properties.WD24NM === filterValue
-    );
+    const wardFiltered = features.filter(f => {
+      const wardCode = f.properties.WD21CD;
+      const wardName = wardCodeToNameMap[wardCode];
+      return wardCode && wardName && wardName === filterValue;
+    });
+    console.log('Ward filtered count:', wardFiltered.length);
+    return wardFiltered;
   }
+  console.log('No matching filter type, returning empty array');
   return [];
 }
 
