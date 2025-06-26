@@ -1503,28 +1503,20 @@ map.on('click', function (e) {
             console.log('Requesting journey time data for:', properties.OriginId_tracc);
             
             if (!fullCsvData) {
-              console.log('Journey time data not loaded yet, attempting to load...');
+              console.log('CSV data not loaded yet, attempting to load...');
+              const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
               
-              parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/trainingcentres_od.parquet')
-                .then(table => {
-                  const journeyTimeData = [];
-                  for (let i = 0; i < table.numRows; i++) {
-                    const row = table.get(i);
-                    journeyTimeData.push({
-                      origin: row.origin,
-                      destination: row.destination,
-                      totaltime: row.totaltime,
-                      services: row.services
-                    });
-                  }
+              fetch(csvPath)
+                .then(response => response.text())
+                .then(csvText => {
+                  const csvData = Papa.parse(csvText, { header: true }).data;
+                  fullCsvData = csvData;
+                  console.log('CSV data loaded for popup, total rows:', fullCsvData.length);
+                  console.log('Sample CSV row:', fullCsvData[0]);
                   
-                  fullCsvData = journeyTimeData;
-                  console.log('Journey time data loaded for popup, total rows:', fullCsvData.length);
-                  console.log('Sample row:', fullCsvData[0]);
-                  
-                  const journeyTimeData_filtered = getJourneyTimeData(properties.OriginId_tracc);
-                  if (journeyTimeData_filtered.length > 0) {
-                    popupContent.JourneyTime = journeyTimeData_filtered;
+                  const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
+                  if (journeyTimeData.length > 0) {
+                    popupContent.JourneyTime = journeyTimeData;
                     
                     const content = `
                       <div>
@@ -1533,7 +1525,7 @@ map.on('click', function (e) {
                         <h4 style="text-decoration: underline;">GridCell</h4>
                         ${popupContent.GridCell.length > 0 ? popupContent.GridCell.join('<br>') : '-'}
                         <h4 style="text-decoration: underline;">Journey Time</h4>
-                        ${createJourneyTimeContent(journeyTimeData_filtered)}
+                        ${createJourneyTimeContent(journeyTimeData)}
                       </div>
                     `;
                     
@@ -1544,10 +1536,10 @@ map.on('click', function (e) {
                   }
                 })
                 .catch(error => {
-                  console.error('Error loading journey time data for popup:', error);
+                  console.error('Error loading CSV for popup:', error);
                 });
             } else {
-              console.log('Using existing journey time data');
+              console.log('Using existing CSV data');
               const journeyTimeData = getJourneyTimeData(properties.OriginId_tracc);
               if (journeyTimeData.length > 0) {
                 popupContent.JourneyTime = journeyTimeData;
@@ -4445,27 +4437,15 @@ function updateAmenitiesCatchmentLayer() {
         return;
     }
 
-    gridTimeMap = {};
-    
-    parquetProcessor.loadParquetFile('https://AmFa6.github.io/TrainingCentres/trainingcentres_od.parquet')
-        .then(table => {
-            console.log(`Loaded ${table.numRows} journey time records from parquet`);
+    const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+
+    fetch(csvPath)
+        .then(response => response.text())        .then(csvText => {
+            const csvData = Papa.parse(csvText, { header: true }).data;
+            fullCsvData = csvData;
             
-            const journeyTimeData = [];
-            for (let i = 0; i < table.numRows; i++) {
-                const row = table.get(i);
-                journeyTimeData.push({
-                    origin: row.origin,
-                    destination: row.destination,
-                    totaltime: row.totaltime,
-                    services: row.services
-                });
-            }
-            
-            fullCsvData = journeyTimeData;
-            
-            if (journeyTimeData.length === 0) {
-                isUpdatingCatchmentLayer = false;
+            if (csvData.length === 0) {
+                updateAmenitiesCatchmentLayer.isRunning = false;
                 return;
             }
             
