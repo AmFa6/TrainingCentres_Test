@@ -1668,7 +1668,8 @@ function getTrainingCenterPopupContent(properties) {
   if (properties.AimLevel_3 === "1") aimLevels.push("3");
   
   content += aimLevels.join(", ") || "None";
-  
+  content += "<br>";
+
   content += "<strong>Available Courses by Year:</strong>";
   content += "</p>";
 
