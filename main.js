@@ -968,6 +968,11 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     console.log(`📋 Created lookup table with ${csvLookup.size} entries`);
     console.log(`📋 CSV1 rows: ${csvData1.length}, CSV2 rows: ${csvData2.length}`);
     
+    // Process features in larger batches for better performance
+    const BATCH_SIZE = 10000; // Larger batches since we're not using JSON.parse for geometry
+    const allFeatures = [...data1.features, ...data2.features];
+    const processedFeatures = [];
+    
     // Debug: Sample CSV keys and GeoJSON properties
     const csvKeys = Array.from(csvLookup.keys()).slice(0, 5);
     const geoJsonKeys = allFeatures.slice(0, 5).map(f => f.properties.OriginId_tracc);
@@ -975,11 +980,6 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     console.log('📋 Sample GeoJSON keys:', geoJsonKeys);
     console.log('📋 CSV key types:', csvKeys.map(k => typeof k));
     console.log('📋 GeoJSON key types:', geoJsonKeys.map(k => typeof k));
-    
-    // Process features in larger batches for better performance
-    const BATCH_SIZE = 10000; // Larger batches since we're not using JSON.parse for geometry
-    const allFeatures = [...data1.features, ...data2.features];
-    const processedFeatures = [];
     
     let processed = 0;
     const totalFeatures = allFeatures.length;
