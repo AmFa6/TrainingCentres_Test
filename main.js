@@ -925,7 +925,7 @@ async function initializeDuckDB() {
 }
 
 /**
- * Load grid data using DuckDB-WASM (Optimized)
+ * Load grid data using DuckDB-WASM
  */
 async function loadGridDataWithDuckDB() {
   const db = window.duckdbInstance;
@@ -940,71 +940,77 @@ async function loadGridDataWithDuckDB() {
     const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
     
     const startTime = performance.now();
+    await conn.query(`
+      CREATE VIEW grid_data AS 
+      SELECT * FROM read_parquet('${parquetUrl}')
+      WHERE geometry IS NOT NULL;
+    `);
     
-    // Use more efficient query that returns structured GeoJSON directly
     const result = await conn.query(`
       SELECT 
-        json_object(
-          'type', 'Feature',
-          'geometry', ST_AsGeoJSON(geometry)::JSON,
-          'properties', json_object(
-            'OriginId_tracc', OriginId_tracc,
-            'pop', pop,
-            'pop_growth', pop_growth,
-            'imd_score_mhclg', imd_score_mhclg,
-            'imd_decile_mhclg', imd_decile_mhclg,
-            'hh_caravail_ts045', hh_caravail_ts045,
-            'lad24cd', lad24cd,
-            'wd24cd', wd24cd
-          )
-        ) as feature_json
-      FROM read_parquet('${parquetUrl}')
-      WHERE geometry IS NOT NULL
+        OriginId_tracc,
+        pop,
+        pop_growth,
+        imd_score_mhclg,
+        imd_decile_mhclg,
+        hh_caravail_ts045,
+        lad24cd,
+        wd24cd,
+        ST_AsGeoJSON(geometry) as geojson_geom
+      FROM grid_data
       ORDER BY OriginId_tracc
     `);
     
     const loadTime = performance.now() - startTime;
     console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
     
-    // Process results in larger batches using bulk operations
-    const processingStartTime = performance.now();
     const features = [];
-    const batchSize = 5000; // Larger batch size for better performance
+    const batchSize = 1000;
     
     for (let batchStart = 0; batchStart < result.numRows; batchStart += batchSize) {
       const batchEnd = Math.min(batchStart + batchSize, result.numRows);
+      const batchFeatures = [];
       
-      // Use toArray() for bulk extraction instead of row-by-row processing
-      const batchData = result.slice(batchStart, batchEnd).toArray();
-      
-      const batchFeatures = batchData.map(row => {
+      for (let i = batchStart; i < batchEnd; i++) {
+        const row = result.get(i);
+        const rowObj = row.toJSON();
+        
+        let geometry;
         try {
-          // Direct JSON parsing since we get structured JSON from DuckDB
-          return JSON.parse(row.feature_json);
+          geometry = JSON.parse(rowObj.geojson_geom);
         } catch (e) {
-          console.warn(`Failed to parse feature JSON for batch row:`, e);
-          return null;
+          console.warn(`Failed to parse geometry for row ${i}:`, e);
+          continue;
         }
-      }).filter(feature => feature !== null);
+        
+        const properties = { ...rowObj };
+        delete properties.geometry;
+        delete properties.geojson_geom;
+        
+        const feature = {
+          type: 'Feature',
+          geometry: geometry,
+          properties: properties
+        };
+        
+        batchFeatures.push(feature);
+      }
       
       features.push(...batchFeatures);
       
-      // Only yield control occasionally for very large datasets
-      if (batchStart + batchSize < result.numRows && batchStart % 20000 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 1));
+      if (batchStart + batchSize < result.numRows) {
+        await new Promise(resolve => setTimeout(resolve, 10));
       }
     }
     
     await conn.close();
-    
-    const processingTime = performance.now() - processingStartTime;
-    console.log(`Processed ${features.length} features in ${processingTime.toFixed(2)}ms`);
     
     const combinedData = {
       type: 'FeatureCollection',
       features: features
     };
     
+    // console.log(`Processed ${features.length} features from parquet data`);
     return combinedData;
     
   } catch (error) {
