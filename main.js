@@ -758,43 +758,71 @@ async function loadGridData() {
   showBackgroundLoadingIndicator('Loading grid data...');
   
   try {
-    // console.log('=== loadGridData called ===');
+    console.log('🚀 === Starting optimized grid data loading ===');
+    const totalStartTime = performance.now();
     
-    // console.log('Waiting for DuckDB-WASM ES module to be available...');
-    
+    console.log('⏳ Waiting for DuckDB-WASM ES module...');
+    const moduleWaitStart = performance.now();
     await waitForDuckDBModule();
+    const moduleWaitTime = performance.now() - moduleWaitStart;
+    console.log(`✅ DuckDB-WASM module ready in ${moduleWaitTime.toFixed(2)}ms`);
     
-    // console.log('DuckDB-WASM is available, proceeding with grid data loading...');
-    
+    console.log('🔧 Initializing DuckDB...');
+    const initStart = performance.now();
     await initializeDuckDB();
+    const initTime = performance.now() - initStart;
+    console.log(`✅ DuckDB initialized in ${initTime.toFixed(2)}ms`);
     
+    console.log('📥 Loading parquet data...');
+    const dataLoadStart = performance.now();
     const processedGrid = await loadGridDataWithDuckDB();
+    const dataLoadTime = performance.now() - dataLoadStart;
+    console.log(`✅ Parquet data loaded in ${dataLoadTime.toFixed(2)}ms`);
     
     grid = processedGrid;
     
+    console.log('📊 Calculating statistics...');
+    const statsStart = performance.now();
     calculateGridStatistics(grid);
+    const statsTime = performance.now() - statsStart;
+    console.log(`✅ Statistics calculated in ${statsTime.toFixed(2)}ms`);
     
+    console.log('🔄 Updating UI components...');
+    const uiStart = performance.now();
     updateFilterDropdown();
     updateFilterValues();
     
     if (initialLoadComplete) {
       updateSummaryStatistics(grid.features);
     }
+    const uiTime = performance.now() - uiStart;
+    console.log(`✅ UI updated in ${uiTime.toFixed(2)}ms`);
     
     hideBackgroundLoadingIndicator();
-    // console.log("Grid data loading and processing complete using DuckDB-WASM");
+    
+    const totalTime = performance.now() - totalStartTime;
+    const totalSeconds = (totalTime / 1000).toFixed(2);
+    console.log(`🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
+    console.log(`📈 Performance breakdown:`);
+    console.log(`   Module wait: ${moduleWaitTime.toFixed(2)}ms (${((moduleWaitTime/totalTime)*100).toFixed(1)}%)`);
+    console.log(`   DuckDB init: ${initTime.toFixed(2)}ms (${((initTime/totalTime)*100).toFixed(1)}%)`);
+    console.log(`   Data loading: ${dataLoadTime.toFixed(2)}ms (${((dataLoadTime/totalTime)*100).toFixed(1)}%)`);
+    console.log(`   Statistics: ${statsTime.toFixed(2)}ms (${((statsTime/totalTime)*100).toFixed(1)}%)`);
+    console.log(`   UI update: ${uiTime.toFixed(2)}ms (${((uiTime/totalTime)*100).toFixed(1)}%)`);
     
   } catch (error) {
-    console.error("Error loading grid data with DuckDB-WASM:", error);
-    // console.log("Trying fallback to GeoJSON format...");
+    console.error("❌ Error loading grid data with DuckDB-WASM:", error);
+    console.log("🔄 Trying fallback to GeoJSON format...");
     try {
+      const fallbackStart = performance.now();
       const response = await fetch('https://AmFa6.github.io/TrainingCentres/grid_combined.geojson');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const geojsonData = await response.json();
-      // console.log("Successfully loaded grid data from GeoJSON fallback");
+      const fallbackTime = performance.now() - fallbackStart;
+      console.log(`✅ Successfully loaded grid data from GeoJSON fallback in ${fallbackTime.toFixed(2)}ms`);
       
       grid = geojsonData;
       
@@ -925,27 +953,33 @@ async function initializeDuckDB() {
 }
 
 /**
- * Load grid data using DuckDB-WASM
+ * Load grid data using DuckDB-WASM with optimized bulk processing
  */
 async function loadGridDataWithDuckDB() {
   const db = window.duckdbInstance;
   const conn = await db.connect();
   
   try {
-    // console.log("Loading parquet file with DuckDB-WASM...");
+    console.log("🚀 Loading parquet file with optimized DuckDB-WASM...");
     
+    const setupStartTime = performance.now();
     await conn.query("INSTALL spatial;");
     await conn.query("LOAD spatial;");
     
     const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
     
-    const startTime = performance.now();
+    // Create view with pre-filtering for better performance
     await conn.query(`
       CREATE VIEW grid_data AS 
       SELECT * FROM read_parquet('${parquetUrl}')
       WHERE geometry IS NOT NULL;
     `);
     
+    const setupTime = performance.now() - setupStartTime;
+    console.log(`⚡ DuckDB setup completed in ${setupTime.toFixed(2)}ms`);
+    
+    // Optimized query: use DuckDB's native JSON processing
+    const queryStartTime = performance.now();
     const result = await conn.query(`
       SELECT 
         OriginId_tracc,
@@ -961,56 +995,50 @@ async function loadGridDataWithDuckDB() {
       ORDER BY OriginId_tracc
     `);
     
-    const loadTime = performance.now() - startTime;
-    console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
+    const queryTime = performance.now() - queryStartTime;
+    console.log(`📊 Query executed in ${queryTime.toFixed(2)}ms for ${result.numRows} rows`);
     
+    // Bulk processing with optimized batching
+    const processingStartTime = performance.now();
     const features = [];
-    const batchSize = 1000;
+    const BATCH_SIZE = 5000; // Larger batches for better performance
+    const totalRows = result.numRows;
     
-    for (let batchStart = 0; batchStart < result.numRows; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, result.numRows);
-      const batchFeatures = [];
+    console.log(`🔄 Processing ${totalRows} rows in batches of ${BATCH_SIZE}...`);
+    
+    // Process all data in larger batches without artificial delays
+    for (let batchStart = 0; batchStart < totalRows; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, totalRows);
+      const batchStartTime = performance.now();
       
+      // Bulk extract row data
+      const batchRows = [];
       for (let i = batchStart; i < batchEnd; i++) {
-        const row = result.get(i);
-        const rowObj = row.toJSON();
-        
-        let geometry;
-        try {
-          geometry = JSON.parse(rowObj.geojson_geom);
-        } catch (e) {
-          console.warn(`Failed to parse geometry for row ${i}:`, e);
-          continue;
-        }
-        
-        const properties = { ...rowObj };
-        delete properties.geometry;
-        delete properties.geojson_geom;
-        
-        const feature = {
-          type: 'Feature',
-          geometry: geometry,
-          properties: properties
-        };
-        
-        batchFeatures.push(feature);
+        batchRows.push(result.get(i).toJSON());
       }
       
+      // Bulk process geometries
+      const batchFeatures = await processBatchGeometries(batchRows, batchStart);
       features.push(...batchFeatures);
       
-      if (batchStart + batchSize < result.numRows) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
+      const batchTime = performance.now() - batchStartTime;
+      const progress = ((batchEnd / totalRows) * 100).toFixed(1);
+      console.log(`⚡ Batch ${batchStart}-${batchEnd} processed in ${batchTime.toFixed(2)}ms (${progress}% complete)`);
     }
     
+    const processingTime = performance.now() - processingStartTime;
+    console.log(`✅ All ${features.length} features processed in ${processingTime.toFixed(2)}ms`);
+    
     await conn.close();
+    
+    const totalTime = performance.now() - setupStartTime;
+    console.log(`🎉 Total loading time: ${totalTime.toFixed(2)}ms (${(totalTime/1000).toFixed(2)}s)`);
     
     const combinedData = {
       type: 'FeatureCollection',
       features: features
     };
     
-    // console.log(`Processed ${features.length} features from parquet data`);
     return combinedData;
     
   } catch (error) {
@@ -1020,13 +1048,74 @@ async function loadGridDataWithDuckDB() {
 }
 
 /**
- * Calculates and stores min/max values for important grid attributes
+ * Process batch geometries with optimized JSON parsing and memory management
+ */
+async function processBatchGeometries(batchRows, batchStartIndex) {
+  const features = [];
+  const geometryParseErrors = [];
+  
+  // Pre-allocate array for better performance
+  features.length = batchRows.length;
+  let validFeatureCount = 0;
+  
+  for (let i = 0; i < batchRows.length; i++) {
+    const rowObj = batchRows[i];
+    
+    let geometry;
+    try {
+      // Optimized geometry parsing with validation
+      const geomStr = rowObj.geojson_geom;
+      if (!geomStr || geomStr.length === 0) continue;
+      
+      geometry = JSON.parse(geomStr);
+      
+      // Quick geometry validation
+      if (!geometry || !geometry.type || !geometry.coordinates) {
+        continue;
+      }
+    } catch (e) {
+      geometryParseErrors.push({ index: batchStartIndex + i, error: e.message });
+      continue;
+    }
+    
+    // Streamlined property extraction with direct assignment
+    features[validFeatureCount] = {
+      type: 'Feature',
+      geometry: geometry,
+      properties: {
+        OriginId_tracc: rowObj.OriginId_tracc,
+        pop: rowObj.pop,
+        pop_growth: rowObj.pop_growth,
+        imd_score_mhclg: rowObj.imd_score_mhclg,
+        imd_decile_mhclg: rowObj.imd_decile_mhclg,
+        hh_caravail_ts045: rowObj.hh_caravail_ts045,
+        lad24cd: rowObj.lad24cd,
+        wd24cd: rowObj.wd24cd
+      }
+    };
+    
+    validFeatureCount++;
+  }
+  
+  // Trim array to actual size
+  features.length = validFeatureCount;
+  
+  if (geometryParseErrors.length > 0) {
+    console.warn(`⚠️ Failed to parse ${geometryParseErrors.length} geometries in batch starting at ${batchStartIndex}`);
+  }
+  
+  return features;
+}
+
+/**
+ * Calculates and stores min/max values for important grid attributes with optimized processing
  * @param {Object} gridData The grid GeoJSON data
  */
 function calculateGridStatistics(gridData) {
   if (!gridData || !gridData.features || gridData.features.length === 0) return;
   
-  // console.log("Calculating grid statistics for optimization...");
+  console.log(`📊 Calculating grid statistics for ${gridData.features.length} features...`);
+  const startTime = performance.now();
   
   gridStatistics = {
     pop: { min: Infinity, max: -Infinity },
@@ -1036,57 +1125,53 @@ function calculateGridStatistics(gridData) {
     imd_decile_mhclg: { min: Infinity, max: -Infinity }
   };
   
-  const BATCH_SIZE = 5000;
   const features = gridData.features;
-  const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   
-  function processBatch(batchIndex) {
-    const startIdx = batchIndex * BATCH_SIZE;
-    const endIdx = Math.min((batchIndex + 1) * BATCH_SIZE, features.length);
+  // Optimized single-pass calculation
+  for (let i = 0; i < features.length; i++) {
+    const props = features[i].properties;
+    if (!props) continue;
     
-    for (let i = startIdx; i < endIdx; i++) {
-      const props = features[i].properties;
-      if (!props) continue;
-      
-      for (const field in gridStatistics) {
-        if (props[field] !== undefined && props[field] !== null) {
-          const value = parseFloat(props[field]);
-          if (!isNaN(value)) {
-            gridStatistics[field].min = Math.min(gridStatistics[field].min, value);
-            gridStatistics[field].max = Math.max(gridStatistics[field].max, value);
-          }
+    // Process all fields in one loop iteration
+    for (const field in gridStatistics) {
+      const value = props[field];
+      if (value !== undefined && value !== null) {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+          if (numValue < gridStatistics[field].min) gridStatistics[field].min = numValue;
+          if (numValue > gridStatistics[field].max) gridStatistics[field].max = numValue;
         }
       }
     }
-    
-    if (batchIndex + 1 < totalBatches) {
-      setTimeout(() => processBatch(batchIndex + 1), 0);
-    } else {
-      // console.log("Grid statistics calculation complete:", gridStatistics);
-      
-      updateSliderRanges('Amenities', 'Opacity');
-      updateSliderRanges('Amenities', 'Outline');
-    }
   }
   
-  processBatch(0);
+  const calcTime = performance.now() - startTime;
+  console.log(`✅ Grid statistics calculated in ${calcTime.toFixed(2)}ms`);
+  console.log('📈 Statistics:', gridStatistics);
+  
+  updateSliderRanges('Amenities', 'Opacity');
+  updateSliderRanges('Amenities', 'Outline');
 }
 
 /**
- * Shows a subtle loading indicator for background processes
+ * Shows a subtle loading indicator for background processes with progress support
  * @param {String} message The message to display in the indicator
+ * @param {Number} progress Optional progress percentage (0-100)
  */
-function showBackgroundLoadingIndicator(message = 'Loading data...') {
+function showBackgroundLoadingIndicator(message = 'Loading data...', progress = null) {
   let indicator = document.getElementById('background-loading-indicator');
   
   if (!indicator) {
     indicator = document.createElement('div');
     indicator.id = 'background-loading-indicator';
-    indicator.style.cssText = 'position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,0.8);padding:5px 10px;border-radius:3px;font-size:12px;z-index:1000;display:flex;align-items:center;';
+    indicator.style.cssText = 'position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,0.95);padding:8px 12px;border-radius:6px;font-size:12px;z-index:1000;display:flex;flex-direction:column;box-shadow:0 2px 8px rgba(0,0,0,0.1);border-left:3px solid #3388ff;';
+    
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;';
     
     const spinner = document.createElement('div');
     spinner.className = 'mini-spinner';
-    spinner.style.cssText = 'width:12px;height:12px;border:2px solid #ccc;border-top-color:#3388ff;border-radius:50%;margin-right:8px;animation:spin 1s linear infinite;';
+    spinner.style.cssText = 'width:14px;height:14px;border:2px solid #e0e0e0;border-top-color:#3388ff;border-radius:50%;margin-right:10px;animation:spin 1s linear infinite;';
     
     const style = document.createElement('style');
     style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
@@ -1094,14 +1179,30 @@ function showBackgroundLoadingIndicator(message = 'Loading data...') {
     
     const text = document.createElement('span');
     text.id = 'background-loading-text';
+    text.style.cssText = 'font-weight:500;color:#333;';
     
-    indicator.appendChild(spinner);
-    indicator.appendChild(text);
+    const progressBar = document.createElement('div');
+    progressBar.id = 'background-loading-progress';
+    progressBar.style.cssText = 'width:0%;height:2px;background:#3388ff;margin-top:4px;transition:width 0.3s ease;display:none;';
+    
+    topRow.appendChild(spinner);
+    topRow.appendChild(text);
+    indicator.appendChild(topRow);
+    indicator.appendChild(progressBar);
     document.body.appendChild(indicator);
   }
   
   const textElement = document.getElementById('background-loading-text');
+  const progressElement = document.getElementById('background-loading-progress');
+  
   if (textElement) textElement.textContent = message;
+  
+  if (progressElement && progress !== null) {
+    progressElement.style.display = 'block';
+    progressElement.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  } else if (progressElement) {
+    progressElement.style.display = 'none';
+  }
   
   indicator.style.display = 'flex';
 }
