@@ -3960,6 +3960,10 @@ function scaleExp(value, minVal, maxVal, minScale, maxScale, order) {
 }
 
 function formatValue(value, step) {
+  if (typeof value === 'bigint') {
+    value = Number(value);
+  }
+  
   if (value === null || value === undefined || isNaN(value) || value === Infinity || value === -Infinity) {
     return '-';
   }
