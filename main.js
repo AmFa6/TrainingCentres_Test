@@ -960,7 +960,6 @@ async function loadGridDataWithDuckDB() {
       FROM read_parquet('${parquetUrl}')
       WHERE geometry IS NOT NULL
       ORDER BY OriginId_tracc
-      LIMIT 10000
     `);
     
     const loadTime = performance.now() - startTime;
@@ -985,132 +984,17 @@ async function loadGridDataWithDuckDB() {
   }
 }
 
-/**
- * Process geometry data using Web Workers for better performance
- */
-async function processGeometryDataInParallel(result) {
-  console.log('Processing geometry data with Web Workers...');
-  
-  // Check if Web Workers are supported
-  if (typeof Worker === 'undefined') {
-    console.warn('Web Workers not supported, falling back to sequential processing');
-    return processGeometryDataSequential(result);
-  }
-  
-  const totalRows = result.numRows;
-  const numWorkers = Math.min(4, navigator.hardwareConcurrency || 4);
-  const chunkSize = Math.ceil(totalRows / numWorkers);
-  
-  // Create worker script as blob
-  const workerScript = `
-    self.onmessage = function(e) {
-      const { chunk, startIndex } = e.data;
-      const features = [];
-      
-      for (let i = 0; i < chunk.length; i++) {
-        const rowData = chunk[i];
-        
-        if (!rowData.geojson_geom) continue;
-        
-        let geometry;
-        try {
-          geometry = JSON.parse(rowData.geojson_geom);
-        } catch (error) {
-          continue; // Skip invalid geometries
-        }
-        
-        const properties = {
-          OriginId_tracc: rowData.OriginId_tracc,
-          pop: rowData.pop,
-          pop_growth: rowData.pop_growth,
-          imd_score_mhclg: rowData.imd_score_mhclg,
-          imd_decile_mhclg: rowData.imd_decile_mhclg,
-          hh_caravail_ts045: rowData.hh_caravail_ts045,
-          lad24cd: rowData.lad24cd,
-          wd24cd: rowData.wd24cd
-        };
-        
-        features.push({
-          type: 'Feature',
-          geometry: geometry,
-          properties: properties
-        });
-      }
-      
-      self.postMessage({ features, chunkIndex: Math.floor(startIndex / ${chunkSize}) });
-    };
-  `;
-  
-  const blob = new Blob([workerScript], { type: 'application/javascript' });
-  const workerUrl = URL.createObjectURL(blob);
-  
-  try {
-    const workers = [];
-    const promises = [];
-    
-    // Create workers and assign chunks
-    for (let i = 0; i < numWorkers; i++) {
-      const startIndex = i * chunkSize;
-      const endIndex = Math.min(startIndex + chunkSize, totalRows);
-      
-      if (startIndex >= totalRows) break;
-      
-      const worker = new Worker(workerUrl);
-      workers.push(worker);
-      
-      // Extract chunk data
-      const chunk = [];
-      for (let j = startIndex; j < endIndex; j++) {
-        const row = result.get(j);
-        chunk.push(row.toJSON());
-      }
-      
-      const promise = new Promise((resolve, reject) => {
-        worker.onmessage = (e) => {
-          resolve(e.data);
-          worker.terminate();
-        };
-        worker.onerror = reject;
-      });
-      
-      promises.push(promise);
-      worker.postMessage({ chunk, startIndex });
-    }
-    
-    console.log(`Processing ${totalRows} rows with ${workers.length} workers...`);
-    const results = await Promise.all(promises);
-    
-    // Combine results from all workers
-    const allFeatures = [];
-    results.sort((a, b) => a.chunkIndex - b.chunkIndex);
-    
-    for (const result of results) {
-      allFeatures.push(...result.features);
-    }
-    
-    console.log(`Completed parallel processing of ${allFeatures.length} features`);
-    return allFeatures;
-    
-  } catch (error) {
-    console.warn('Web Worker processing failed, falling back to sequential:', error);
-    return processGeometryDataSequential(result);
-  } finally {
-    URL.revokeObjectURL(workerUrl);
-  }
-}
-
 async function processGeometryDataSequential(result) {
-  console.log('Processing geometry data sequentially...');
+  console.log('Using fallback sequential processing...');
   const features = [];
   const totalRows = result.numRows;
-  const batchSize = 1000; // Smaller batches for better UI responsiveness
-  let processedCount = 0;
-
+  const batchSize = 5000; // Larger batches for better performance
+  
   for (let batchStart = 0; batchStart < totalRows; batchStart += batchSize) {
     const batchEnd = Math.min(batchStart + batchSize, totalRows);
     const batchFeatures = [];
     
-    // Process batch with pre-allocated arrays for better performance
+    // Process batch synchronously for speed
     for (let i = batchStart; i < batchEnd; i++) {
       const row = result.get(i);
       const rowObj = row.toJSON();
@@ -1141,20 +1025,16 @@ async function processGeometryDataSequential(result) {
         geometry: geometry,
         properties: properties
       });
-      processedCount++;
     }
     
-    // Use more efficient array concatenation
     features.push(...batchFeatures);
     
-    // Show progress and yield control more frequently
-    if (batchStart % (batchSize * 2) === 0) {
-      console.log(`Processed ${processedCount}/${totalRows} features (${((processedCount/totalRows)*100).toFixed(1)}%)`);
+    // Only yield control occasionally to prevent UI blocking
+    if (batchStart % (batchSize * 5) === 0) {
       await new Promise(resolve => setTimeout(resolve, 1));
     }
   }
   
-  console.log(`Completed processing ${features.length} features`);
   return features;
 }
 
