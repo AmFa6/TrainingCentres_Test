@@ -962,7 +962,7 @@ async function loadGridDataWithDuckDB() {
     `);
     
     const loadTime = performance.now() - startTime;
-    // console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
+    console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
     
     const features = [];
     const batchSize = 1000;
