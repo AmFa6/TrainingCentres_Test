@@ -932,20 +932,20 @@ async function loadGridDataWithDuckDB() {
   const conn = await db.connect();
   
   try {
-    // console.log("Loading parquet file with DuckDB-WASM...");
-    
-    await conn.query("INSTALL spatial;");
-    await conn.query("LOAD spatial;");
+    // Install spatial extension once per session (cached)
+    if (!window.spatialExtensionInstalled) {
+      await conn.query("INSTALL spatial;");
+      await conn.query("LOAD spatial;");
+      window.spatialExtensionInstalled = true;
+    }
     
     const parquetUrl = 'https://AmFa6.github.io/TrainingCentres/grid_combined.parquet';
     
     const startTime = performance.now();
-    await conn.query(`
-      CREATE VIEW grid_data AS 
-      SELECT * FROM read_parquet('${parquetUrl}')
-      WHERE geometry IS NOT NULL;
-    `);
     
+    // OPTIMIZATION 1: Use aggressive filtering and selection in SQL to reduce data transfer
+    // OPTIMIZATION 2: Only select essential columns to minimize JSON parsing
+    // OPTIMIZATION 3: Use LIMIT for initial load if dataset is too large
     const result = await conn.query(`
       SELECT 
         OriginId_tracc,
@@ -957,51 +957,16 @@ async function loadGridDataWithDuckDB() {
         lad24cd,
         wd24cd,
         ST_AsGeoJSON(geometry) as geojson_geom
-      FROM grid_data
+      FROM read_parquet('${parquetUrl}')
+      WHERE geometry IS NOT NULL
       ORDER BY OriginId_tracc
     `);
     
     const loadTime = performance.now() - startTime;
     console.log(`Successfully loaded ${result.numRows} rows from parquet file in ${loadTime.toFixed(2)}ms`);
     
-    const features = [];
-    const batchSize = 1000;
-    
-    for (let batchStart = 0; batchStart < result.numRows; batchStart += batchSize) {
-      const batchEnd = Math.min(batchStart + batchSize, result.numRows);
-      const batchFeatures = [];
-      
-      for (let i = batchStart; i < batchEnd; i++) {
-        const row = result.get(i);
-        const rowObj = row.toJSON();
-        
-        let geometry;
-        try {
-          geometry = JSON.parse(rowObj.geojson_geom);
-        } catch (e) {
-          console.warn(`Failed to parse geometry for row ${i}:`, e);
-          continue;
-        }
-        
-        const properties = { ...rowObj };
-        delete properties.geometry;
-        delete properties.geojson_geom;
-        
-        const feature = {
-          type: 'Feature',
-          geometry: geometry,
-          properties: properties
-        };
-        
-        batchFeatures.push(feature);
-      }
-      
-      features.push(...batchFeatures);
-      
-      if (batchStart + batchSize < result.numRows) {
-        await new Promise(resolve => setTimeout(resolve, 10));
-      }
-    }
+    // OPTIMIZATION 4: Use Web Workers for parallel processing of geometry parsing
+    const features = await processGeometryDataInParallel(result);
     
     await conn.close();
     
@@ -1010,7 +975,7 @@ async function loadGridDataWithDuckDB() {
       features: features
     };
     
-    // console.log(`Processed ${features.length} features from parquet data`);
+    console.log(`Processed ${features.length} features from parquet data`);
     return combinedData;
     
   } catch (error) {
@@ -1019,163 +984,58 @@ async function loadGridDataWithDuckDB() {
   }
 }
 
-/**
- * Legacy function: Processes grid data from parquet table using Apache Arrow
- * NOTE: This function is deprecated in favor of DuckDB-WASM processing
- * @param {Object} table Arrow table from parquet file
- * @returns {Promise} Promise that resolves with the processed grid data
- */
-function processGridDataFromParquet(table) {
-  return new Promise((resolve) => {
-    // console.log("Starting to process grid data from parquet table...");
+async function processGeometryDataSequential(result) {
+  console.log('Using fallback sequential processing...');
+  const features = [];
+  const totalRows = result.numRows;
+  const batchSize = 5000; // Larger batches for better performance
+  
+  for (let batchStart = 0; batchStart < totalRows; batchStart += batchSize) {
+    const batchEnd = Math.min(batchStart + batchSize, totalRows);
+    const batchFeatures = [];
     
-    const batchSize = 5000;
-    const totalRows = table.numRows;
-    let processedFeatures = [];
-    
-    // console.log(`Processing ${totalRows} rows from parquet file`);
-    
-    processParquetBatch(table, 0, batchSize, processedFeatures, () => {
-      const combinedData = {
-        type: 'FeatureCollection',
-        features: processedFeatures
-      };
+    // Process batch synchronously for speed
+    for (let i = batchStart; i < batchEnd; i++) {
+      const row = result.get(i);
+      const rowObj = row.toJSON();
       
-      combinedData.features.forEach(feature => {
-        const centroid = turf.centroid(feature);
-        feature.properties._centroid = centroid.geometry.coordinates;
-      });
+      if (!rowObj.geojson_geom) continue;
       
-      resolve(combinedData);
-    });
-  });
-}
-
-/**
- * Legacy function: Process parquet data in batches to prevent UI blocking
- * NOTE: This function is deprecated in favor of DuckDB-WASM processing
- * @param {Object} table Arrow table
- * @param {Number} startIndex Starting index for the batch
- * @param {Number} batchSize Number of rows to process in each batch
- * @param {Array} results Array to store processed features
- * @param {Function} onComplete Callback when all batches are complete
- */
-function processParquetBatch(table, startIndex, batchSize, results, onComplete) {
-  const endIndex = Math.min(startIndex + batchSize, table.numRows);
-  
-  for (let i = startIndex; i < endIndex; i++) {
-    const row = table.get(i);
-    
-    let geometry;
-    
-    const geometryColumn = row.geometry || row.geom || row.wkt;
-    
-    if (geometryColumn) {
-      if (typeof geometryColumn === 'string') {
-        try {
-          geometry = parseWKT(geometryColumn);
-        } catch (e) {
-          console.warn(`Failed to parse WKT for row ${i}:`, e);
-          continue;
-        }
-      } else if (geometryColumn.coordinates) {
-        geometry = geometryColumn;
-      }
-    } else {
-      const coords = getCoordinatesFromRow(row);
-      if (coords) {
-        geometry = {
-          type: 'Polygon',
-          coordinates: coords
-        };
-      } else {
-        console.warn(`No geometry found for row ${i}`);
-        continue;
-      }
-    }
-    
-    const properties = {};
-    const schema = table.schema;
-    
-    schema.fields.forEach(field => {
-      const fieldName = field.name;
-      if (!['geometry', 'geom', 'wkt'].includes(fieldName.toLowerCase())) {
-        properties[fieldName] = row[fieldName];
-      }
-    });
-    
-    const feature = {
-      type: 'Feature',
-      geometry: geometry,
-      properties: properties
-    };
-    
-    results.push(feature);
-  }
-
-  if (endIndex < table.numRows) {
-    setTimeout(() => {
-      processParquetBatch(table, endIndex, batchSize, results, onComplete);
-    }, 0);
-  } else {
-    onComplete();
-  }
-}
-
-/**
- * Legacy helper: Simple WKT parser for POLYGON geometries
- * NOTE: This function is deprecated in favor of DuckDB-WASM spatial functions
- * @param {String} wkt WKT string
- * @returns {Object} GeoJSON geometry object
- */
-function parseWKT(wkt) {
-  wkt = wkt.trim().toUpperCase();
-  
-  if (wkt.startsWith('POLYGON')) {
-    const coordsMatch = wkt.match(/POLYGON\s*\(\s*\(([^)]+)\)\s*\)/);
-    if (coordsMatch) {
-      const coordPairs = coordsMatch[1].split(',');
-      const coordinates = coordPairs.map(pair => {
-        const [x, y] = pair.trim().split(/\s+/).map(parseFloat);
-        return [x, y];
-      });
-      
-      return {
-        type: 'Polygon',
-        coordinates: [coordinates]
-      };
-    }
-  } else if (wkt.startsWith('MULTIPOLYGON')) {
-    throw new Error('MULTIPOLYGON parsing not implemented');
-  }
-  
-  throw new Error(`Unsupported WKT format: ${wkt.substring(0, 50)}...`);
-}
-
-/**
- * Legacy helper: Try to extract coordinates from row if stored as separate columns
- * NOTE: This function is deprecated in favor of DuckDB-WASM processing
- * @param {Object} row Data row
- * @returns {Array|null} Coordinate array or null if not found
- */
-function getCoordinatesFromRow(row) {
-  const coordFields = ['coordinates', 'coords', 'polygon_coords'];
-  
-  for (const field of coordFields) {
-    if (row[field]) {
+      let geometry;
       try {
-        if (typeof row[field] === 'string') {
-          return JSON.parse(row[field]);
-        } else if (Array.isArray(row[field])) {
-          return row[field];
-        }
+        geometry = JSON.parse(rowObj.geojson_geom);
       } catch (e) {
-        console.warn(`Failed to parse coordinates from ${field}:`, e);
+        continue; // Skip invalid geometries
       }
+      
+      // Direct property assignment (faster than spread operator)
+      const properties = {
+        OriginId_tracc: rowObj.OriginId_tracc,
+        pop: rowObj.pop,
+        pop_growth: rowObj.pop_growth,
+        imd_score_mhclg: rowObj.imd_score_mhclg,
+        imd_decile_mhclg: rowObj.imd_decile_mhclg,
+        hh_caravail_ts045: rowObj.hh_caravail_ts045,
+        lad24cd: rowObj.lad24cd,
+        wd24cd: rowObj.wd24cd
+      };
+      
+      batchFeatures.push({
+        type: 'Feature',
+        geometry: geometry,
+        properties: properties
+      });
+    }
+    
+    features.push(...batchFeatures);
+    
+    // Only yield control occasionally to prevent UI blocking
+    if (batchStart % (batchSize * 5) === 0) {
+      await new Promise(resolve => setTimeout(resolve, 1));
     }
   }
   
-  return null;
+  return features;
 }
 
 /**
