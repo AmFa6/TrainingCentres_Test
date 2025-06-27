@@ -965,7 +965,16 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       }
     });
     
-    console.log(`� Created lookup table with ${csvLookup.size} entries`);
+    console.log(`📋 Created lookup table with ${csvLookup.size} entries`);
+    console.log(`📋 CSV1 rows: ${csvData1.length}, CSV2 rows: ${csvData2.length}`);
+    
+    // Debug: Sample CSV keys and GeoJSON properties
+    const csvKeys = Array.from(csvLookup.keys()).slice(0, 5);
+    const geoJsonKeys = allFeatures.slice(0, 5).map(f => f.properties.OriginId_tracc);
+    console.log('📋 Sample CSV keys:', csvKeys);
+    console.log('📋 Sample GeoJSON keys:', geoJsonKeys);
+    console.log('📋 CSV key types:', csvKeys.map(k => typeof k));
+    console.log('📋 GeoJSON key types:', geoJsonKeys.map(k => typeof k));
     
     // Process features in larger batches for better performance
     const BATCH_SIZE = 10000; // Larger batches since we're not using JSON.parse for geometry
@@ -986,9 +995,45 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
         const feature = allFeatures[j];
         const originId = feature.properties.OriginId_tracc;
         
-        if (originId && csvLookup.has(originId)) {
-          const csvData = csvLookup.get(originId);
+        // Debug: Check first few matches
+        if (j < 5) {
+          console.log(`🔍 Feature ${j}: originId=${originId} (${typeof originId}), has match: ${csvLookup.has(originId)}`);
+          if (!csvLookup.has(originId)) {
+            // Try converting to string/number
+            const asString = String(originId);
+            const asNumber = Number(originId);
+            console.log(`🔍 Trying as string: ${csvLookup.has(asString)}, as number: ${csvLookup.has(asNumber)}`);
+          }
+        }
+        
+        // Skip features without OriginId_tracc
+        if (!originId) {
+          continue;
+        }
+        
+        let csvData = null;
+        let matchedKey = null;
+        
+        // Try exact match first
+        if (csvLookup.has(originId)) {
+          csvData = csvLookup.get(originId);
+          matchedKey = originId;
+        } else {
+          // Try alternative key formats
+          const stringKey = String(originId);
+          const numberKey = Number(originId);
           
+          if (csvLookup.has(stringKey)) {
+            csvData = csvLookup.get(stringKey);
+            matchedKey = stringKey;
+          } else if (csvLookup.has(numberKey)) {
+            csvData = csvLookup.get(numberKey);
+            matchedKey = numberKey;
+          }
+        }
+        
+        // Only keep features that have matching CSV data
+        if (csvData) {
           // Merge properties efficiently
           Object.assign(feature.properties, csvData);
           
@@ -1000,6 +1045,7 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
           
           processedFeatures.push(feature);
         }
+        // Features without CSV matches are silently excluded from the dataset
       }
       
       processed = batchEnd;
@@ -1013,7 +1059,13 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       features: processedFeatures
     };
     
-    console.log(`✅ Processed ${processedFeatures.length} valid features`);
+    const totalInputFeatures = allFeatures.length;
+    const validOutputFeatures = processedFeatures.length;
+    const filteredOutCount = totalInputFeatures - validOutputFeatures;
+    
+    console.log(`✅ Processed ${validOutputFeatures} valid features (${filteredOutCount} features filtered out due to missing CSV data)`);
+    console.log(`📊 Data quality: ${((validOutputFeatures / totalInputFeatures) * 100).toFixed(1)}% of GeoJSON features had matching CSV data`);
+    
     resolve(combinedData);
   });
 }
@@ -1035,15 +1087,42 @@ async function initializeDuckDBForAnalytics(gridData) {
         const db = window.duckdbInstance;
         const conn = await db.connect();
         
-        // Create analytics table with prepared data
+        // Check if we have valid data
+        if (!gridData || !gridData.features || gridData.features.length === 0) {
+          console.warn('⚠️ No grid data available for DuckDB analytics');
+          await conn.close();
+          return;
+        }
+        
+        console.log(`🔧 Loading ${gridData.features.length} features into DuckDB analytics table...`);
+        
+        // Create table with proper schema first
         await conn.query(`
-          CREATE TABLE grid_analytics AS 
-          SELECT * FROM (VALUES 
-            ${gridData.features.map(f => 
-              `(${f.properties.OriginId_tracc}, ${f.properties.pop || 'NULL'}, ${f.properties.pop_growth || 'NULL'}, ${f.properties.imd_score_mhclg || 'NULL'}, ${f.properties.imd_decile_mhclg || 'NULL'}, ${f.properties.hh_caravail_ts045 || 'NULL'}, '${f.properties.lad24cd || ''}', '${f.properties.wd24cd || ''}')`
-            ).join(', ')}
-          ) AS t(OriginId_tracc, pop, pop_growth, imd_score_mhclg, imd_decile_mhclg, hh_caravail_ts045, lad24cd, wd24cd)
+          CREATE TABLE grid_analytics (
+            OriginId_tracc INTEGER,
+            pop DOUBLE,
+            pop_growth DOUBLE,
+            imd_score_mhclg DOUBLE,
+            imd_decile_mhclg INTEGER,
+            hh_caravail_ts045 DOUBLE,
+            lad24cd VARCHAR,
+            wd24cd VARCHAR
+          )
         `);
+        
+        // Insert data in smaller batches to avoid SQL length limits
+        const BATCH_SIZE = 1000;
+        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
+          const batch = gridData.features.slice(i, i + BATCH_SIZE);
+          const values = batch.map(f => {
+            const props = f.properties;
+            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
+          }).join(', ');
+          
+          await conn.query(`
+            INSERT INTO grid_analytics VALUES ${values}
+          `);
+        }
         
         await conn.close();
         
