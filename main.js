@@ -5499,27 +5499,24 @@ function updateFilterValues(source = 'filter') {
   }
 }
 
+/**
+ * Enhanced updateSummaryStatistics that can wait for DuckDB
+ */
 async function updateSummaryStatistics(features, source = 'filter') {
   if (isCalculatingStats) {
-    // console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
+    console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
     return;
   }
   isCalculatingStats = true;
   
-  // console.log('=== updateSummaryStatistics Debug ===');
-  // console.log('Called from:', source);
-  // console.log('Input features count:', features ? features.length : 'null/undefined');
-  // console.log('Grid available:', !!grid);
-  // console.log('Grid features count:', grid ? grid.features.length : 'N/A');
-  // console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
-  // console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
-  // console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🕐 ${timestamp} - === updateSummaryStatistics called from: ${source} ===`);
+  console.log(`Input features count: ${features ? features.length : 'null/undefined'}`);
     
   try {
     if (!grid && (!features || features.length === 0)) {
-      // console.log('No grid and no features, displaying empty statistics');
+      console.log('No grid and no features, displaying empty statistics');
       displayEmptyStatistics();
-      //hideLoadingOverlay();
       return;
     }
     
@@ -5528,50 +5525,56 @@ async function updateSummaryStatistics(features, source = 'filter') {
       const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
         .map(checkbox => checkbox.value);
       
-      // console.log('Selected filter values:', selectedValues);
-      
       if (selectedValues.length === 0) {
-        // console.log('No filter values selected, displaying empty statistics');
+        console.log('No filter values selected, displaying empty statistics');
         displayEmptyStatistics();
-        //hideLoadingOverlay();
         return;
       }
     }
     
-    // console.log('Applying filters to features...');
+    console.log('Applying filters to features...');
     const filteredFeatures = applyFilters(features);
-    // console.log('Filtered features count:', filteredFeatures ? filteredFeatures.length : 'null/undefined');
+    console.log(`Filtered features count: ${filteredFeatures ? filteredFeatures.length : 'null/undefined'}`);
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
-      // console.log('No features after filtering, displaying empty statistics');
+      console.log('No features after filtering, displaying empty statistics');
       displayEmptyStatistics();
-      //hideLoadingOverlay();
       return;
     }
 
-    // console.log('Calculating base statistics...');
+    // Show loading indicator for large datasets
+    if (filteredFeatures.length > 50000) {
+      showBackgroundLoadingIndicator(`${timestamp} - Calculating statistics for ${filteredFeatures.length} features...`);
+    }
+
+    console.log('Calculating base statistics...');
     const baseStats = await calculateBaseStatistics(filteredFeatures);
-    // console.log('Base stats calculated:', baseStats);
+    console.log('Base stats calculated:', baseStats);
     
     if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
-      // console.log('Calculating time statistics...');
+      console.log('Calculating time statistics...');
       const timeStats = calculateTimeStatistics(filteredFeatures);
-      // console.log('Time stats calculated:', timeStats);
+      console.log('Time stats calculated:', timeStats);
       const stats = {...baseStats, ...timeStats};
-      // console.log('Combined stats:', stats);
+      console.log('Combined stats:', stats);
       updateStatisticsUI(stats);
     } else {
-      // console.log('Using base stats only');
+      console.log('Using base stats only');
       updateStatisticsUI(baseStats);
     }
-    //hideLoadingOverlay();
+    
+    if (filteredFeatures.length > 50000) {
+      hideBackgroundLoadingIndicator();
+    }
+    
   } catch (error) {
     console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
-    //hideLoadingOverlay();
+    hideBackgroundLoadingIndicator();
   } finally {
     isCalculatingStats = false;
-    // console.log('=== updateSummaryStatistics completed ===');
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - === updateSummaryStatistics completed ===`);
   }
 }
 
@@ -5834,32 +5837,115 @@ function applyRangeFilter(features, filterValue) {
   return features;
 }
 
-async function calculateStatistics(features) {
-  // console.log(`Calculating statistics for ${features.length} features`);
-  
-  const baseStats = await calculateBaseStatistics(features);
-  
-  let layerStats = {};
-  
-  if (AmenitiesCatchmentLayer) {
-    layerStats = calculateTimeStatistics(features);
-  }
-  
-  return {...baseStats, ...layerStats};
+/**
+ * Wait for DuckDB analytics to be ready
+ */
+function waitForDuckDBAnalytics(timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    if (window.duckdbAnalyticsReady) {
+      resolve();
+      return;
+    }
+    
+    const startTime = Date.now();
+    const checkInterval = setInterval(() => {
+      if (window.duckdbAnalyticsReady) {
+        clearInterval(checkInterval);
+        resolve();
+      } else if (Date.now() - startTime > timeoutMs) {
+        clearInterval(checkInterval);
+        reject(new Error('DuckDB analytics timeout'));
+      }
+    }, 100);
+  });
 }
 
-function calculateBaseStatistics(features) {
-  if (!features || features.length === 0) {
+/**
+ * Calculate statistics using DuckDB for better performance on large datasets
+ */
+async function calculateStatisticsWithDuckDB(features) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🕐 ${timestamp} - Starting DuckDB statistics calculation`);
+  
+  try {
+    const conn = await window.duckdbInstance.connect();
+    
+    // Get origin IDs for filtering
+    const originIds = features.map(f => f.properties.OriginId_tracc).filter(id => id);
+    
+    if (originIds.length === 0) {
+      await conn.close();
+      return await calculateStatisticsWithJavaScript(features);
+    }
+    
+    // Create a temporary table with the filtered IDs for faster joins
+    const batchSize = 1000;
+    await conn.query('CREATE TEMP TABLE filtered_origins (id INTEGER)');
+    
+    for (let i = 0; i < originIds.length; i += batchSize) {
+      const batch = originIds.slice(i, i + batchSize);
+      const values = batch.map(id => `(${id})`).join(',');
+      await conn.query(`INSERT INTO filtered_origins VALUES ${values}`);
+    }
+    
+    // Run the statistics query
+    const result = await conn.query(`
+      SELECT 
+        SUM(pop) as total_population,
+        MIN(pop) as min_population,
+        MAX(pop) as max_population,
+        SUM(pop * imd_score_mhclg) / NULLIF(SUM(CASE WHEN imd_score_mhclg IS NOT NULL THEN pop END), 0) as avg_imd_score,
+        MIN(imd_score_mhclg) as min_imd_score,
+        MAX(imd_score_mhclg) as max_imd_score,
+        SUM(pop * imd_decile_mhclg) / NULLIF(SUM(CASE WHEN imd_decile_mhclg IS NOT NULL THEN pop END), 0) as avg_imd_decile,
+        MIN(imd_decile_mhclg) as min_imd_decile,
+        MAX(imd_decile_mhclg) as max_imd_decile,
+        SUM(pop * hh_caravail_ts045) / NULLIF(SUM(CASE WHEN hh_caravail_ts045 IS NOT NULL THEN pop END), 0) as avg_car_availability,
+        MIN(hh_caravail_ts045) as min_car_availability,
+        MAX(hh_caravail_ts045) as max_car_availability,
+        SUM(pop_growth) as total_pop_growth,
+        MIN(pop_growth) as min_pop_growth,
+        MAX(pop_growth) as max_pop_growth
+      FROM grid_analytics g
+      INNER JOIN filtered_origins f ON g.OriginId_tracc = f.id
+    `);
+    
+    await conn.close();
+    
+    const row = result.toArray()[0];
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - ✅ DuckDB statistics completed`);
+    
     return {
-      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
-      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
-      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
-      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
-      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+      totalPopulation: Number(row.total_population) || 0,
+      minPopulation: Number(row.min_population) || 0,
+      maxPopulation: Number(row.max_population) || 0,
+      avgImdScore: Number(row.avg_imd_score) || 0,
+      minImdScore: Number(row.min_imd_score) || 0,
+      maxImdScore: Number(row.max_imd_score) || 0,
+      avgImdDecile: Number(row.avg_imd_decile) || 0,
+      minImdDecile: Number(row.min_imd_decile) || 0,
+      maxImdDecile: Number(row.max_imd_decile) || 0,
+      avgCarAvailability: Number(row.avg_car_availability) || 0,
+      minCarAvailability: Number(row.min_car_availability) || 0,
+      maxCarAvailability: Number(row.max_car_availability) || 0,
+      totalPopGrowth: Number(row.total_pop_growth) || 0,
+      minPopGrowth: Number(row.min_pop_growth) || 0,
+      maxPopGrowth: Number(row.max_pop_growth) || 0
     };
+    
+  } catch (error) {
+    console.error('Error in DuckDB statistics calculation:', error);
+    return await calculateStatisticsWithJavaScript(features);
   }
+}
 
-  // console.log('Calculating stats for', features.length, 'features');
+/**
+ * Original JavaScript-based statistics calculation (renamed for clarity)
+ */
+function calculateStatisticsWithJavaScript(features) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🕐 ${timestamp} - Starting JavaScript statistics calculation`);
   
   const BATCH_SIZE = 5000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
@@ -5945,18 +6031,15 @@ function calculateBaseStatistics(features) {
       if (currentBatch < totalBatches) {
         requestAnimationFrame(processBatch);
       } else {
+        // Finalize statistics
         if (stats.minPopulation === Infinity) stats.minPopulation = 0;
         if (stats.maxPopulation === -Infinity) stats.maxPopulation = 0;
-        
         if (stats.minImdScore === Infinity) stats.minImdScore = 0;
         if (stats.maxImdScore === -Infinity) stats.maxImdScore = 0;
-        
         if (stats.minImdDecile === Infinity) stats.minImdDecile = 0;
         if (stats.maxImdDecile === -Infinity) stats.maxImdDecile = 0;
-        
         if (stats.minCarAvailability === Infinity) stats.minCarAvailability = 0;
         if (stats.maxCarAvailability === -Infinity) stats.maxCarAvailability = 0;
-        
         if (stats.minPopGrowth === Infinity) stats.minPopGrowth = 0;
         if (stats.maxPopGrowth === -Infinity) stats.maxPopGrowth = 0;
         
@@ -5969,23 +6052,22 @@ function calculateBaseStatistics(features) {
         const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
           stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
 
+        const timestamp2 = new Date().toLocaleTimeString();
+        console.log(`🕐 ${timestamp2} - ✅ JavaScript statistics completed`);
+
         resolve({
           totalPopulation: stats.totalPopulation,
           minPopulation: stats.minPopulation,
           maxPopulation: stats.maxPopulation,
-          
           avgImdScore: avgImdScore,
           minImdScore: stats.minImdScore,
           maxImdScore: stats.maxImdScore,
-          
           avgImdDecile: avgImdDecile,
           minImdDecile: stats.minImdDecile,
           maxImdDecile: stats.maxImdDecile,
-          
           avgCarAvailability: avgCarAvailability,
           minCarAvailability: stats.minCarAvailability,
           maxCarAvailability: stats.maxCarAvailability,
-          
           totalPopGrowth: stats.totalPopGrowth,
           minPopGrowth: stats.minPopGrowth,
           maxPopGrowth: stats.maxPopGrowth
@@ -5995,6 +6077,44 @@ function calculateBaseStatistics(features) {
     
     processBatch();
   });
+}
+
+/**
+ * Enhanced statistics calculation that can use DuckDB for large datasets
+ */
+async function calculateBaseStatistics(features) {
+  if (!features || features.length === 0) {
+    return {
+      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
+      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
+      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
+      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
+      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+    };
+  }
+
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🕐 ${timestamp} - Calculating stats for ${features.length} features`);
+  
+  // For large datasets, wait for DuckDB and use it for faster calculations
+  if (features.length > 50000 && window.duckdbInstance) {
+    console.log(`🕐 ${timestamp} - Large dataset detected, checking DuckDB availability...`);
+    
+    try {
+      // Wait for DuckDB analytics to be ready (with timeout)
+      await waitForDuckDBAnalytics(10000); // 10 second timeout
+      
+      if (window.duckdbAnalyticsReady) {
+        console.log(`🕐 ${timestamp} - Using DuckDB for statistics calculation`);
+        return await calculateStatisticsWithDuckDB(features);
+      }
+    } catch (error) {
+      console.warn(`⚠️ DuckDB not ready, falling back to JavaScript calculation:`, error);
+    }
+  }
+  
+  console.log(`🕐 ${timestamp} - Using JavaScript for statistics calculation`);
+  return await calculateStatisticsWithJavaScript(features);
 }
 
 function calculateTimeStatistics(features) {
