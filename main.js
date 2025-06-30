@@ -78,9 +78,7 @@ let isUpdatingOpacityOutlineFields = false;
 let pendingAmenitiesUpdate = false;
 let amenitiesUpdateRequested = false;
 
-// DOM Element Cache for performance optimization
 const DOMElements = {
-  // Checkbox elements
   amenitiesCheckbox: null,
   uaBoundariesCheckbox: null,
   wardBoundariesCheckbox: null,
@@ -88,26 +86,22 @@ const DOMElements = {
   busLinesCheckbox: null,
   roadNetworkCheckbox: null,
   
-  // Subject and aim level elements
   subjectAllCheckbox: null,
   subjectCheckboxes: null,
   aimLevelAllCheckbox: null,
   aimLevelCheckboxes: null,
   
-  // Dropdown elements
   subjectDropdown: null,
   subjectCheckboxesContainer: null,
   aimLevelDropdown: null,
   aimLevelCheckboxesContainer: null,
   
-  // Filter elements
   filterTypeDropdown: null,
   filterValueDropdown: null,
   filterValueContainer: null,
   highlightAreaCheckbox: null,
   
   init() {
-    // Cache checkbox elements
     this.amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
     this.uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
     this.wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
@@ -115,19 +109,16 @@ const DOMElements = {
     this.busLinesCheckbox = document.getElementById('busLinesCheckbox');
     this.roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
     
-    // Cache subject and aim level elements
     this.subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     this.subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
     this.aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
     this.aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
     
-    // Cache dropdown elements
     this.subjectDropdown = document.getElementById('subjectDropdown');
     this.subjectCheckboxesContainer = document.getElementById('subjectCheckboxesContainer');
     this.aimLevelDropdown = document.getElementById('aimlevelDropdown');
     this.aimLevelCheckboxesContainer = document.getElementById('aimlevelCheckboxesContainer');
     
-    // Cache filter elements
     this.filterTypeDropdown = document.getElementById('filterTypeDropdown');
     this.filterValueDropdown = document.getElementById('filterValueDropdown');
     this.filterValueContainer = document.getElementById('filterValueContainer');
@@ -135,16 +126,13 @@ const DOMElements = {
   }
 };
 
-// Utility functions for common patterns
 const Utils = {
-  // Create toggle handler for layer visibility
   createToggleHandler(checkbox, layer, onStyle = { opacity: 1 }, offStyle = { opacity: 0 }) {
     if (checkbox && layer) {
       checkbox.addEventListener('change', () => {
         if (layer.setStyle) {
           layer.setStyle(checkbox.checked ? onStyle : offStyle);
         } else if (layer.eachLayer) {
-          // Handle layer groups
           layer.eachLayer(sublayer => {
             const style = checkbox.checked ? onStyle : offStyle;
             if (sublayer.setStyle) {
@@ -156,7 +144,6 @@ const Utils = {
     }
   },
   
-  // Create special handler for bus layers with calculated opacity
   createBusLayerHandler(checkbox, layer, isStopsLayer = false) {
     if (checkbox && layer) {
       checkbox.addEventListener('change', () => {
@@ -178,7 +165,6 @@ const Utils = {
     }
   },
   
-  // Setup collapsible panel
   setupCollapsiblePanel(headerElement, contentElement, onToggle = null) {
     if (headerElement && contentElement) {
       contentElement.style.display = "none";
@@ -196,7 +182,6 @@ const Utils = {
     }
   },
   
-  // Get selection state for checkbox containers
   getSelectionState(containerSelector, allValue = "All") {
     const allCheckbox = document.querySelector(`${containerSelector} input[value="${allValue}"]`);
     const isAllSelected = allCheckbox?.checked || false;
@@ -212,7 +197,6 @@ const Utils = {
   }
 };
 
-// Layer management utilities
 const LayerUtils = {
   forEachUserLayer(callback) {
     userLayers.forEach(userLayer => {
@@ -393,10 +377,8 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
 document.addEventListener('DOMContentLoaded', (event) => {
   console.log('DOM fully loaded, starting application initialization...');
   
-  // Initialize DOM element cache first
   DOMElements.init();
   
-  //showoadingOverlay();
   initializeUI();
   setupMapPanes();
   
@@ -417,7 +399,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
-    //hideLoadingOverlay();
     showErrorNotification('Error loading map layers. Please try refreshing the page.');
   });
 });
@@ -460,7 +441,6 @@ function setupAdditionalUIListeners() {
 function createStaticLegendControls() {
   console.log('Creating static legend controls...');
   
-  // Amenities checkbox with custom handler
   if (DOMElements.amenitiesCheckbox) {
     DOMElements.amenitiesCheckbox.addEventListener('change', () => {
       if (DOMElements.amenitiesCheckbox.checked) {
@@ -472,12 +452,10 @@ function createStaticLegendControls() {
     });
   }
 
-  // Standard layer toggles using utility function
   Utils.createToggleHandler(DOMElements.uaBoundariesCheckbox, uaBoundariesLayer);
   Utils.createToggleHandler(DOMElements.wardBoundariesCheckbox, wardBoundariesLayer);
   Utils.createToggleHandler(DOMElements.roadNetworkCheckbox, roadNetworkLayer);
   
-  // Bus layers with special handling for calculated opacity
   Utils.createBusLayerHandler(DOMElements.busStopsCheckbox, busStopsLayer, true);
   Utils.createBusLayerHandler(DOMElements.busLinesCheckbox, busLinesLayer, false);
 }
@@ -604,7 +582,6 @@ function initializeCollapsiblePanels() {
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
-  // Use utility function for consistent panel behavior
   Utils.setupCollapsiblePanel(summaryHeader, summaryContent);
 }
 
@@ -999,28 +976,16 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       fastMode: true
     }).data;
     
-    // Optimized CSV processing - combine both datasets in one loop
     const csvLookup = new Map();
     
     function processCsvDataToLookup(csvDataArrays) {
       csvDataArrays.forEach(csvData => {
-        for (let i = 0; i < csvData.length; i++) {
-          const row = csvData[i];
+        csvData.forEach(row => {
           if (row.OriginId_tracc) {
             const key = String(row.OriginId_tracc);
-            if (!csvLookup.has(key)) {
-              csvLookup.set(key, {
-                pop: Number(row.pop) || 0,
-                pop_growth: Number(row.pop_growth) || 0,
-                imd_score_mhclg: Number(row.imd_score_mhclg) || 0,
-                imd_decile_mhclg: Number(row.imd_decile_mhclg) || 0,
-                hh_caravail_ts045: Number(row.hh_caravail_ts045) || 0,
-                lad24cd: row.lad24cd || '',
-                wd24cd: row.wd24cd || ''
-              });
-            }
+            csvLookup.set(key, row);
           }
-        }
+        });
       });
     }
     
@@ -1029,12 +994,19 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Created lookup table with ${csvLookup.size} entries`);
     
+    const sampleCsvKeys = Array.from(csvLookup.keys()).slice(0, 5);
+    console.log('Sample CSV keys:', sampleCsvKeys);
+    
     const BATCH_SIZE = 20000;
     const allFeatures = [...data1.features, ...data2.features];
     const processedFeatures = [];
     
     let processed = 0;
+    let matchedCount = 0;
     const totalFeatures = allFeatures.length;
+    
+    const sampleGeoJsonKeys = allFeatures.slice(0, 5).map(f => f.properties?.OriginId_tracc);
+    console.log('Sample GeoJSON keys:', sampleGeoJsonKeys);
     
     const timestamp3 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp3} - Processing ${totalFeatures} features in batches of ${BATCH_SIZE}...`);
@@ -1045,23 +1017,22 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       
       for (let j = i; j < batchEnd; j++) {
         const feature = allFeatures[j];
-        const originId = feature.properties.OriginId_tracc;
+        if (!feature.properties?.OriginId_tracc) continue;
         
-        if (!originId) {
-          continue;
-        }
+        const geoJsonKey = String(feature.properties.OriginId_tracc);
+        const csvRow = csvLookup.get(geoJsonKey);
         
-        const csvData = csvLookup.get(originId);
-        
-        if (csvData) {
-          Object.assign(feature.properties, csvData);
+        if (csvRow) {
+          const mergedProperties = {
+            ...feature.properties,
+            ...csvRow
+          };
           
-          if (!feature.properties._centroid) {
-            const centroid = turf.centroid(feature);
-            feature.properties._centroid = centroid.geometry.coordinates;
-          }
-          
-          processedFeatures.push(feature);
+          processedFeatures.push({
+            ...feature,
+            properties: mergedProperties
+          });
+          matchedCount++;
         }
       }
       
@@ -1083,6 +1054,7 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     const timestamp4 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp4} - ✅ Processed ${validOutputFeatures} valid features (${filteredOutCount} features filtered out due to missing CSV data)`);
     console.log(`📊 Data quality: ${((validOutputFeatures / totalInputFeatures) * 100).toFixed(1)}% of GeoJSON features had matching CSV data`);
+    console.log(`🔗 Successfully matched ${matchedCount} features with CSV data`);
     
     resolve(combinedData);
   });
@@ -1894,7 +1866,6 @@ function loadTrainingCentres() {
 function setupSubjectAndAimLevelCheckboxes() {
   console.log('Setting up subject and aim level checkboxes...');
   
-  // Use cached DOM elements instead of repeated queries
   if (DOMElements.subjectAllCheckbox) {
     DOMElements.subjectAllCheckbox.addEventListener('change', function() {
       const isChecked = this.checked;
@@ -2122,13 +2093,12 @@ function setupTrainingCenterFilters() {
         updateAmenitiesCatchmentLayer();
     }, 2000);
     
-    // Use cached DOM elements - combine subject and aim level checkbox handling
     const allCheckboxes = [
         ...Array.from(DOMElements.subjectCheckboxes), 
         DOMElements.subjectAllCheckbox,
         ...Array.from(DOMElements.aimLevelCheckboxes),
         DOMElements.aimLevelAllCheckbox
-    ].filter(Boolean); // Remove any null elements
+    ].filter(Boolean);
     
     allCheckboxes.forEach(checkbox => {
         checkbox.removeEventListener('change', debouncedHandler);
@@ -4956,6 +4926,10 @@ function checkAmenitiesDataReady() {
     
     if (!grid || !grid.features || grid.features.length === 0) {
         missing.push('Grid data not loaded');
+    } else if (grid.features.length > 0 && !grid.features[0].properties) {
+        missing.push('Grid data has no properties');
+    } else if (grid.features.length > 0 && !grid.features[0].properties.OriginId_tracc) {
+        missing.push('Grid data missing OriginId_tracc');
     }
     
     if (!amenityLayers['TrainingCentres'] || !amenityLayers['TrainingCentres'].features) {
