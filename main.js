@@ -604,6 +604,9 @@ function loadBoundaryData() {
             },
           }).addTo(map);
           
+          updateFilterDropdown();
+          updateFilterValues();
+
           if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
             const dataStatus = checkAmenitiesDataReady();
             if (dataStatus.ready) {
@@ -648,6 +651,9 @@ function loadBoundaryData() {
               },
             }).addTo(map);
             
+            updateFilterDropdown();
+            updateFilterValues();
+
             if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
               const dataStatus = checkAmenitiesDataReady();
               if (dataStatus.ready) {
@@ -5470,6 +5476,10 @@ function updateFilterValues(source = 'filter') {
       } else {
         if (currentFilterType === 'LA') {
           checkbox.checked = (option === 'MCA');
+        } else if (currentFilterType === 'Ward') {
+          checkbox.checked = false;
+        } else if (currentFilterType === 'Range') {
+          checkbox.checked = true;
         } else {
           checkbox.checked = (index === 0);
         }
