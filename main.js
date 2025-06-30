@@ -4941,6 +4941,14 @@ function setupAmenitiesAutoRetry() {
     }, 15000);
 }
 
+/**
+ * Clear the amenities auto-retry mechanism
+ */
+function clearAmenitiesAutoRetry() {
+    pendingAmenitiesUpdate = false;
+    amenitiesUpdateRequested = false;
+}
+
 function applyAmenitiesCatchmentLayerStyling() {
     console.log("applyAmenitiesCatchmentLayerStyling called");
     
@@ -5466,9 +5474,7 @@ function updateFilterValues(source = 'filter') {
           checkbox.checked = (index === 0);
         }
       }
-      
-      console.log('Setting checkbox for', option, 'to', checkbox.checked);
-      
+            
       checkbox.className = 'filter-value-checkbox';
       checkboxes.push(checkbox);
       
