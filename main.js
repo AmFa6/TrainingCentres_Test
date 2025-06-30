@@ -767,9 +767,6 @@ function loadBackgroundData() {
     });
 }
 
-/**
- * Enhanced loadGridData that triggers pending amenities updates when complete
- */
 async function loadGridData() {
   const timestamp = new Date().toLocaleTimeString();
   showBackgroundLoadingIndicator(`Loading grid data...`);
@@ -778,23 +775,45 @@ async function loadGridData() {
     console.log(`🕐 ${timestamp} - 🚀 === Starting fast CSV+GeoJSON data loading ===`);
     const totalStartTime = performance.now();
     
-    // ... existing loadGridData code ...
+    const [data1, data2, csvText1, csvText2] = await Promise.all([
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
+    ]);
     
-    // At the end of successful grid loading, check for pending amenities updates
+    console.log("Processing grid data in background...");
+    
+    const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
+    grid = processedGrid;
+    
+    calculateGridStatistics(grid);
+    
+    updateFilterDropdown();
+    updateFilterValues();
+    
+    if (initialLoadComplete) {
+      updateSummaryStatistics(grid.features);
+    }
+    
+    // ✅ Now the timing is correct - after all processing is done
     const totalTime = performance.now() - totalStartTime;
     const totalSeconds = (totalTime / 1000).toFixed(2);
-    const timestamp11 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp11} - 🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - 🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
     
     // Trigger any pending amenities updates now that grid data is ready
     if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
-      console.log(`🕐 ${timestamp11} - Grid data loaded, checking for pending amenities updates...`);
+      console.log(`🕐 ${timestamp2} - Grid data loaded, checking for pending amenities updates...`);
       setTimeout(() => {
         if (amenitiesUpdateRequested) {
           updateAmenitiesCatchmentLayer();
         }
-      }, 500); // Small delay to ensure everything is settled
+      }, 500);
     }
+    
+    hideBackgroundLoadingIndicator();
+    console.log("Grid data loading and processing complete");
     
   } catch (error) {
     const timestamp = new Date().toLocaleTimeString();
