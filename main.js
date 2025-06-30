@@ -78,141 +78,6 @@ let isUpdatingOpacityOutlineFields = false;
 let pendingAmenitiesUpdate = false;
 let amenitiesUpdateRequested = false;
 
-const DOMElements = {
-  amenitiesCheckbox: null,
-  uaBoundariesCheckbox: null,
-  wardBoundariesCheckbox: null,
-  busStopsCheckbox: null,
-  busLinesCheckbox: null,
-  roadNetworkCheckbox: null,
-  
-  subjectAllCheckbox: null,
-  subjectCheckboxes: null,
-  aimLevelAllCheckbox: null,
-  aimLevelCheckboxes: null,
-  
-  subjectDropdown: null,
-  subjectCheckboxesContainer: null,
-  aimLevelDropdown: null,
-  aimLevelCheckboxesContainer: null,
-  
-  filterTypeDropdown: null,
-  filterValueDropdown: null,
-  filterValueContainer: null,
-  highlightAreaCheckbox: null,
-  
-  init() {
-    this.amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-    this.uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
-    this.wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
-    this.busStopsCheckbox = document.getElementById('busStopsCheckbox');
-    this.busLinesCheckbox = document.getElementById('busLinesCheckbox');
-    this.roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
-    
-    this.subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
-    this.subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
-    this.aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
-    this.aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
-    
-    this.subjectDropdown = document.getElementById('subjectDropdown');
-    this.subjectCheckboxesContainer = document.getElementById('subjectCheckboxesContainer');
-    this.aimLevelDropdown = document.getElementById('aimlevelDropdown');
-    this.aimLevelCheckboxesContainer = document.getElementById('aimlevelCheckboxesContainer');
-    
-    this.filterTypeDropdown = document.getElementById('filterTypeDropdown');
-    this.filterValueDropdown = document.getElementById('filterValueDropdown');
-    this.filterValueContainer = document.getElementById('filterValueContainer');
-    this.highlightAreaCheckbox = document.getElementById('highlightAreaCheckbox');
-  }
-};
-
-const Utils = {
-  createToggleHandler(checkbox, layer, onStyle = { opacity: 1 }, offStyle = { opacity: 0 }) {
-    if (checkbox && layer) {
-      checkbox.addEventListener('change', () => {
-        if (layer.setStyle) {
-          layer.setStyle(checkbox.checked ? onStyle : offStyle);
-        } else if (layer.eachLayer) {
-          layer.eachLayer(sublayer => {
-            const style = checkbox.checked ? onStyle : offStyle;
-            if (sublayer.setStyle) {
-              sublayer.setStyle(style);
-            }
-          });
-        }
-      });
-    }
-  },
-  
-  createBusLayerHandler(checkbox, layer, isStopsLayer = false) {
-    if (checkbox && layer) {
-      checkbox.addEventListener('change', () => {
-        layer.eachLayer(sublayer => {
-          if (checkbox.checked) {
-            if (isStopsLayer) {
-              sublayer.setStyle({ 
-                opacity: 1, 
-                fillOpacity: sublayer.options._calculatedFillOpacity || 0
-              });
-            } else {
-              sublayer.setStyle({ opacity: sublayer.options._calculatedOpacity || 1 });
-            }
-          } else {
-            sublayer.setStyle({ opacity: 0, fillOpacity: 0 });
-          }
-        });
-      });
-    }
-  },
-  
-  setupCollapsiblePanel(headerElement, contentElement, onToggle = null) {
-    if (headerElement && contentElement) {
-      contentElement.style.display = "none";
-      headerElement.classList.add("collapsed");
-      
-      headerElement.addEventListener("click", function() {
-        this.classList.toggle("collapsed");
-        const isCollapsed = this.classList.contains("collapsed");
-        contentElement.style.display = isCollapsed ? "none" : "block";
-        
-        if (onToggle) {
-          onToggle(this, !isCollapsed);
-        }
-      });
-    }
-  },
-  
-  getSelectionState(containerSelector, allValue = "All") {
-    const allCheckbox = document.querySelector(`${containerSelector} input[value="${allValue}"]`);
-    const isAllSelected = allCheckbox?.checked || false;
-    
-    if (isAllSelected) {
-      return { isAllSelected: true, selectedValues: [] };
-    }
-    
-    const individualCheckboxes = document.querySelectorAll(`${containerSelector} input[type="checkbox"]:checked:not([value="${allValue}"])`);
-    const selectedValues = Array.from(individualCheckboxes).map(cb => cb.value.toLowerCase());
-    
-    return { isAllSelected: false, selectedValues };
-  }
-};
-
-const LayerUtils = {
-  forEachUserLayer(callback) {
-    userLayers.forEach(userLayer => {
-      if (userLayer.layer) {
-        callback(userLayer);
-      }
-    });
-  },
-  
-  forEachFeatureInUserLayers(callback) {
-    this.forEachUserLayer(userLayer => {
-      userLayer.layer.eachLayer(callback);
-    });
-  }
-};
-
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
   return new Promise((resolve) => {
@@ -376,9 +241,7 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
  */
 document.addEventListener('DOMContentLoaded', (event) => {
   console.log('DOM fully loaded, starting application initialization...');
-  
-  DOMElements.init();
-  
+  //showoadingOverlay();
   initializeUI();
   setupMapPanes();
   
@@ -399,6 +262,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
+    //hideLoadingOverlay();
     showErrorNotification('Error loading map layers. Please try refreshing the page.');
   });
 });
@@ -441,9 +305,10 @@ function setupAdditionalUIListeners() {
 function createStaticLegendControls() {
   console.log('Creating static legend controls...');
   
-  if (DOMElements.amenitiesCheckbox) {
-    DOMElements.amenitiesCheckbox.addEventListener('change', () => {
-      if (DOMElements.amenitiesCheckbox.checked) {
+  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
+  if (amenitiesCheckbox) {
+    amenitiesCheckbox.addEventListener('change', () => {
+      if (amenitiesCheckbox.checked) {
         drawSelectedAmenities();
         amenitiesLayerGroup.addTo(map);
       } else {
@@ -452,12 +317,83 @@ function createStaticLegendControls() {
     });
   }
 
-  Utils.createToggleHandler(DOMElements.uaBoundariesCheckbox, uaBoundariesLayer);
-  Utils.createToggleHandler(DOMElements.wardBoundariesCheckbox, wardBoundariesLayer);
-  Utils.createToggleHandler(DOMElements.roadNetworkCheckbox, roadNetworkLayer);
+  const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
+  if (uaBoundariesCheckbox) {
+    uaBoundariesCheckbox.addEventListener('change', () => {
+      if (uaBoundariesLayer) {
+        if (uaBoundariesCheckbox.checked) {
+          uaBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          uaBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
+  if (wardBoundariesCheckbox) {
+    wardBoundariesCheckbox.addEventListener('change', () => {
+      if (wardBoundariesLayer) {
+        if (wardBoundariesCheckbox.checked) {
+          wardBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          wardBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
   
-  Utils.createBusLayerHandler(DOMElements.busStopsCheckbox, busStopsLayer, true);
-  Utils.createBusLayerHandler(DOMElements.busLinesCheckbox, busLinesLayer, false);
+  const busStopsCheckbox = document.getElementById('busStopsCheckbox');
+  if (busStopsCheckbox) {
+    busStopsCheckbox.addEventListener('change', () => {
+      if (busStopsLayer) {
+        if (busStopsCheckbox.checked) {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ 
+              opacity: 1, 
+              fillOpacity: layer.options._calculatedFillOpacity 
+            });
+          });
+        } else {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: 0, fillOpacity: 0 });
+          });
+        }
+      }
+    });
+  }
+  
+  const busLinesCheckbox = document.getElementById('busLinesCheckbox');
+  if (busLinesCheckbox) {
+    busLinesCheckbox.addEventListener('change', () => {
+      if (busLinesLayer) {
+        if (busLinesCheckbox.checked) {
+          busLinesLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: layer.options._calculatedOpacity });
+          });
+        } else {
+          busLinesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
+  if (roadNetworkCheckbox) {
+    roadNetworkCheckbox.addEventListener('change', () => {
+      if (roadNetworkLayer) {
+        if (roadNetworkCheckbox.checked) {
+          roadNetworkLayer.setStyle({
+            opacity: 1,
+          });
+        } else {
+          roadNetworkLayer.setStyle({
+            opacity: 0,
+          });
+        }
+      }
+    });
+  }
 }
 
 /**
@@ -510,7 +446,7 @@ function initializeCollapsiblePanels() {
     }
   });
 
-  function handlePanelStateChange(header, isOpen) {
+    function handlePanelStateChange(header, isOpen) {
     const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
     if (isOpen) {
@@ -558,7 +494,7 @@ function initializeCollapsiblePanels() {
     }
   }
 
-  const panelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
+  const panelHeaders = document.querySelectorAll(".panel-header");
   panelHeaders.forEach(header => {
     const content = header.nextElementSibling;
     if (content) {
@@ -572,7 +508,9 @@ function initializeCollapsiblePanels() {
         this.classList.toggle("collapsed");
         content.style.display = willOpen ? "block" : "none";
         
-        handlePanelStateChange(this, willOpen);
+        if (!this.classList.contains('summary-header')) {
+          handlePanelStateChange(this, willOpen);
+        }
       });
     }
   });
@@ -585,15 +523,15 @@ function initializeCollapsiblePanels() {
     summaryHeader.classList.add("collapsed");
     
     summaryHeader.addEventListener("click", function() {
-      const isCurrentlyCollapsed = this.classList.contains("collapsed");
-      
-      if (isCurrentlyCollapsed) {
-        this.classList.remove("collapsed");
-        summaryContent.style.display = "block";
-      } else {
-        this.classList.add("collapsed");
-        summaryContent.style.display = "none";
-      }
+      const isCollapsed = this.classList.contains("collapsed");
+      this.classList.toggle("collapsed");
+      summaryContent.style.display = isCollapsed ? "block" : "none";
+    });
+    
+    summaryHeader.addEventListener("click", function() {
+      this.classList.toggle("collapsed");
+      const isNowCollapsed = this.classList.contains("collapsed");
+      summaryContent.style.display = isNowCollapsed ? "none" : "block";
     });
   }
 }
@@ -853,28 +791,7 @@ async function loadGridData() {
     updateFilterValues();
     
     if (initialLoadComplete) {
-      setTimeout(() => {
-        const filterValueContainer = document.getElementById('filterValueContainer');
-        if (filterValueContainer) {
-          const mcaCheckbox = filterValueContainer.querySelector('input[value="MCA"]');
-          if (mcaCheckbox) {
-            mcaCheckbox.checked = true;
-            const allCheckboxes = filterValueContainer.querySelectorAll('.filter-value-checkbox');
-            allCheckboxes.forEach(cb => {
-              if (cb.value !== 'MCA') {
-                cb.checked = false;
-              }
-            });
-            
-            const filterValueButton = document.getElementById('filterValueButton');
-            if (filterValueButton) {
-              filterValueButton.textContent = 'MCA';
-            }
-          }
-        }
-        
-        updateSummaryStatistics(getCurrentFeatures(), 'initial_load');
-      }, 100);
+      updateSummaryStatistics(grid.features);
     }
     
     const totalTime = performance.now() - totalStartTime;
@@ -899,496 +816,6 @@ async function loadGridData() {
     console.error(`🕐 ${timestamp} - ❌ Error loading grid data:`, error);
     hideBackgroundLoadingIndicator();
     showErrorNotification("Error loading grid data. Some features may be limited.");
-  }
-}
-
-function updateAmenitiesCatchmentLayer() {
-    const timestamp = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp} - === updateAmenitiesCatchmentLayer called ===`);
-    
-    amenitiesUpdateRequested = true;
-    
-    if (isUpdatingCatchmentLayer) {
-        console.log("Already updating catchment layer, skipping duplicate call");
-        return;
-    }
-    
-    const hasRequiredData = checkAmenitiesDataReady();
-    
-    if (!hasRequiredData.ready) {
-        console.log(`🕐 ${timestamp} - Dependencies not ready:`, hasRequiredData.missing);
-        console.log(`🕐 ${timestamp} - Will retry automatically when data is available`);
-        
-        setupAmenitiesAutoRetry();
-        return;
-    }
-    
-    clearAmenitiesAutoRetry();
-    
-    isUpdatingCatchmentLayer = true;
-    
-    const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
-        .classList.contains("collapsed") === false;
-    
-    if (!amenitiesPanelOpen) {
-        console.log("Amenities panel not open, skipping update");
-        isUpdatingCatchmentLayer = false;
-        amenitiesUpdateRequested = false;
-        return;
-    }
-
-    const selectedYear = AmenitiesYear.value;
-    const timestamp2 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp2} - Selected year: ${selectedYear}`);
-    
-    showBackgroundLoadingIndicator(`Loading journey time data...`);
-    
-    const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
-    const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
-    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-    const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-    
-    const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
-    const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
-    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-    const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-    
-    const filteredTrainingCentres = filterTrainingCentres();
-    const timestamp3 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp3} - Filtered training centres count: ${filteredTrainingCentres.features.length}`);
-    
-    const filteredTrainingCenterIds = filteredTrainingCentres.features
-        .map(feature => feature.properties.DestinationId_tracc)
-        .filter(id => id !== undefined);
-        
-    if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-        console.log("No year selected or no training centers found, clearing layer");
-        if (AmenitiesCatchmentLayer) {
-            map.removeLayer(AmenitiesCatchmentLayer);
-            AmenitiesCatchmentLayer = null;
-        }
-        drawSelectedAmenities([]);
-        updateLegend();
-        updateFilterDropdown();
-        updateFilterValues();
-        updateSummaryStatistics([]);
-        hideBackgroundLoadingIndicator();
-        isUpdatingCatchmentLayer = false;
-        amenitiesUpdateRequested = false;
-        return;
-    }
-
-    const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-
-    fetch(csvPath)
-      .then(response => response.text())
-      .then(csvText => {
-          const timestamp4 = new Date().toLocaleTimeString();
-          console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
-          showBackgroundLoadingIndicator(`Processing journey times...`);
-          
-          const csvData = Papa.parse(csvText, { header: true }).data;
-          fullCsvData = csvData;
-          
-          if (csvData.length === 0) {
-              isUpdatingCatchmentLayer = false;
-              hideBackgroundLoadingIndicator();
-              return;
-          }
-          
-          const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-          const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-          
-          if (matchingIds.length === 0) {
-              console.log("No matching IDs found, clearing amenities layer");
-              if (AmenitiesCatchmentLayer) {
-                  map.removeLayer(AmenitiesCatchmentLayer);
-                  AmenitiesCatchmentLayer = null;
-              }
-              drawSelectedAmenities([]);
-              updateLegend();
-              updateFilterDropdown();
-              updateFilterValues();
-              updateSummaryStatistics([]);
-              hideBackgroundLoadingIndicator();
-              isUpdatingCatchmentLayer = false;
-              return;
-          }
-          
-          const timestamp5 = new Date().toLocaleTimeString();
-          console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
-          showBackgroundLoadingIndicator(`Creating catchment layer...`);
-          
-          const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-          const eligibleDestinations = new Set();
-          
-          if (amenityLayers['TrainingCentres']) {
-              amenityLayers['TrainingCentres'].features.forEach(feature => {
-                  const props = feature.properties;
-                  const destinationId = props.DestinationId_tracc;
-                  
-                  if (!destinationId || !matchingIds.includes(destinationId)) {
-                      return;
-                  }
-                  
-                  const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-                      selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-                  
-                  if (!hasSelectedAimLevel) {
-                      return;
-                  }
-                  
-                  let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-                  
-                  if (!hasSelectedSubject && yearPrefix) {
-                      hasSelectedSubject = selectedSubjects.some(subject => {
-                          const columnName = `${yearPrefix}_${subject}`;
-                          return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                      });
-                  } else if (!hasSelectedSubject) {
-                      const years = ["2122", "2223", "2324", "2425"];
-                      hasSelectedSubject = years.some(year => {
-                          return selectedSubjects.some(subject => {
-                              const columnName = `${year}_${subject}`;
-                              return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                          });
-                      });
-                  }
-                  
-                  if (hasSelectedSubject) {
-                      eligibleDestinations.add(destinationId);
-                  }
-              });
-          }
-          
-          gridTimeMap = {};
-          
-          csvData.forEach(row => {
-              const originId = row.origin;
-              const destinationId = row.destination;
-              const totalTime = parseFloat(row.totaltime);
-              
-              if (!originId || !destinationId || isNaN(totalTime)) {
-                  return;
-              }
-              
-              if (eligibleDestinations.has(destinationId)) {
-                  if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-                      gridTimeMap[originId] = totalTime;
-                  }
-              }
-          });
-          
-          grid.features.forEach(feature => {
-              const originId = feature.properties.OriginId_tracc;
-              if (gridTimeMap[originId] === undefined) {
-                  gridTimeMap[originId] = 120;
-              }
-          });
-          
-          let needToCreateNewLayer = false;
-          if (!AmenitiesCatchmentLayer) {
-              needToCreateNewLayer = true;
-          }
-          
-          if (needToCreateNewLayer) {
-              const timestamp6 = new Date().toLocaleTimeString();
-              console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
-              showBackgroundLoadingIndicator(`Rendering catchment layer...`);
-              
-              if (AmenitiesCatchmentLayer) {
-                  map.removeLayer(AmenitiesCatchmentLayer);
-              }
-              
-              AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                  pane: 'polygonLayers',
-                  style: function(feature) {
-                      const OriginId_tracc = feature.properties.OriginId_tracc;
-                      const time = gridTimeMap[OriginId_tracc];
-                      
-                      let fillColor = 'transparent';
-                      let fillOpacity = 0;
-                      
-                      if (time !== undefined && time < 120) {
-                          if (time <= 10) fillColor = '#fde725';
-                          else if (time <= 20) fillColor = '#8fd744';
-                          else if (time <= 30) fillColor = '#35b779';
-                          else if (time <= 40) fillColor = '#21908d';
-                          else if (time <= 50) fillColor = '#31688e';
-                          else if (time <= 60) fillColor = '#443a82';
-                          else fillColor = '#440154';
-                          fillOpacity = 0.7;
-                      }
-                      
-                      return {
-                          weight: 0.5,
-                          fillOpacity: fillOpacity,
-                          opacity: fillOpacity > 0 ? 0.8 : 0,
-                          fillColor: fillColor,
-                          color: '#ffffff'
-                      };
-                  }
-              }).addTo(map);
-              
-              AmenitiesCatchmentLayer.eachLayer(layer => {
-                  layer.feature.properties._opacity = undefined;
-                  layer.feature.properties._weight = undefined;
-              });
-              
-              const timestamp7 = new Date().toLocaleTimeString();
-              console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
-              showBackgroundLoadingIndicator(`Finalizing layer...`);
-          
-              const updatesComplete = () => {
-                drawSelectedAmenities();
-                updateLegend();
-                updateFilterDropdown();
-                updateFilterValues('amenities');
-                hideBackgroundLoadingIndicator();
-                
-                const timestamp8 = new Date().toLocaleTimeString();
-                console.log(`🕐 ${timestamp8} - ✅ Amenities catchment layer complete`);
-              };
-              
-              updateSliderRanges('Amenities', 'Opacity');
-              updateSliderRanges('Amenities', 'Outline');
-              
-              setTimeout(updatesComplete, 50);
-            } else {
-                applyAmenitiesCatchmentLayerStyling();
-                updateSummaryStatistics(getCurrentFeatures());
-                hideBackgroundLoadingIndicator();
-            }
-        
-          isUpdatingCatchmentLayer = false;
-          amenitiesUpdateRequested = false;
-      })
-      .catch(error => {
-          console.error("Error loading journey time data:", error);
-          hideBackgroundLoadingIndicator();
-          isUpdatingCatchmentLayer = false;
-          amenitiesUpdateRequested = false;
-      });
-}
-
-function updateFilterValues(source = 'filter') {
-  if (isUpdatingFilterValues) return;
-  console.log('=== updateFilterValues called ===');
-  console.log('Called from:', source);
-  console.log('Current filter type:', filterTypeDropdown.value);
-  console.log('uaBoundariesLayer available:', !!uaBoundariesLayer);
-  console.log('AmenitiesCatchmentLayer available:', !!AmenitiesCatchmentLayer);
-  console.log('ladCodeToNameMap size:', Object.keys(ladCodeToNameMap).length);
-  console.log('wardCodeToNameMap size:', Object.keys(wardCodeToNameMap).length);
-  
-  isUpdatingFilterValues = true;
-
-  try {
-    if (!filterTypeDropdown.value) {
-      console.log('No filter type selected, skipping update');
-      isUpdatingFilterValues = false;
-      return;
-    }
-    
-    const currentFilterType = filterTypeDropdown.value;
-    
-    let filterValueButton = document.getElementById('filterValueButton');
-    const filterValueContainer = document.getElementById('filterValueContainer');
-    
-    if (filterValueContainer) {
-      filterValueContainer.style.display = 'block';
-    }
-    
-    if (!filterValueButton) {
-      console.error('filterValueButton not found');
-      isUpdatingFilterValues = false;
-      return;
-    }
-
-    filterValueButton = document.getElementById('filterValueButton');
-
-    if (!filterValueContainer) {
-      console.error('filterValueContainer not found');
-      isUpdatingFilterValues = false;
-      return;
-    }
-    
-    filterValueContainer.innerHTML = '';
-
-    let options = [];
-    let filterFieldSelector = null;
-
-    if (currentFilterType.startsWith('UserLayer_')) {
-      const layerId = currentFilterType.split('UserLayer_')[1];
-      const userLayer = userLayers.find(l => l.id === layerId);
-      
-      if (userLayer) {
-        console.log('Setting up user layer filter for:', layerId);
-        
-        const fieldSelectorContainer = document.createElement('div');
-        fieldSelectorContainer.style.marginBottom = '10px';
-        fieldSelectorContainer.innerHTML = `
-          <label for="userLayerFieldSelector" style="display: block; margin-bottom: 5px; font-weight: bold;">Filter by field:</label>
-          <select id="userLayerFieldSelector" style="width: 100%; padding: 5px;">
-            <option value="">-- Select a field --</option>
-          </select>
-        `;
-        
-        filterValueContainer.appendChild(fieldSelectorContainer);
-        
-        filterFieldSelector = document.getElementById('userLayerFieldSelector');
-        
-        userLayer.fieldNames.forEach(fieldName => {
-          const option = document.createElement('option');
-          option.value = fieldName;
-          option.textContent = fieldName;
-          filterFieldSelector.appendChild(option);
-        });
-        
-        filterFieldSelector.addEventListener('change', function() {
-          populateUserLayerFilterValues(userLayer, this.value);
-        });
-        
-        populateUserLayerFilterValues(userLayer, '');
-        isUpdatingFilterValues = false;
-        return;
-      }
-    } else if (currentFilterType === 'LA') {
-      if (Object.keys(ladCodeToNameMap).length === 0) {
-        console.log('LAD data not yet available');
-        options = [];
-      } else {
-        options = Object.values(ladCodeToNameMap).sort();
-      }
-    } else if (currentFilterType === 'Ward') {
-      if (Object.keys(wardCodeToNameMap).length === 0) {
-        console.log('Ward data not yet available');
-        options = [];
-      } else {
-        options = Object.values(wardCodeToNameMap).sort();
-      }
-    } else if (currentFilterType === 'Range') {
-      if (AmenitiesCatchmentLayer) {
-        options = ["0-10", "10-20", "20-30", "30-40", "40-50", "50-60", ">60"];
-      } else {
-        options = [];
-      }
-    }
-
-    const selectAllLabel = document.createElement('label');
-    selectAllLabel.className = 'checkbox-label';
-    
-    const selectAllCheckbox = document.createElement('input');
-    selectAllCheckbox.type = 'checkbox';
-    selectAllCheckbox.id = 'select-all-filter';
-    selectAllCheckbox.checked = false;
-    
-    const selectAllSpan = document.createElement('span');
-    selectAllSpan.innerHTML = '<i>Select/Deselect All</i>';
-    
-    selectAllLabel.appendChild(selectAllCheckbox);
-    selectAllLabel.appendChild(selectAllSpan);
-    filterValueContainer.appendChild(selectAllLabel);
-
-    const previouslySelected = previousFilterSelections[currentFilterType] || [];
-    console.log('updateFilterValues - Previous selections for', currentFilterType, ':', previouslySelected);
-
-    const checkboxes = [];
-    options.forEach((option, index) => {
-      const label = document.createElement('label');
-      label.className = 'checkbox-label';
-      
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.id = `filter-${option.replace(/\s+/g, '-').replace(/[^\w-]/g, '')}`;
-      checkbox.value = option;
-      
-      if (previouslySelected.length > 0) {
-        checkbox.checked = previouslySelected.includes(option);
-      } else {
-        checkbox.checked = true;
-      }
-            
-      checkbox.className = 'filter-value-checkbox';
-      checkboxes.push(checkbox);
-      
-      const span = document.createElement('span');
-      span.textContent = option;
-      
-      label.appendChild(checkbox);
-      label.appendChild(span);
-      filterValueContainer.appendChild(label);
-      
-      checkbox.addEventListener('change', function() {
-        updateStoredSelections();
-        updateFilterButtonText();
-        updateSummaryStatistics(getCurrentFeatures(), `filter_change_${currentFilterType}`);
-        
-        if (DOMElements.highlightAreaCheckbox && DOMElements.highlightAreaCheckbox.checked) {
-          highlightSelectedArea();
-        }
-      });
-    });
-    
-    selectAllCheckbox.addEventListener('change', function() {
-      const isChecked = this.checked;
-      checkboxes.forEach(cb => cb.checked = isChecked);
-      updateStoredSelections();
-      updateFilterButtonText();
-      updateSummaryStatistics(getCurrentFeatures(), `filter_select_all_${currentFilterType}`);
-      
-      if (DOMElements.highlightAreaCheckbox && DOMElements.highlightAreaCheckbox.checked) {
-        highlightSelectedArea();
-      }
-    });
-    
-    function updateStoredSelections() {
-      const selectedValues = checkboxes
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-      
-      previousFilterSelections[currentFilterType] = selectedValues;
-      console.log('Stored selections for', currentFilterType, ':', selectedValues);
-    }
-    
-    function updateFilterButtonText() {
-      const selectedValues = checkboxes
-        .filter(cb => cb.checked)
-        .map(cb => cb.value);
-      
-      const filterValueButton = document.getElementById('filterValueButton');
-      if (filterValueButton) {
-        if (selectedValues.length === 0) {
-          filterValueButton.textContent = 'None selected';
-        } else if (selectedValues.length === 1) {
-          const text = selectedValues[0];
-          filterValueButton.textContent = text.length > 20 ? text.substring(0, 20) + '...' : text;
-        } else if (selectedValues.length === options.length) {
-          filterValueButton.textContent = 'All selected';
-        } else {
-          filterValueButton.textContent = `${selectedValues.length} selected`;
-        }
-      }
-    }
-    
-    const allChecked = checkboxes.every(cb => cb.checked);
-    const anyChecked = checkboxes.some(cb => cb.checked);
-    selectAllCheckbox.checked = allChecked;
-    selectAllCheckbox.indeterminate = anyChecked && !allChecked;
-    
-    if (previouslySelected.length === 0) {
-      updateStoredSelections();
-      console.log('Stored initial default selections for', currentFilterType);
-    }
-    
-    updateFilterButtonText();
-    
-    setTimeout(() => {
-      updateSummaryStatistics(getCurrentFeatures(), `filter_setup_${source}`);
-    }, 50);
-
-  } finally {
-    isUpdatingFilterValues = false;
   }
 }
 
@@ -1502,35 +929,33 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     
     const csvLookup = new Map();
     
-    function processCsvDataToLookup(csvDataArrays) {
-      csvDataArrays.forEach(csvData => {
-        csvData.forEach(row => {
-          if (row.OriginId_tracc) {
-            const key = String(row.OriginId_tracc);
-            csvLookup.set(key, row);
-          }
-        });
-      });
-    }
+    csvData1.forEach(row => {
+      if (row.OriginId_tracc) {
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
+      }
+    });
     
-    processCsvDataToLookup([csvData1, csvData2]);
+    csvData2.forEach(row => {
+      if (row.OriginId_tracc) {
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
+      }
+    });
     
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Created lookup table with ${csvLookup.size} entries`);
-    
-    const sampleCsvKeys = Array.from(csvLookup.keys()).slice(0, 5);
-    console.log('Sample CSV keys:', sampleCsvKeys);
     
     const BATCH_SIZE = 20000;
     const allFeatures = [...data1.features, ...data2.features];
     const processedFeatures = [];
     
     let processed = 0;
-    let matchedCount = 0;
     const totalFeatures = allFeatures.length;
-    
-    const sampleGeoJsonKeys = allFeatures.slice(0, 5).map(f => f.properties?.OriginId_tracc);
-    console.log('Sample GeoJSON keys:', sampleGeoJsonKeys);
     
     const timestamp3 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp3} - Processing ${totalFeatures} features in batches of ${BATCH_SIZE}...`);
@@ -1541,22 +966,23 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       
       for (let j = i; j < batchEnd; j++) {
         const feature = allFeatures[j];
-        if (!feature.properties?.OriginId_tracc) continue;
+        const originId = feature.properties.OriginId_tracc;
         
-        const geoJsonKey = String(feature.properties.OriginId_tracc);
-        const csvRow = csvLookup.get(geoJsonKey);
+        if (!originId) {
+          continue;
+        }
         
-        if (csvRow) {
-          const mergedProperties = {
-            ...feature.properties,
-            ...csvRow
-          };
+        const csvData = csvLookup.get(originId);
+        
+        if (csvData) {
+          Object.assign(feature.properties, csvData);
           
-          processedFeatures.push({
-            ...feature,
-            properties: mergedProperties
-          });
-          matchedCount++;
+          if (!feature.properties._centroid) {
+            const centroid = turf.centroid(feature);
+            feature.properties._centroid = centroid.geometry.coordinates;
+          }
+          
+          processedFeatures.push(feature);
         }
       }
       
@@ -1578,7 +1004,6 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     const timestamp4 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp4} - ✅ Processed ${validOutputFeatures} valid features (${filteredOutCount} features filtered out due to missing CSV data)`);
     console.log(`📊 Data quality: ${((validOutputFeatures / totalInputFeatures) * 100).toFixed(1)}% of GeoJSON features had matching CSV data`);
-    console.log(`🔗 Successfully matched ${matchedCount} features with CSV data`);
     
     resolve(combinedData);
   });
@@ -2389,26 +1814,26 @@ function loadTrainingCentres() {
 
 function setupSubjectAndAimLevelCheckboxes() {
   console.log('Setting up subject and aim level checkboxes...');
+  const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
+  const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   
-  if (DOMElements.subjectAllCheckbox) {
-    DOMElements.subjectAllCheckbox.addEventListener('change', function() {
-      const isChecked = this.checked;
-      DOMElements.subjectCheckboxes.forEach(checkbox => {
-        checkbox.checked = isChecked;
-      });
-      updateSubjectDropdownLabel();
-      drawSelectedAmenities();
+  subjectAllCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    subjectCheckboxes.forEach(checkbox => {
+      checkbox.checked = isChecked;
     });
-  }
+    updateSubjectDropdownLabel();
+    drawSelectedAmenities();
+  });
   
-  DOMElements.subjectCheckboxes.forEach(checkbox => {
+  subjectCheckboxes.forEach(checkbox => {
     checkbox.addEventListener('change', function() {
       if (!this.checked) {
-        DOMElements.subjectAllCheckbox.checked = false;
+        subjectAllCheckbox.checked = false;
       } else {
-        const allIndividualChecked = Array.from(DOMElements.subjectCheckboxes).every(cb => cb.checked);
+        const allIndividualChecked = Array.from(subjectCheckboxes).every(cb => cb.checked);
         if (allIndividualChecked) {
-          DOMElements.subjectAllCheckbox.checked = true;
+          subjectAllCheckbox.checked = true;
         }
       }
       updateSubjectDropdownLabel();
@@ -2416,25 +1841,26 @@ function setupSubjectAndAimLevelCheckboxes() {
     });
   });
   
-  if (DOMElements.aimLevelAllCheckbox) {
-    DOMElements.aimLevelAllCheckbox.addEventListener('change', function() {
-      const isChecked = this.checked;
-      DOMElements.aimLevelCheckboxes.forEach(checkbox => {
-        checkbox.checked = isChecked;
-      });
-      updateAimLevelDropdownLabel();
-      drawSelectedAmenities();
-    });
-  }
+  const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
+  const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   
-  DOMElements.aimLevelCheckboxes.forEach(checkbox => {
+  aimLevelAllCheckbox.addEventListener('change', function() {
+    const isChecked = this.checked;
+    aimLevelCheckboxes.forEach(checkbox => {
+      checkbox.checked = isChecked;
+    });
+    updateAimLevelDropdownLabel();
+    drawSelectedAmenities();
+  });
+  
+  aimLevelCheckboxes.forEach(checkbox => {
     checkbox.addEventListener('change', function() {
       if (!this.checked) {
-        DOMElements.aimLevelAllCheckbox.checked = false;
+        aimLevelAllCheckbox.checked = false;
       } else {
-        const allIndividualChecked = Array.from(DOMElements.aimLevelCheckboxes).every(cb => cb.checked);
+        const allIndividualChecked = Array.from(aimLevelCheckboxes).every(cb => cb.checked);
         if (allIndividualChecked) {
-          DOMElements.aimLevelAllCheckbox.checked = true;
+          aimLevelAllCheckbox.checked = true;
         }
       }
       updateAimLevelDropdownLabel();
@@ -2617,14 +2043,14 @@ function setupTrainingCenterFilters() {
         updateAmenitiesCatchmentLayer();
     }, 2000);
     
-    const allCheckboxes = [
-        ...Array.from(DOMElements.subjectCheckboxes), 
-        DOMElements.subjectAllCheckbox,
-        ...Array.from(DOMElements.aimLevelCheckboxes),
-        DOMElements.aimLevelAllCheckbox
-    ].filter(Boolean);
+    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
+    subjectCheckboxes.forEach(checkbox => {
+        checkbox.removeEventListener('change', debouncedHandler);
+        checkbox.addEventListener('change', debouncedHandler);
+    });
     
-    allCheckboxes.forEach(checkbox => {
+    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]');
+    aimLevelCheckboxes.forEach(checkbox => {
         checkbox.removeEventListener('change', debouncedHandler);
         checkbox.addEventListener('change', debouncedHandler);
     });
@@ -5250,199 +4676,192 @@ function updateAmenitiesCatchmentLayer() {
     fetch(csvPath)
       .then(response => response.text())
       .then(csvText => {
-        const timestamp4 = new Date().toLocaleTimeString();
-        console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
-        showBackgroundLoadingIndicator(`Processing journey times...`);
-        
-        const csvData = Papa.parse(csvText, { header: true }).data;
-        fullCsvData = csvData;
-        
-        if (csvData.length === 0) {
-            isUpdatingCatchmentLayer = false;
-            hideBackgroundLoadingIndicator();
-            return;
-        }
-        
-        const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-        const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-        
-        if (matchingIds.length === 0) {
-            console.log("No matching IDs found, clearing amenities layer");
-            if (AmenitiesCatchmentLayer) {
-                map.removeLayer(AmenitiesCatchmentLayer);
-                AmenitiesCatchmentLayer = null;
-            }
-            drawSelectedAmenities([]);
-            updateLegend();
-            updateFilterDropdown();
-            updateFilterValues();
-            updateSummaryStatistics([]);
-            hideBackgroundLoadingIndicator();
-            isUpdatingCatchmentLayer = false;
-            return;
-        }
-        
-        const timestamp5 = new Date().toLocaleTimeString();
-        console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
-        showBackgroundLoadingIndicator(`Creating catchment layer...`);
-        
-        const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-        const eligibleDestinations = new Set();
-        
-        if (amenityLayers['TrainingCentres']) {
-            amenityLayers['TrainingCentres'].features.forEach(feature => {
-                const props = feature.properties;
-                const destinationId = props.DestinationId_tracc;
-                
-                if (!destinationId || !matchingIds.includes(destinationId)) {
-                    return;
-                }
-                
-                const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-                    selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-                
-                if (!hasSelectedAimLevel) {
-                    return;
-                }
-                
-                let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-                
-                if (!hasSelectedSubject && yearPrefix) {
-                    hasSelectedSubject = selectedSubjects.some(subject => {
-                        const columnName = `${yearPrefix}_${subject}`;
-                        return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                    });
-                } else if (!hasSelectedSubject) {
-                    const years = ["2122", "2223", "2324", "2425"];
-                    hasSelectedSubject = years.some(year => {
-                        return selectedSubjects.some(subject => {
-                            const columnName = `${year}_${subject}`;
-                            return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                        });
-                    });
-                }
-                
-                if (hasSelectedSubject) {
-                    eligibleDestinations.add(destinationId);
-                }
-            });
-        }
-        
-        gridTimeMap = {};
-        
-        csvData.forEach(row => {
-            const originId = row.origin;
-            const destinationId = row.destination;
-            const totalTime = parseFloat(row.totaltime);
-            
-            if (!originId || !destinationId || isNaN(totalTime)) {
-                return;
-            }
-            
-            if (eligibleDestinations.has(destinationId)) {
-                if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-                    gridTimeMap[originId] = totalTime;
-                }
-            }
-        });
-        
-        grid.features.forEach(feature => {
-            const originId = feature.properties.OriginId_tracc;
-            if (gridTimeMap[originId] === undefined) {
-                gridTimeMap[originId] = 120;
-            }
-        });
-        
-        let needToCreateNewLayer = false;
-        if (!AmenitiesCatchmentLayer) {
-            needToCreateNewLayer = true;
-        }
-        
-        if (needToCreateNewLayer) {
-            const timestamp6 = new Date().toLocaleTimeString();
-            console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
-            showBackgroundLoadingIndicator(`Rendering catchment layer...`);
-            
-            if (AmenitiesCatchmentLayer) {
-                map.removeLayer(AmenitiesCatchmentLayer);
-            }
-            
-            AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                pane: 'polygonLayers',
-                style: function(feature) {
-                    const OriginId_tracc = feature.properties.OriginId_tracc;
-                    const time = gridTimeMap[OriginId_tracc];
-                    
-                    let fillColor = 'transparent';
-                    let fillOpacity = 0;
-                    
-                    if (time !== undefined && time < 120) {
-                        if (time <= 10) fillColor = '#fde725';
-                        else if (time <= 20) fillColor = '#8fd744';
-                        else if (time <= 30) fillColor = '#35b779';
-                        else if (time <= 40) fillColor = '#21908d';
-                        else if (time <= 50) fillColor = '#31688e';
-                        else if (time <= 60) fillColor = '#443a82';
-                        else fillColor = '#440154';
-                        fillOpacity = 0.7;
-                    }
-                    
-                    return {
-                        weight: 0.5,
-                        fillOpacity: fillOpacity,
-                        opacity: fillOpacity > 0 ? 0.8 : 0,
-                        fillColor: fillColor,
-                        color: '#ffffff'
-                    };
-                }
-            }).addTo(map);
-            
-            AmenitiesCatchmentLayer.eachLayer(layer => {
-                layer.feature.properties._opacity = undefined;
-                layer.feature.properties._weight = undefined;
-            });
-            
-            const timestamp7 = new Date().toLocaleTimeString();
-            console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
-            showBackgroundLoadingIndicator(`Finalizing layer...`);
+          const timestamp4 = new Date().toLocaleTimeString();
+          console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
+          showBackgroundLoadingIndicator(`Processing journey times...`);
+          
+          const csvData = Papa.parse(csvText, { header: true }).data;
+          fullCsvData = csvData;
+          
+          if (csvData.length === 0) {
+              isUpdatingCatchmentLayer = false;
+              hideBackgroundLoadingIndicator();
+              return;
+          }
+          
+          const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+          const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
+          
+          if (matchingIds.length === 0) {
+              console.log("No matching IDs found, clearing amenities layer");
+              if (AmenitiesCatchmentLayer) {
+                  map.removeLayer(AmenitiesCatchmentLayer);
+                  AmenitiesCatchmentLayer = null;
+              }
+              drawSelectedAmenities([]);
+              updateLegend();
+              updateFilterDropdown();
+              updateFilterValues();
+              updateSummaryStatistics([]);
+              hideBackgroundLoadingIndicator();
+              isUpdatingCatchmentLayer = false;
+              return;
+          }
+          
+          const timestamp5 = new Date().toLocaleTimeString();
+          console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
+          showBackgroundLoadingIndicator(`Creating catchment layer...`);
+          
+          const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
+          const eligibleDestinations = new Set();
+          
+          if (amenityLayers['TrainingCentres']) {
+              amenityLayers['TrainingCentres'].features.forEach(feature => {
+                  const props = feature.properties;
+                  const destinationId = props.DestinationId_tracc;
+                  
+                  if (!destinationId || !matchingIds.includes(destinationId)) {
+                      return;
+                  }
+                  
+                  const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
+                      selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
+                  
+                  if (!hasSelectedAimLevel) {
+                      return;
+                  }
+                  
+                  let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
+                  
+                  if (!hasSelectedSubject && yearPrefix) {
+                      hasSelectedSubject = selectedSubjects.some(subject => {
+                          const columnName = `${yearPrefix}_${subject}`;
+                          return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                      });
+                  } else if (!hasSelectedSubject) {
+                      const years = ["2122", "2223", "2324", "2425"];
+                      hasSelectedSubject = years.some(year => {
+                          return selectedSubjects.some(subject => {
+                              const columnName = `${year}_${subject}`;
+                              return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                          });
+                      });
+                  }
+                  
+                  if (hasSelectedSubject) {
+                      eligibleDestinations.add(destinationId);
+                  }
+              });
+          }
+          
+          gridTimeMap = {};
+          
+          csvData.forEach(row => {
+              const originId = row.origin;
+              const destinationId = row.destination;
+              const totalTime = parseFloat(row.totaltime);
               
-          const updatesComplete = () => {
-            drawSelectedAmenities();
-            updateLegend();
-            updateFilterDropdown();
-            updateFilterValues('amenities');
-            
-            setTimeout(() => {
-              updateSummaryStatistics(getCurrentFeatures(), 'amenities_complete');
-            }, 100);
-            
-            hideBackgroundLoadingIndicator();
-            
-            const timestamp8 = new Date().toLocaleTimeString();
-            console.log(`🕐 ${timestamp8} - ✅ Amenities catchment layer complete`);
-          };
+              if (!originId || !destinationId || isNaN(totalTime)) {
+                  return;
+              }
+              
+              if (eligibleDestinations.has(destinationId)) {
+                  if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
+                      gridTimeMap[originId] = totalTime;
+                  }
+              }
+          });
           
-          updateSliderRanges('Amenities', 'Opacity');
-          updateSliderRanges('Amenities', 'Outline');
+          grid.features.forEach(feature => {
+              const originId = feature.properties.OriginId_tracc;
+              if (gridTimeMap[originId] === undefined) {
+                  gridTimeMap[originId] = 120;
+              }
+          });
           
-          setTimeout(updatesComplete, 50);
-        } else {
-            applyAmenitiesCatchmentLayerStyling();
-            setTimeout(() => {
-              updateSummaryStatistics(getCurrentFeatures(), 'amenities_styling');
-            }, 50);
-            hideBackgroundLoadingIndicator();
-        }
-        
-      isUpdatingCatchmentLayer = false;
-      amenitiesUpdateRequested = false;
-    })
-    .catch(error => {
-        console.error("Error loading journey time data:", error);
-        hideBackgroundLoadingIndicator();
-        isUpdatingCatchmentLayer = false;
-        amenitiesUpdateRequested = false;
-    });
+          let needToCreateNewLayer = false;
+          if (!AmenitiesCatchmentLayer) {
+              needToCreateNewLayer = true;
+          }
+          
+          if (needToCreateNewLayer) {
+              const timestamp6 = new Date().toLocaleTimeString();
+              console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
+              showBackgroundLoadingIndicator(`Rendering catchment layer...`);
+              
+              if (AmenitiesCatchmentLayer) {
+                  map.removeLayer(AmenitiesCatchmentLayer);
+              }
+              
+              AmenitiesCatchmentLayer = L.geoJSON(grid, {
+                  pane: 'polygonLayers',
+                  style: function(feature) {
+                      const OriginId_tracc = feature.properties.OriginId_tracc;
+                      const time = gridTimeMap[OriginId_tracc];
+                      
+                      let fillColor = 'transparent';
+                      let fillOpacity = 0;
+                      
+                      if (time !== undefined && time < 120) {
+                          if (time <= 10) fillColor = '#fde725';
+                          else if (time <= 20) fillColor = '#8fd744';
+                          else if (time <= 30) fillColor = '#35b779';
+                          else if (time <= 40) fillColor = '#21908d';
+                          else if (time <= 50) fillColor = '#31688e';
+                          else if (time <= 60) fillColor = '#443a82';
+                          else fillColor = '#440154';
+                          fillOpacity = 0.7;
+                      }
+                      
+                      return {
+                          weight: 0.5,
+                          fillOpacity: fillOpacity,
+                          opacity: fillOpacity > 0 ? 0.8 : 0,
+                          fillColor: fillColor,
+                          color: '#ffffff'
+                      };
+                  }
+              }).addTo(map);
+              
+              AmenitiesCatchmentLayer.eachLayer(layer => {
+                  layer.feature.properties._opacity = undefined;
+                  layer.feature.properties._weight = undefined;
+              });
+              
+              const timestamp7 = new Date().toLocaleTimeString();
+              console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
+              showBackgroundLoadingIndicator(`Finalizing layer...`);
+              
+              const updatesComplete = () => {
+                drawSelectedAmenities();
+                updateLegend();
+                updateFilterDropdown();
+                updateFilterValues('amenities');
+                hideBackgroundLoadingIndicator();
+                
+                const timestamp8 = new Date().toLocaleTimeString();
+                console.log(`🕐 ${timestamp8} - ✅ Amenities catchment layer complete`);
+              };
+              
+              updateSliderRanges('Amenities', 'Opacity');
+              updateSliderRanges('Amenities', 'Outline');
+              
+              setTimeout(updatesComplete, 50);
+            } else {
+                applyAmenitiesCatchmentLayerStyling();
+                updateSummaryStatistics(getCurrentFeatures());
+                hideBackgroundLoadingIndicator();
+            }
+            
+          isUpdatingCatchmentLayer = false;
+          amenitiesUpdateRequested = false;
+      })
+      .catch(error => {
+          console.error("Error loading journey time data:", error);
+          hideBackgroundLoadingIndicator();
+          isUpdatingCatchmentLayer = false;
+          amenitiesUpdateRequested = false;
+      });
 }
 
 /**
@@ -5457,10 +4876,6 @@ function checkAmenitiesDataReady() {
     
     if (!grid || !grid.features || grid.features.length === 0) {
         missing.push('Grid data not loaded');
-    } else if (grid.features.length > 0 && !grid.features[0].properties) {
-        missing.push('Grid data has no properties');
-    } else if (grid.features.length > 0 && !grid.features[0].properties.OriginId_tracc) {
-        missing.push('Grid data missing OriginId_tracc');
     }
     
     if (!amenityLayers['TrainingCentres'] || !amenityLayers['TrainingCentres'].features) {
