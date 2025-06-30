@@ -78,6 +78,157 @@ let isUpdatingOpacityOutlineFields = false;
 let pendingAmenitiesUpdate = false;
 let amenitiesUpdateRequested = false;
 
+// DOM Element Cache for performance optimization
+const DOMElements = {
+  // Checkbox elements
+  amenitiesCheckbox: null,
+  uaBoundariesCheckbox: null,
+  wardBoundariesCheckbox: null,
+  busStopsCheckbox: null,
+  busLinesCheckbox: null,
+  roadNetworkCheckbox: null,
+  
+  // Subject and aim level elements
+  subjectAllCheckbox: null,
+  subjectCheckboxes: null,
+  aimLevelAllCheckbox: null,
+  aimLevelCheckboxes: null,
+  
+  // Dropdown elements
+  subjectDropdown: null,
+  subjectCheckboxesContainer: null,
+  aimLevelDropdown: null,
+  aimLevelCheckboxesContainer: null,
+  
+  // Filter elements
+  filterTypeDropdown: null,
+  filterValueDropdown: null,
+  filterValueContainer: null,
+  highlightAreaCheckbox: null,
+  
+  init() {
+    // Cache checkbox elements
+    this.amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
+    this.uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
+    this.wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
+    this.busStopsCheckbox = document.getElementById('busStopsCheckbox');
+    this.busLinesCheckbox = document.getElementById('busLinesCheckbox');
+    this.roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
+    
+    // Cache subject and aim level elements
+    this.subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
+    this.subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
+    this.aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
+    this.aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
+    
+    // Cache dropdown elements
+    this.subjectDropdown = document.getElementById('subjectDropdown');
+    this.subjectCheckboxesContainer = document.getElementById('subjectCheckboxesContainer');
+    this.aimLevelDropdown = document.getElementById('aimlevelDropdown');
+    this.aimLevelCheckboxesContainer = document.getElementById('aimlevelCheckboxesContainer');
+    
+    // Cache filter elements
+    this.filterTypeDropdown = document.getElementById('filterTypeDropdown');
+    this.filterValueDropdown = document.getElementById('filterValueDropdown');
+    this.filterValueContainer = document.getElementById('filterValueContainer');
+    this.highlightAreaCheckbox = document.getElementById('highlightAreaCheckbox');
+  }
+};
+
+// Utility functions for common patterns
+const Utils = {
+  // Create toggle handler for layer visibility
+  createToggleHandler(checkbox, layer, onStyle = { opacity: 1 }, offStyle = { opacity: 0 }) {
+    if (checkbox && layer) {
+      checkbox.addEventListener('change', () => {
+        if (layer.setStyle) {
+          layer.setStyle(checkbox.checked ? onStyle : offStyle);
+        } else if (layer.eachLayer) {
+          // Handle layer groups
+          layer.eachLayer(sublayer => {
+            const style = checkbox.checked ? onStyle : offStyle;
+            if (sublayer.setStyle) {
+              sublayer.setStyle(style);
+            }
+          });
+        }
+      });
+    }
+  },
+  
+  // Create special handler for bus layers with calculated opacity
+  createBusLayerHandler(checkbox, layer, isStopsLayer = false) {
+    if (checkbox && layer) {
+      checkbox.addEventListener('change', () => {
+        layer.eachLayer(sublayer => {
+          if (checkbox.checked) {
+            if (isStopsLayer) {
+              sublayer.setStyle({ 
+                opacity: 1, 
+                fillOpacity: sublayer.options._calculatedFillOpacity || 0
+              });
+            } else {
+              sublayer.setStyle({ opacity: sublayer.options._calculatedOpacity || 1 });
+            }
+          } else {
+            sublayer.setStyle({ opacity: 0, fillOpacity: 0 });
+          }
+        });
+      });
+    }
+  },
+  
+  // Setup collapsible panel
+  setupCollapsiblePanel(headerElement, contentElement, onToggle = null) {
+    if (headerElement && contentElement) {
+      contentElement.style.display = "none";
+      headerElement.classList.add("collapsed");
+      
+      headerElement.addEventListener("click", function() {
+        this.classList.toggle("collapsed");
+        const isCollapsed = this.classList.contains("collapsed");
+        contentElement.style.display = isCollapsed ? "none" : "block";
+        
+        if (onToggle) {
+          onToggle(this, !isCollapsed);
+        }
+      });
+    }
+  },
+  
+  // Get selection state for checkbox containers
+  getSelectionState(containerSelector, allValue = "All") {
+    const allCheckbox = document.querySelector(`${containerSelector} input[value="${allValue}"]`);
+    const isAllSelected = allCheckbox?.checked || false;
+    
+    if (isAllSelected) {
+      return { isAllSelected: true, selectedValues: [] };
+    }
+    
+    const individualCheckboxes = document.querySelectorAll(`${containerSelector} input[type="checkbox"]:checked:not([value="${allValue}"])`);
+    const selectedValues = Array.from(individualCheckboxes).map(cb => cb.value.toLowerCase());
+    
+    return { isAllSelected: false, selectedValues };
+  }
+};
+
+// Layer management utilities
+const LayerUtils = {
+  forEachUserLayer(callback) {
+    userLayers.forEach(userLayer => {
+      if (userLayer.layer) {
+        callback(userLayer);
+      }
+    });
+  },
+  
+  forEachFeatureInUserLayers(callback) {
+    this.forEachUserLayer(userLayer => {
+      userLayer.layer.eachLayer(callback);
+    });
+  }
+};
+
 function convertMultiPolygonToPolygons(geoJson) {
   console.log('Converting MultiPolygon to Polygon...');
   return new Promise((resolve) => {
@@ -241,6 +392,10 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
  */
 document.addEventListener('DOMContentLoaded', (event) => {
   console.log('DOM fully loaded, starting application initialization...');
+  
+  // Initialize DOM element cache first
+  DOMElements.init();
+  
   //showoadingOverlay();
   initializeUI();
   setupMapPanes();
@@ -305,10 +460,10 @@ function setupAdditionalUIListeners() {
 function createStaticLegendControls() {
   console.log('Creating static legend controls...');
   
-  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-  if (amenitiesCheckbox) {
-    amenitiesCheckbox.addEventListener('change', () => {
-      if (amenitiesCheckbox.checked) {
+  // Amenities checkbox with custom handler
+  if (DOMElements.amenitiesCheckbox) {
+    DOMElements.amenitiesCheckbox.addEventListener('change', () => {
+      if (DOMElements.amenitiesCheckbox.checked) {
         drawSelectedAmenities();
         amenitiesLayerGroup.addTo(map);
       } else {
@@ -317,83 +472,14 @@ function createStaticLegendControls() {
     });
   }
 
-  const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
-  if (uaBoundariesCheckbox) {
-    uaBoundariesCheckbox.addEventListener('change', () => {
-      if (uaBoundariesLayer) {
-        if (uaBoundariesCheckbox.checked) {
-          uaBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          uaBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
-
-  const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
-  if (wardBoundariesCheckbox) {
-    wardBoundariesCheckbox.addEventListener('change', () => {
-      if (wardBoundariesLayer) {
-        if (wardBoundariesCheckbox.checked) {
-          wardBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          wardBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
+  // Standard layer toggles using utility function
+  Utils.createToggleHandler(DOMElements.uaBoundariesCheckbox, uaBoundariesLayer);
+  Utils.createToggleHandler(DOMElements.wardBoundariesCheckbox, wardBoundariesLayer);
+  Utils.createToggleHandler(DOMElements.roadNetworkCheckbox, roadNetworkLayer);
   
-  const busStopsCheckbox = document.getElementById('busStopsCheckbox');
-  if (busStopsCheckbox) {
-    busStopsCheckbox.addEventListener('change', () => {
-      if (busStopsLayer) {
-        if (busStopsCheckbox.checked) {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ 
-              opacity: 1, 
-              fillOpacity: layer.options._calculatedFillOpacity 
-            });
-          });
-        } else {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: 0, fillOpacity: 0 });
-          });
-        }
-      }
-    });
-  }
-  
-  const busLinesCheckbox = document.getElementById('busLinesCheckbox');
-  if (busLinesCheckbox) {
-    busLinesCheckbox.addEventListener('change', () => {
-      if (busLinesLayer) {
-        if (busLinesCheckbox.checked) {
-          busLinesLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: layer.options._calculatedOpacity });
-          });
-        } else {
-          busLinesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
-
-  const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
-  if (roadNetworkCheckbox) {
-    roadNetworkCheckbox.addEventListener('change', () => {
-      if (roadNetworkLayer) {
-        if (roadNetworkCheckbox.checked) {
-          roadNetworkLayer.setStyle({
-            opacity: 1,
-          });
-        } else {
-          roadNetworkLayer.setStyle({
-            opacity: 0,
-          });
-        }
-      }
-    });
-  }
+  // Bus layers with special handling for calculated opacity
+  Utils.createBusLayerHandler(DOMElements.busStopsCheckbox, busStopsLayer, true);
+  Utils.createBusLayerHandler(DOMElements.busLinesCheckbox, busLinesLayer, false);
 }
 
 /**
@@ -518,22 +604,8 @@ function initializeCollapsiblePanels() {
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
-  if (summaryHeader && summaryContent) {
-    summaryContent.style.display = "none";
-    summaryHeader.classList.add("collapsed");
-    
-    summaryHeader.addEventListener("click", function() {
-      const isCollapsed = this.classList.contains("collapsed");
-      this.classList.toggle("collapsed");
-      summaryContent.style.display = isCollapsed ? "block" : "none";
-    });
-    
-    summaryHeader.addEventListener("click", function() {
-      this.classList.toggle("collapsed");
-      const isNowCollapsed = this.classList.contains("collapsed");
-      summaryContent.style.display = isNowCollapsed ? "none" : "block";
-    });
-  }
+  // Use utility function for consistent panel behavior
+  Utils.setupCollapsiblePanel(summaryHeader, summaryContent);
 }
 
 /**
@@ -927,25 +999,32 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
       fastMode: true
     }).data;
     
+    // Optimized CSV processing - combine both datasets in one loop
     const csvLookup = new Map();
     
-    csvData1.forEach(row => {
-      if (row.OriginId_tracc) {
-        const numericKey = Number(row.OriginId_tracc);
-        if (!isNaN(numericKey)) {
-          csvLookup.set(numericKey, row);
+    function processCsvDataToLookup(csvDataArrays) {
+      csvDataArrays.forEach(csvData => {
+        for (let i = 0; i < csvData.length; i++) {
+          const row = csvData[i];
+          if (row.OriginId_tracc) {
+            const key = String(row.OriginId_tracc);
+            if (!csvLookup.has(key)) {
+              csvLookup.set(key, {
+                pop: Number(row.pop) || 0,
+                pop_growth: Number(row.pop_growth) || 0,
+                imd_score_mhclg: Number(row.imd_score_mhclg) || 0,
+                imd_decile_mhclg: Number(row.imd_decile_mhclg) || 0,
+                hh_caravail_ts045: Number(row.hh_caravail_ts045) || 0,
+                lad24cd: row.lad24cd || '',
+                wd24cd: row.wd24cd || ''
+              });
+            }
+          }
         }
-      }
-    });
+      });
+    }
     
-    csvData2.forEach(row => {
-      if (row.OriginId_tracc) {
-        const numericKey = Number(row.OriginId_tracc);
-        if (!isNaN(numericKey)) {
-          csvLookup.set(numericKey, row);
-        }
-      }
-    });
+    processCsvDataToLookup([csvData1, csvData2]);
     
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Created lookup table with ${csvLookup.size} entries`);
@@ -1814,26 +1893,27 @@ function loadTrainingCentres() {
 
 function setupSubjectAndAimLevelCheckboxes() {
   console.log('Setting up subject and aim level checkboxes...');
-  const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
-  const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:not([value="All"])');
   
-  subjectAllCheckbox.addEventListener('change', function() {
-    const isChecked = this.checked;
-    subjectCheckboxes.forEach(checkbox => {
-      checkbox.checked = isChecked;
+  // Use cached DOM elements instead of repeated queries
+  if (DOMElements.subjectAllCheckbox) {
+    DOMElements.subjectAllCheckbox.addEventListener('change', function() {
+      const isChecked = this.checked;
+      DOMElements.subjectCheckboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+      });
+      updateSubjectDropdownLabel();
+      drawSelectedAmenities();
     });
-    updateSubjectDropdownLabel();
-    drawSelectedAmenities();
-  });
+  }
   
-  subjectCheckboxes.forEach(checkbox => {
+  DOMElements.subjectCheckboxes.forEach(checkbox => {
     checkbox.addEventListener('change', function() {
       if (!this.checked) {
-        subjectAllCheckbox.checked = false;
+        DOMElements.subjectAllCheckbox.checked = false;
       } else {
-        const allIndividualChecked = Array.from(subjectCheckboxes).every(cb => cb.checked);
+        const allIndividualChecked = Array.from(DOMElements.subjectCheckboxes).every(cb => cb.checked);
         if (allIndividualChecked) {
-          subjectAllCheckbox.checked = true;
+          DOMElements.subjectAllCheckbox.checked = true;
         }
       }
       updateSubjectDropdownLabel();
@@ -1841,26 +1921,25 @@ function setupSubjectAndAimLevelCheckboxes() {
     });
   });
   
-  const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
-  const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:not([value="All"])');
-  
-  aimLevelAllCheckbox.addEventListener('change', function() {
-    const isChecked = this.checked;
-    aimLevelCheckboxes.forEach(checkbox => {
-      checkbox.checked = isChecked;
+  if (DOMElements.aimLevelAllCheckbox) {
+    DOMElements.aimLevelAllCheckbox.addEventListener('change', function() {
+      const isChecked = this.checked;
+      DOMElements.aimLevelCheckboxes.forEach(checkbox => {
+        checkbox.checked = isChecked;
+      });
+      updateAimLevelDropdownLabel();
+      drawSelectedAmenities();
     });
-    updateAimLevelDropdownLabel();
-    drawSelectedAmenities();
-  });
+  }
   
-  aimLevelCheckboxes.forEach(checkbox => {
+  DOMElements.aimLevelCheckboxes.forEach(checkbox => {
     checkbox.addEventListener('change', function() {
       if (!this.checked) {
-        aimLevelAllCheckbox.checked = false;
+        DOMElements.aimLevelAllCheckbox.checked = false;
       } else {
-        const allIndividualChecked = Array.from(aimLevelCheckboxes).every(cb => cb.checked);
+        const allIndividualChecked = Array.from(DOMElements.aimLevelCheckboxes).every(cb => cb.checked);
         if (allIndividualChecked) {
-          aimLevelAllCheckbox.checked = true;
+          DOMElements.aimLevelAllCheckbox.checked = true;
         }
       }
       updateAimLevelDropdownLabel();
@@ -2043,14 +2122,15 @@ function setupTrainingCenterFilters() {
         updateAmenitiesCatchmentLayer();
     }, 2000);
     
-    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
-    subjectCheckboxes.forEach(checkbox => {
-        checkbox.removeEventListener('change', debouncedHandler);
-        checkbox.addEventListener('change', debouncedHandler);
-    });
+    // Use cached DOM elements - combine subject and aim level checkbox handling
+    const allCheckboxes = [
+        ...Array.from(DOMElements.subjectCheckboxes), 
+        DOMElements.subjectAllCheckbox,
+        ...Array.from(DOMElements.aimLevelCheckboxes),
+        DOMElements.aimLevelAllCheckbox
+    ].filter(Boolean); // Remove any null elements
     
-    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]');
-    aimLevelCheckboxes.forEach(checkbox => {
+    allCheckboxes.forEach(checkbox => {
         checkbox.removeEventListener('change', debouncedHandler);
         checkbox.addEventListener('change', debouncedHandler);
     });
