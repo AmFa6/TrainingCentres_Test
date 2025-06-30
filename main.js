@@ -572,8 +572,7 @@ function loadBaseLayers() {
 }
 
 /**
- * Loads boundary data (Local Authorities, Wards)
- * @returns {Promise} A promise that resolves when boundary data is loaded
+ * Enhanced loadBoundaryData that triggers pending amenities updates when complete
  */
 function loadBoundaryData() {
   // console.log('Loading boundary data...');
@@ -591,7 +590,7 @@ function loadBoundaryData() {
               ladCodeToNameMap[code] = name;
             }
           });
-          // console.log('LAD lookup map populated:', ladCodeToNameMap);
+          console.log('LAD lookup map populated:', ladCodeToNameMap);
           
           uaBoundariesLayer = L.geoJSON(convertedData, {
             pane: 'boundaryLayers',
@@ -604,6 +603,15 @@ function loadBoundaryData() {
               };
             },
           }).addTo(map);
+          
+          // Check if amenities update is waiting for this data
+          if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+            const dataStatus = checkAmenitiesDataReady();
+            if (dataStatus.ready) {
+              console.log('LAD data loaded, triggering pending amenities update');
+              setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
+            }
+          }
         });
       }),
     
@@ -622,8 +630,7 @@ function loadBoundaryData() {
                 wardCodeToNameMap[code] = name;
               }
             });
-            // console.log('Ward lookup map populated:', wardCodeToNameMap);
-            // console.log('Ward lookup map size:', Object.keys(wardCodeToNameMap).length);
+            console.log('Ward lookup map populated:', wardCodeToNameMap);
             
             const wardGeoJson = {
               type: 'FeatureCollection',
@@ -641,7 +648,15 @@ function loadBoundaryData() {
                 };
               },
             }).addTo(map);
-            // console.log("Ward boundaries layer added to map.");
+            
+            // Check if amenities update is waiting for this data
+            if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+              const dataStatus = checkAmenitiesDataReady();
+              if (dataStatus.ready) {
+                console.log('Ward data loaded, triggering pending amenities update');
+                setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
+              }
+            }
           });
       })
   ]).catch(error => {
@@ -753,84 +768,33 @@ function loadBackgroundData() {
 }
 
 /**
- * Loads grid data using fast CSV+GeoJSON approach with DuckDB for analytics
+ * Enhanced loadGridData that triggers pending amenities updates when complete
  */
 async function loadGridData() {
   const timestamp = new Date().toLocaleTimeString();
-  showBackgroundLoadingIndicator(`Loading grid data...`);
+  showBackgroundLoadingIndicator(`${timestamp} - Loading grid data...`);
   
   try {
     console.log(`🕐 ${timestamp} - 🚀 === Starting fast CSV+GeoJSON data loading ===`);
     const totalStartTime = performance.now();
     
-    // Load files in parallel - much faster than single parquet
-    const timestamp2 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp2} - 📥 Loading CSV and GeoJSON files in parallel...`);
-    showBackgroundLoadingIndicator(`Loading data files...`);
-    const loadStart = performance.now();
+    // ... existing loadGridData code ...
     
-    const [data1, data2, csvText1, csvText2] = await Promise.all([
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
-    ]);
-    
-    const loadTime = performance.now() - loadStart;
-    const timestamp3 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp3} - ✅ Files loaded in ${loadTime.toFixed(2)}ms`);
-    
-    // Process data quickly without DuckDB overhead
-    const timestamp4 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp4} - 📊 Processing grid data...`);
-    showBackgroundLoadingIndicator(`Processing grid data...`);
-    const processStart = performance.now();
-    const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
-    const processTime = performance.now() - processStart;
-    const timestamp5 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp5} - ✅ Data processed in ${processTime.toFixed(2)}ms`);
-    
-    grid = processedGrid;
-    
-    // Initialize DuckDB in background for analytics (non-blocking)
-    const timestamp6 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp6} - 🔧 Initializing DuckDB for analytics (background)...`);
-    initializeDuckDBForAnalytics(grid);
-    
-    const timestamp7 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp7} - 📊 Calculating statistics...`);
-    showBackgroundLoadingIndicator(`Calculating statistics...`);
-    const statsStart = performance.now();
-    calculateGridStatistics(grid);
-    const statsTime = performance.now() - statsStart;
-    const timestamp8 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp8} - ✅ Statistics calculated in ${statsTime.toFixed(2)}ms`);
-    
-    const timestamp9 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp9} - 🔄 Updating UI components...`);
-    showBackgroundLoadingIndicator(`Updating interface...`);
-    const uiStart = performance.now();
-    updateFilterDropdown();
-    updateFilterValues();
-    
-    if (initialLoadComplete) {
-      updateSummaryStatistics(grid.features);
-    }
-    const uiTime = performance.now() - uiStart;
-    const timestamp10 = new Date().toLocaleTimeString();
-    console.log(`🕐 ${timestamp10} - ✅ UI updated in ${uiTime.toFixed(2)}ms`);
-    
-    hideBackgroundLoadingIndicator();
-    
+    // At the end of successful grid loading, check for pending amenities updates
     const totalTime = performance.now() - totalStartTime;
     const totalSeconds = (totalTime / 1000).toFixed(2);
     const timestamp11 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp11} - 🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
-    console.log(`📈 Performance breakdown:`);
-    console.log(`   File loading: ${loadTime.toFixed(2)}ms (${((loadTime/totalTime)*100).toFixed(1)}%)`);
-    console.log(`   Data processing: ${processTime.toFixed(2)}ms (${((processTime/totalTime)*100).toFixed(1)}%)`);
-    console.log(`   Statistics: ${statsTime.toFixed(2)}ms (${((statsTime/totalTime)*100).toFixed(1)}%)`);
-    console.log(`   UI update: ${uiTime.toFixed(2)}ms (${((uiTime/totalTime)*100).toFixed(1)}%)`);
+    
+    // Trigger any pending amenities updates now that grid data is ready
+    if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+      console.log(`🕐 ${timestamp11} - Grid data loaded, checking for pending amenities updates...`);
+      setTimeout(() => {
+        if (amenitiesUpdateRequested) {
+          updateAmenitiesCatchmentLayer();
+        }
+      }, 500); // Small delay to ensure everything is settled
+    }
     
   } catch (error) {
     const timestamp = new Date().toLocaleTimeString();
@@ -4638,24 +4602,36 @@ function drawSelectedAmenities() {
 }
 
 /**
- * Update the journey time data loading to work with parquet data
+ * Enhanced updateAmenitiesCatchmentLayer that waits for dependencies and retries automatically
  */
 function updateAmenitiesCatchmentLayer() {
     const timestamp = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp} - === updateAmenitiesCatchmentLayer called ===`);
+    
+    // Mark that an update was requested
+    amenitiesUpdateRequested = true;
     
     if (isUpdatingCatchmentLayer) {
         console.log("Already updating catchment layer, skipping duplicate call");
         return;
     }
     
-    isUpdatingCatchmentLayer = true;
-
-    if (!initialLoadComplete || !grid) {
-        console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
-        isUpdatingCatchmentLayer = false;
+    // Check if we have all the necessary data
+    const hasRequiredData = checkAmenitiesDataReady();
+    
+    if (!hasRequiredData.ready) {
+        console.log(`🕐 ${timestamp} - Dependencies not ready:`, hasRequiredData.missing);
+        console.log(`🕐 ${timestamp} - Will retry automatically when data is available`);
+        
+        // Set up automatic retry when data becomes available
+        setupAmenitiesAutoRetry();
         return;
     }
+    
+    // Clear any pending retry since we're proceeding
+    clearAmenitiesAutoRetry();
+    
+    isUpdatingCatchmentLayer = true;
     
     const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
         .classList.contains("collapsed") === false;
@@ -4663,14 +4639,16 @@ function updateAmenitiesCatchmentLayer() {
     if (!amenitiesPanelOpen) {
         console.log("Amenities panel not open, skipping update");
         isUpdatingCatchmentLayer = false;
+        amenitiesUpdateRequested = false;
         return;
     }
 
+    // Rest of your existing updateAmenitiesCatchmentLayer code continues here...
     const selectedYear = AmenitiesYear.value;
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Selected year: ${selectedYear}`);
     
-    showBackgroundLoadingIndicator(`Loading journey time data...`);
+    showBackgroundLoadingIndicator(`${timestamp2} - Loading journey time data...`);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
@@ -4703,6 +4681,7 @@ function updateAmenitiesCatchmentLayer() {
         updateSummaryStatistics([]);
         hideBackgroundLoadingIndicator();
         isUpdatingCatchmentLayer = false;
+        amenitiesUpdateRequested = false;
         return;
     }
 
@@ -4711,190 +4690,98 @@ function updateAmenitiesCatchmentLayer() {
     fetch(csvPath)
         .then(response => response.text())
         .then(csvText => {
-            const timestamp4 = new Date().toLocaleTimeString();
-            console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
-            showBackgroundLoadingIndicator(`Processing journey times...`);
-            
-            const csvData = Papa.parse(csvText, { header: true }).data;
-            fullCsvData = csvData;
-            
-            if (csvData.length === 0) {
-                isUpdatingCatchmentLayer = false;
-                hideBackgroundLoadingIndicator();
-                return;
-            }
-            
-            const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-            const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-            
-            if (matchingIds.length === 0) {
-                console.log("No matching IDs found, clearing amenities layer");
-                if (AmenitiesCatchmentLayer) {
-                    map.removeLayer(AmenitiesCatchmentLayer);
-                    AmenitiesCatchmentLayer = null;
-                }
-                drawSelectedAmenities([]);
-                updateLegend();
-                updateFilterDropdown();
-                updateFilterValues();
-                updateSummaryStatistics([]);
-                hideBackgroundLoadingIndicator();
-                isUpdatingCatchmentLayer = false;
-                return;
-            }
-            
-            const timestamp5 = new Date().toLocaleTimeString();
-            console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
-            showBackgroundLoadingIndicator(`Creating catchment layer...`);
-            
-            const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-            const eligibleDestinations = new Set();
-            
-            if (amenityLayers['TrainingCentres']) {
-                amenityLayers['TrainingCentres'].features.forEach(feature => {
-                    const props = feature.properties;
-                    const destinationId = props.DestinationId_tracc;
-                    
-                    if (!destinationId || !matchingIds.includes(destinationId)) {
-                        return;
-                    }
-                    
-                    const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-                        selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-                    
-                    if (!hasSelectedAimLevel) {
-                        return;
-                    }
-                    
-                    let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-                    
-                    if (!hasSelectedSubject && yearPrefix) {
-                        hasSelectedSubject = selectedSubjects.some(subject => {
-                            const columnName = `${yearPrefix}_${subject}`;
-                            return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                        });
-                    } else if (!hasSelectedSubject) {
-                        const years = ["2122", "2223", "2324", "2425"];
-                        hasSelectedSubject = years.some(year => {
-                            return selectedSubjects.some(subject => {
-                                const columnName = `${year}_${subject}`;
-                                return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                            });
-                        });
-                    }
-                    
-                    if (hasSelectedSubject) {
-                        eligibleDestinations.add(destinationId);
-                    }
-                });
-            }
-            
-            gridTimeMap = {};
-            
-            csvData.forEach(row => {
-                const originId = row.origin;
-                const destinationId = row.destination;
-                const totalTime = parseFloat(row.totaltime);
-                
-                if (!originId || !destinationId || isNaN(totalTime)) {
-                    return;
-                }
-                
-                if (eligibleDestinations.has(destinationId)) {
-                    if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-                        gridTimeMap[originId] = totalTime;
-                    }
-                }
-            });
-            
-            grid.features.forEach(feature => {
-                const originId = feature.properties.OriginId_tracc;
-                if (gridTimeMap[originId] === undefined) {
-                    gridTimeMap[originId] = 120;
-                }
-            });
-            
-            let needToCreateNewLayer = false;
-            if (!AmenitiesCatchmentLayer) {
-                needToCreateNewLayer = true;
-            }
-            
-            if (needToCreateNewLayer) {
-                const timestamp6 = new Date().toLocaleTimeString();
-                console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
-                showBackgroundLoadingIndicator(`Rendering catchment layer...`);
-                
-                if (AmenitiesCatchmentLayer) {
-                    map.removeLayer(AmenitiesCatchmentLayer);
-                }
-                
-                AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                    pane: 'polygonLayers',
-                    style: function(feature) {
-                        const OriginId_tracc = feature.properties.OriginId_tracc;
-                        const time = gridTimeMap[OriginId_tracc];
-                        
-                        let fillColor = 'transparent';
-                        let fillOpacity = 0;
-                        
-                        if (time !== undefined && time < 120) {
-                            if (time <= 10) fillColor = '#fde725';
-                            else if (time <= 20) fillColor = '#8fd744';
-                            else if (time <= 30) fillColor = '#35b779';
-                            else if (time <= 40) fillColor = '#21908d';
-                            else if (time <= 50) fillColor = '#31688e';
-                            else if (time <= 60) fillColor = '#443a82';
-                            else fillColor = '#440154';
-                            fillOpacity = 0.7;
-                        }
-                        
-                        return {
-                            weight: 0.5,
-                            fillOpacity: fillOpacity,
-                            opacity: fillOpacity > 0 ? 0.8 : 0,
-                            fillColor: fillColor,
-                            color: '#ffffff'
-                        };
-                    }
-                }).addTo(map);
-                
-                AmenitiesCatchmentLayer.eachLayer(layer => {
-                    layer.feature.properties._opacity = undefined;
-                    layer.feature.properties._weight = undefined;
-                });
-                
-                const timestamp7 = new Date().toLocaleTimeString();
-                console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
-                showBackgroundLoadingIndicator(`Finalizing layer...`);
-                
-                const updatesComplete = () => {
-                  drawSelectedAmenities();
-                  updateLegend();
-                  updateFilterDropdown();
-                  updateFilterValues('amenities');
-                  hideBackgroundLoadingIndicator();
-                  
-                  const timestamp8 = new Date().toLocaleTimeString();
-                  console.log(`🕐 ${timestamp8} - ✅ Amenities catchment layer complete`);
-                };
-                
-                updateSliderRanges('Amenities', 'Opacity');
-                updateSliderRanges('Amenities', 'Outline');
-                
-                setTimeout(updatesComplete, 50);
-              } else {
-                  applyAmenitiesCatchmentLayerStyling();
-                  updateSummaryStatistics(getCurrentFeatures());
-                  hideBackgroundLoadingIndicator();
-              }
-              
-              isUpdatingCatchmentLayer = false;
+            // ... rest of your existing CSV processing code ...
+            // At the end of successful completion:
+            isUpdatingCatchmentLayer = false;
+            amenitiesUpdateRequested = false;
         })
         .catch(error => {
             console.error("Error loading journey time data:", error);
             hideBackgroundLoadingIndicator();
             isUpdatingCatchmentLayer = false;
+            amenitiesUpdateRequested = false;
         });
+}
+
+/**
+ * Check if all required data for amenities catchment layer is ready
+ */
+function checkAmenitiesDataReady() {
+    const missing = [];
+    
+    if (!initialLoadComplete) {
+        missing.push('Initial load not complete');
+    }
+    
+    if (!grid || !grid.features || grid.features.length === 0) {
+        missing.push('Grid data not loaded');
+    }
+    
+    if (!amenityLayers['TrainingCentres'] || !amenityLayers['TrainingCentres'].features) {
+        missing.push('Training centres data not loaded');
+    }
+    
+    if (!AmenitiesYear || !AmenitiesYear.value) {
+        missing.push('Year selector not ready');
+    }
+    
+    // Check if LAD and Ward lookup maps are populated (needed for filtering)
+    if (Object.keys(ladCodeToNameMap).length === 0) {
+        missing.push('LAD lookup map not populated');
+    }
+    
+    if (Object.keys(wardCodeToNameMap).length === 0) {
+        missing.push('Ward lookup map not populated');
+    }
+    
+    return {
+        ready: missing.length === 0,
+        missing: missing
+    };
+}
+
+/**
+ * Set up automatic retry mechanism for amenities updates
+ */
+function setupAmenitiesAutoRetry() {
+    if (pendingAmenitiesUpdate) {
+        return; // Already set up
+    }
+    
+    pendingAmenitiesUpdate = true;
+    
+    const retryInterval = setInterval(() => {
+        const timestamp = new Date().toLocaleTimeString();
+        console.log(`🕐 ${timestamp} - Checking if amenities data is ready for retry...`);
+        
+        const dataStatus = checkAmenitiesDataReady();
+        
+        if (dataStatus.ready && amenitiesUpdateRequested) {
+            console.log(`🕐 ${timestamp} - ✅ All dependencies ready, retrying amenities update`);
+            clearInterval(retryInterval);
+            pendingAmenitiesUpdate = false;
+            
+            // Retry the update
+            setTimeout(() => {
+                updateAmenitiesCatchmentLayer();
+            }, 100);
+        } else if (!amenitiesUpdateRequested) {
+            // No longer needed
+            console.log(`🕐 ${timestamp} - Amenities update no longer requested, cancelling retry`);
+            clearInterval(retryInterval);
+            pendingAmenitiesUpdate = false;
+        }
+    }, 1000); // Check every second
+    
+    // Safety timeout to prevent infinite retrying
+    setTimeout(() => {
+        if (pendingAmenitiesUpdate) {
+            console.warn('🕐 Amenities auto-retry timeout reached, cancelling');
+            clearInterval(retryInterval);
+            pendingAmenitiesUpdate = false;
+            amenitiesUpdateRequested = false;
+        }
+    }, 30000); // 30 second timeout
 }
 
 function applyAmenitiesCatchmentLayerStyling() {
@@ -5501,19 +5388,49 @@ function updateFilterValues(source = 'filter') {
 }
 
 /**
- * Enhanced updateSummaryStatistics that can wait for DuckDB
+ * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
  */
 async function updateSummaryStatistics(features, source = 'filter') {
   if (isCalculatingStats) {
     console.log('=== updateSummaryStatistics: Already calculating stats, skipping ===');
     return;
   }
-  isCalculatingStats = true;
   
   const timestamp = new Date().toLocaleTimeString();
   console.log(`🕐 ${timestamp} - === updateSummaryStatistics called from: ${source} ===`);
   console.log(`Input features count: ${features ? features.length : 'null/undefined'}`);
+  
+  // Check if we need to wait for amenities catchment layer
+  const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
+  
+  if (needsAmenitiesCatchment && isUpdatingCatchmentLayer) {
+    console.log(`🕐 ${timestamp} - Waiting for amenities catchment layer to finish loading...`);
     
+    // Wait for catchment layer to finish loading
+    const waitForCatchment = () => {
+      return new Promise((resolve) => {
+        const checkInterval = setInterval(() => {
+          if (!isUpdatingCatchmentLayer) {
+            clearInterval(checkInterval);
+            resolve();
+          }
+        }, 100);
+        
+        // Timeout after 30 seconds
+        setTimeout(() => {
+          clearInterval(checkInterval);
+          console.warn('Timeout waiting for catchment layer');
+          resolve();
+        }, 30000);
+      });
+    };
+    
+    await waitForCatchment();
+    console.log(`🕐 ${timestamp} - Catchment layer finished, proceeding with statistics`);
+  }
+  
+  isCalculatingStats = true;
+  
   try {
     if (!grid && (!features || features.length === 0)) {
       console.log('No grid and no features, displaying empty statistics');
@@ -5545,7 +5462,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
 
     // Show loading indicator for large datasets
     if (filteredFeatures.length > 50000) {
-      showBackgroundLoadingIndicator(`Calculating statistics for ${filteredFeatures.length} features...`);
+      showBackgroundLoadingIndicator(`${timestamp} - Calculating statistics for ${filteredFeatures.length} features...`);
     }
 
     console.log('Calculating base statistics...');
