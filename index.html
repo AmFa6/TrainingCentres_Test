@@ -14,8 +14,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
-  <script src="https://unpkg.com/proj4"></script>
-  <script src="https://unpkg.com/proj4leaflet"></script>
   
   <!-- Load DuckDB-WASM as ES module - This is the correct way -->
   <script type="module">
@@ -202,7 +200,7 @@
     background: linear-gradient(to right, rgba(118, 118, 118, 1) 0%, rgba(118, 118, 118, 0.5) 50%, rgba(118, 118, 118, 0) 100%) !important;
   }
   .noUi-handle {
-    background: rgba(118, 118, 118, 1) !important;
+    background: #767676 !important;
     border: none !important;
     border-radius: 50% !important;
     box-shadow: none !important;
@@ -212,9 +210,13 @@
     top: 50%;
     transform: translate(-50%, 5%) !important;
   }
-  .noUi-handle-transparent {
-    background: rgba(255, 255, 255, 0.0) !important;
-    border: 0.5px solid #767676 !important;
+  .noUi-handle-filled {
+    background: #767676 !important;
+    border: none !important;
+  }
+  .noUi-handle-outline {
+    background: transparent !important;
+    border: 2px solid #767676 !important;
   }
   .noUi-handle::after {
     content: attr(data-value);
@@ -367,37 +369,7 @@
   .dropdown-menu.show {
     display: block;
   }
-  .pin {
-    position: relative;
-    display: inline-block;
-    width: 30px;
-    height: 30px;
-    bottom: 36px;
-    background-color: white;
-    border: 3px solid grey;
-    border-radius: 50%;
-    text-align: center;
-    line-height: 30px;
-  }
-  .pin::after {
-    content: '';
-    position: absolute;
-    top: 18px;
-    left: 50%;
-    transform: translateX(-50%);
-    width: 0;
-    height: 0;
-    border-left: 17px solid transparent;
-    border-right: 17px solid transparent;
-    border-top: 35px solid grey;
-    z-index: -1;
-  }
-  .dot {
-    width: 5px;
-    height: 5px;
-    background-color: grey;
-    border-radius: 50%;
-  }
+
   #summary-panel h4 {
     margin-top: 0;
   }
@@ -540,45 +512,8 @@
     padding: 0;
     border: 1px solid #ddd;
   }
-  .style-tabs {
-    display: flex;
-    border-bottom: 1px solid #ccc;
-    margin-bottom: 10px;
-  }
-  .style-tab {
-    padding: 5px 10px;
-    cursor: pointer;
-    background: #f5f5f5;
-    border: 1px solid #ccc;
-    border-bottom: none;
-    border-radius: 4px 4px 0 0;
-    margin-right: 5px;
-  }
-  .style-tab.active {
-    background: white;
-    border-bottom: 1px solid white;
-    margin-bottom: -1px;
-    font-weight: bold;
-  }
-  .tab-content {
-    display: none;
-  }
-  .tab-content.active {
-    display: block;
-  }
-  .show-catchment-btn {
-    margin-top: 8px;
-    padding: 5px 10px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  .show-catchment-btn:hover {
-    background-color: #45a049;
-  }
+
+
   .legend-header {
     display: flex;
     justify-content: space-between;
@@ -716,16 +651,7 @@
     border-radius: 4px;
     border: 1px solid #ccc;
   }
-  
-  .style-sub-option {
-    margin-top: 10px;
-    margin-left: 15px;
-  }
-  
-  .slider {
-    width: 100%;
-  }
-  
+
   #apply-style,
   #cancel-style {
     padding: 8px 15px;
@@ -790,29 +716,7 @@
   .leaflet-draw-actions {
     display: none;
   }
-  #amenities-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 10px;
-  }
 
-  #amenities-table th, #amenities-table td {
-    border: 1px solid #ccc;
-    padding: 5px;
-    text-align: left;
-  }
-
-  #amenities-table th {
-    background-color: #f2f2f2;
-  }
-
-  #amenities-table .total-row {
-    background-color: #f5f5f5;
-  }
-
-  #amenities-table tr:hover {
-    background-color: #f9f9f9;
-  }
 
   .loading-overlay {
     position: fixed;
@@ -1185,23 +1089,7 @@
       </div>
     </div>
   </template>
-  <template id="style-dialog-template">
-    <div id="style-dialog" class="modal-dialog">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="style-dialog-title">Style: Layer Name</h3>
-        </div>
-        <div class="modal-body">
-          <div class="style-option">
-            <div class="color-picker-row">
-              <label>Color:</label>
-              <input type="color" id="style-color" value="#000000">
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </template>
+
   <div id="loading-overlay" class="loading-overlay">
   <div class="loading-spinner"></div>
   <div id="loading-text" class="loading-text">Loading...</div>
