@@ -253,12 +253,13 @@ document.addEventListener('DOMContentLoaded', (event) => {
   
   initializeCollapsiblePanels();
   
-  loadBaseLayers().then(() => {
+  loadBaseLayers().then(async () => {
     console.log('Base layers loaded successfully');
     
     map.fire('baselayersloaded');
     initialLoadComplete = true;
     
+    await loadJourneyTimeCsv(); // <-- Add this line
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
@@ -822,6 +823,19 @@ async function loadGridData() {
     console.error(`🕐 ${timestamp} - ❌ Error loading grid data:`, error);
     hideBackgroundLoadingIndicator();
     showErrorNotification("Error loading grid data. Some features may be limited.");
+  }
+}
+
+async function loadJourneyTimeCsv() {
+  const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+  try {
+    const response = await fetch(csvPath);
+    const csvText = await response.text();
+    fullCsvData = Papa.parse(csvText, { header: true }).data;
+    console.log('Journey time CSV loaded:', fullCsvData.length, 'rows');
+  } catch (err) {
+    console.error('Failed to load journey time CSV:', err);
+    fullCsvData = [];
   }
 }
 
@@ -4778,12 +4792,13 @@ function updateAmenitiesCatchmentLayer() {
               }
           });
           
-          grid.features.forEach(feature => {
-              const originId = feature.properties.OriginId_tracc;
-              if (gridTimeMap[originId] === undefined) {
-                  gridTimeMap[originId] = 120;
-              }
-          });
+          const gridTimeKeys = new Set(Object.keys(gridTimeMap));
+          for (let i = 0; i < grid.features.length; i++) {
+            const originId = grid.features[i].properties.OriginId_tracc;
+            if (!gridTimeKeys.has(String(originId))) {
+              gridTimeMap[originId] = 120;
+            }
+          }
           
           let needToCreateNewLayer = false;
           if (!AmenitiesCatchmentLayer) {
