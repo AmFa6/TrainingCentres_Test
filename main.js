@@ -5736,7 +5736,6 @@ async function calculateStatisticsWithDuckDB(features) {
       minPopGrowth: Number(row.min_pop_growth) || 0,
       maxPopGrowth: Number(row.max_pop_growth) || 0
     };
-    
   } catch (error) {
     console.error('Error in DuckDB statistics calculation:', error);
     return await calculateStatisticsWithJavaScript(features);
@@ -5881,6 +5880,7 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
+  showBackgroundLoadingIndicator('Calculating base statistics...');
   if (!features || features.length === 0) {
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
@@ -5892,16 +5892,13 @@ async function calculateBaseStatistics(features) {
   }
 
   
-  if (features.length > 50000 && window.duckdbInstance) {    
-    try {
-      await waitForDuckDBAnalytics(10000);
-      
-      if (window.duckdbAnalyticsReady) {
-        return await calculateStatisticsWithDuckDB(features);
-      }
-    } catch (error) {
-      console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
+  try {
+    await waitForDuckDBAnalytics(10000);
+    if (window.duckdbAnalyticsReady) {
+      return await calculateStatisticsWithDuckDB(features);
     }
+  } catch (error) {
+    console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
   }
   
   return await calculateStatisticsWithJavaScript(features);
