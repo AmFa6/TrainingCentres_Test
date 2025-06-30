@@ -755,14 +755,17 @@ function loadBackgroundData() {
  * Loads grid data using fast CSV+GeoJSON approach with DuckDB for analytics
  */
 async function loadGridData() {
-  showBackgroundLoadingIndicator('Loading grid data...');
+  const timestamp = new Date().toLocaleTimeString();
+  showBackgroundLoadingIndicator(`${timestamp} - Loading grid data...`);
   
   try {
-    console.log('🚀 === Starting fast CSV+GeoJSON data loading ===');
+    console.log(`🕐 ${timestamp} - 🚀 === Starting fast CSV+GeoJSON data loading ===`);
     const totalStartTime = performance.now();
     
     // Load files in parallel - much faster than single parquet
-    console.log('📥 Loading CSV and GeoJSON files in parallel...');
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - 📥 Loading CSV and GeoJSON files in parallel...`);
+    showBackgroundLoadingIndicator(`${timestamp2} - Loading data files...`);
     const loadStart = performance.now();
     
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -773,28 +776,38 @@ async function loadGridData() {
     ]);
     
     const loadTime = performance.now() - loadStart;
-    console.log(`✅ Files loaded in ${loadTime.toFixed(2)}ms`);
+    const timestamp3 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp3} - ✅ Files loaded in ${loadTime.toFixed(2)}ms`);
     
     // Process data quickly without DuckDB overhead
-    console.log('� Processing grid data...');
+    const timestamp4 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp4} - 📊 Processing grid data...`);
+    showBackgroundLoadingIndicator(`${timestamp4} - Processing grid data...`);
     const processStart = performance.now();
     const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
     const processTime = performance.now() - processStart;
-    console.log(`✅ Data processed in ${processTime.toFixed(2)}ms`);
+    const timestamp5 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp5} - ✅ Data processed in ${processTime.toFixed(2)}ms`);
     
     grid = processedGrid;
     
     // Initialize DuckDB in background for analytics (non-blocking)
-    console.log('� Initializing DuckDB for analytics (background)...');
+    const timestamp6 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp6} - 🔧 Initializing DuckDB for analytics (background)...`);
     initializeDuckDBForAnalytics(grid);
     
-    console.log('�📊 Calculating statistics...');
+    const timestamp7 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp7} - 📊 Calculating statistics...`);
+    showBackgroundLoadingIndicator(`${timestamp7} - Calculating statistics...`);
     const statsStart = performance.now();
     calculateGridStatistics(grid);
     const statsTime = performance.now() - statsStart;
-    console.log(`✅ Statistics calculated in ${statsTime.toFixed(2)}ms`);
+    const timestamp8 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp8} - ✅ Statistics calculated in ${statsTime.toFixed(2)}ms`);
     
-    console.log('🔄 Updating UI components...');
+    const timestamp9 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp9} - 🔄 Updating UI components...`);
+    showBackgroundLoadingIndicator(`${timestamp9} - Updating interface...`);
     const uiStart = performance.now();
     updateFilterDropdown();
     updateFilterValues();
@@ -803,13 +816,15 @@ async function loadGridData() {
       updateSummaryStatistics(grid.features);
     }
     const uiTime = performance.now() - uiStart;
-    console.log(`✅ UI updated in ${uiTime.toFixed(2)}ms`);
+    const timestamp10 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp10} - ✅ UI updated in ${uiTime.toFixed(2)}ms`);
     
     hideBackgroundLoadingIndicator();
     
     const totalTime = performance.now() - totalStartTime;
     const totalSeconds = (totalTime / 1000).toFixed(2);
-    console.log(`🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
+    const timestamp11 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp11} - 🎉 === TOTAL LOADING TIME: ${totalTime.toFixed(2)}ms (${totalSeconds}s) ===`);
     console.log(`📈 Performance breakdown:`);
     console.log(`   File loading: ${loadTime.toFixed(2)}ms (${((loadTime/totalTime)*100).toFixed(1)}%)`);
     console.log(`   Data processing: ${processTime.toFixed(2)}ms (${((processTime/totalTime)*100).toFixed(1)}%)`);
@@ -817,7 +832,8 @@ async function loadGridData() {
     console.log(`   UI update: ${uiTime.toFixed(2)}ms (${((uiTime/totalTime)*100).toFixed(1)}%)`);
     
   } catch (error) {
-    console.error("❌ Error loading grid data:", error);
+    const timestamp = new Date().toLocaleTimeString();
+    console.error(`🕐 ${timestamp} - ❌ Error loading grid data:`, error);
     hideBackgroundLoadingIndicator();
     showErrorNotification("Error loading grid data. Some features may be limited.");
   }
@@ -860,21 +876,18 @@ async function waitForDuckDBModule() {
 }
 
 /**
- * Initialize DuckDB-WASM
+ * Initialize DuckDB-WASM with reduced logging
  */
 async function initializeDuckDB() {
   try {
-    // console.log('=== DuckDB-WASM Initialization ===');
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp} - Starting DuckDB-WASM initialization...`);
     
     if (!window.duckdb) {
       throw new Error('DuckDB-WASM module not available');
     }
     
-    // console.log('DuckDB object inspection:');
-    // console.log('- typeof:', typeof window.duckdb);
-    // console.log('- keys:', Object.keys(window.duckdb));
-    
-    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'ConsoleLogger'];
+    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'VoidLogger'];
     const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
     
     if (missingMethods.length > 0) {
@@ -883,64 +896,51 @@ async function initializeDuckDB() {
     }
     
     if (!window.duckdbInstance) {
-      // console.log('Initializing DuckDB-WASM instance...');
+      const startTime = performance.now();
       
-      // console.log('Getting bundles...');
       const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
-      // console.log('Available bundles:', JSDELIVR_BUNDLES);
-      
-      // console.log('Selecting bundle...');
       const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
-      // console.log('Selected bundle:', bundle);
       
-      // console.log('Creating worker...');
       const worker_url = URL.createObjectURL(
         new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
       );
       const worker = new Worker(worker_url);
-      // console.log('Worker created successfully');
       
-      // console.log('Creating logger...');
-      const logger = new window.duckdb.ConsoleLogger();
-      // console.log('Logger created successfully');
+      // Use VoidLogger instead of ConsoleLogger to reduce logging
+      const logger = new window.duckdb.VoidLogger();
       
-      // console.log('Creating AsyncDuckDB instance...');
       const db = new window.duckdb.AsyncDuckDB(logger, worker);
-      // console.log('AsyncDuckDB instance created');
-      
-      // console.log('Instantiating database...');
       await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
       
       URL.revokeObjectURL(worker_url);
       
-      // console.log('Database instantiated successfully');
-      
       window.duckdbInstance = db;
-      // console.log('✅ DuckDB-WASM initialized successfully');
-    } else {
-      // console.log('✅ DuckDB-WASM instance already exists');
+      
+      const initTime = performance.now() - startTime;
+      const timestamp2 = new Date().toLocaleTimeString();
+      console.log(`🕐 ${timestamp2} - ✅ DuckDB-WASM initialized in ${initTime.toFixed(2)}ms`);
     }
     
     return window.duckdbInstance;
   } catch (error) {
     console.error('❌ Failed to initialize DuckDB-WASM:', error);
-    console.error('Error stack:', error.stack);
     throw error;
   }
 }
 
 /**
- * Fast processing of grid data without DuckDB overhead
+ * Fast processing of grid data with key type matching fix
  */
 async function processGridDataFast(data1, data2, csvText1, csvText2) {
   return new Promise((resolve) => {
-    console.log("� Processing CSV data with Papa Parse...");
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp} - Processing CSV data with Papa Parse...`);
     
     // Use Papa Parse for fast CSV processing
     const csvData1 = Papa.parse(csvText1, { 
       header: true, 
       skipEmptyLines: true,
-      fastMode: true // Enable fast mode for better performance
+      fastMode: true
     }).data;
     
     const csvData2 = Papa.parse(csvText2, { 
@@ -952,39 +952,38 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     // Create lookup with Map for O(1) access
     const csvLookup = new Map();
     
-    // Process CSV data efficiently
+    // Process CSV data efficiently - convert keys to numbers to match GeoJSON
     csvData1.forEach(row => {
       if (row.OriginId_tracc) {
-        csvLookup.set(row.OriginId_tracc, row);
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
       }
     });
     
     csvData2.forEach(row => {
       if (row.OriginId_tracc) {
-        csvLookup.set(row.OriginId_tracc, row);
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
       }
     });
     
-    console.log(`📋 Created lookup table with ${csvLookup.size} entries`);
-    console.log(`📋 CSV1 rows: ${csvData1.length}, CSV2 rows: ${csvData2.length}`);
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - Created lookup table with ${csvLookup.size} entries`);
     
     // Process features in larger batches for better performance
-    const BATCH_SIZE = 10000; // Larger batches since we're not using JSON.parse for geometry
+    const BATCH_SIZE = 20000; // Increased batch size
     const allFeatures = [...data1.features, ...data2.features];
     const processedFeatures = [];
-    
-    // Debug: Sample CSV keys and GeoJSON properties
-    const csvKeys = Array.from(csvLookup.keys()).slice(0, 5);
-    const geoJsonKeys = allFeatures.slice(0, 5).map(f => f.properties.OriginId_tracc);
-    console.log('📋 Sample CSV keys:', csvKeys);
-    console.log('📋 Sample GeoJSON keys:', geoJsonKeys);
-    console.log('📋 CSV key types:', csvKeys.map(k => typeof k));
-    console.log('📋 GeoJSON key types:', geoJsonKeys.map(k => typeof k));
     
     let processed = 0;
     const totalFeatures = allFeatures.length;
     
-    console.log(`🔄 Processing ${totalFeatures} features in batches of ${BATCH_SIZE}...`);
+    const timestamp3 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp3} - Processing ${totalFeatures} features in batches of ${BATCH_SIZE}...`);
     
     // Process synchronously in batches with progress updates
     for (let i = 0; i < totalFeatures; i += BATCH_SIZE) {
@@ -995,42 +994,13 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
         const feature = allFeatures[j];
         const originId = feature.properties.OriginId_tracc;
         
-        // Debug: Check first few matches
-        if (j < 5) {
-          console.log(`🔍 Feature ${j}: originId=${originId} (${typeof originId}), has match: ${csvLookup.has(originId)}`);
-          if (!csvLookup.has(originId)) {
-            // Try converting to string/number
-            const asString = String(originId);
-            const asNumber = Number(originId);
-            console.log(`🔍 Trying as string: ${csvLookup.has(asString)}, as number: ${csvLookup.has(asNumber)}`);
-          }
-        }
-        
         // Skip features without OriginId_tracc
         if (!originId) {
           continue;
         }
         
-        let csvData = null;
-        let matchedKey = null;
-        
-        // Try exact match first
-        if (csvLookup.has(originId)) {
-          csvData = csvLookup.get(originId);
-          matchedKey = originId;
-        } else {
-          // Try alternative key formats
-          const stringKey = String(originId);
-          const numberKey = Number(originId);
-          
-          if (csvLookup.has(stringKey)) {
-            csvData = csvLookup.get(stringKey);
-            matchedKey = stringKey;
-          } else if (csvLookup.has(numberKey)) {
-            csvData = csvLookup.get(numberKey);
-            matchedKey = numberKey;
-          }
-        }
+        // Direct lookup with numeric key
+        const csvData = csvLookup.get(originId);
         
         // Only keep features that have matching CSV data
         if (csvData) {
@@ -1045,7 +1015,6 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
           
           processedFeatures.push(feature);
         }
-        // Features without CSV matches are silently excluded from the dataset
       }
       
       processed = batchEnd;
@@ -1063,7 +1032,8 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     const validOutputFeatures = processedFeatures.length;
     const filteredOutCount = totalInputFeatures - validOutputFeatures;
     
-    console.log(`✅ Processed ${validOutputFeatures} valid features (${filteredOutCount} features filtered out due to missing CSV data)`);
+    const timestamp4 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp4} - ✅ Processed ${validOutputFeatures} valid features (${filteredOutCount} features filtered out due to missing CSV data)`);
     console.log(`📊 Data quality: ${((validOutputFeatures / totalInputFeatures) * 100).toFixed(1)}% of GeoJSON features had matching CSV data`);
     
     resolve(combinedData);
@@ -1252,6 +1222,9 @@ function calculateGridStatistics(gridData) {
  * @param {Number} progress Optional progress percentage (0-100)
  */
 function showBackgroundLoadingIndicator(message = 'Loading data...', progress = null) {
+  const timestamp = new Date().toLocaleTimeString();
+  console.log(`🕐 ${timestamp} - ${message}`);
+  
   let indicator = document.getElementById('background-loading-indicator');
   
   if (!indicator) {
@@ -4667,17 +4640,18 @@ function drawSelectedAmenities() {
  * Update the journey time data loading to work with parquet data
  */
 function updateAmenitiesCatchmentLayer() {
-    // console.log("=== updateAmenitiesCatchmentLayer called ===");
+    const timestamp = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp} - === updateAmenitiesCatchmentLayer called ===`);
     
     if (isUpdatingCatchmentLayer) {
-        // console.log("Already updating catchment layer, skipping duplicate call");
+        console.log("Already updating catchment layer, skipping duplicate call");
         return;
     }
     
     isUpdatingCatchmentLayer = true;
 
     if (!initialLoadComplete || !grid) {
-        // console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
+        console.log("Initial load not complete or grid not loaded:", {initialLoadComplete, grid: !!grid});
         isUpdatingCatchmentLayer = false;
         return;
     }
@@ -4686,36 +4660,37 @@ function updateAmenitiesCatchmentLayer() {
         .classList.contains("collapsed") === false;
     
     if (!amenitiesPanelOpen) {
-        // console.log("Amenities panel not open, skipping update");
+        console.log("Amenities panel not open, skipping update");
         isUpdatingCatchmentLayer = false;
         return;
     }
 
     const selectedYear = AmenitiesYear.value;
-    // console.log("Selected year:", selectedYear);
+    const timestamp2 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp2} - Selected year: ${selectedYear}`);
+    
+    showBackgroundLoadingIndicator(`${timestamp2} - Loading journey time data...`);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
     const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-    // console.log("Subject selection:", {isAllSubjectsSelected, selectedSubjects, totalSubjectCheckboxes: subjectCheckboxes.length});
     
     const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
     const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
     const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
     const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-    // console.log("Aim level selection:", {isAllAimLevelsSelected, selectedAimLevels, totalAimLevelCheckboxes: aimLevelCheckboxes.length});
     
     const filteredTrainingCentres = filterTrainingCentres();
-    // console.log("Filtered training centres count:", filteredTrainingCentres.features.length);
+    const timestamp3 = new Date().toLocaleTimeString();
+    console.log(`🕐 ${timestamp3} - Filtered training centres count: ${filteredTrainingCentres.features.length}`);
     
     const filteredTrainingCenterIds = filteredTrainingCentres.features
         .map(feature => feature.properties.DestinationId_tracc)
         .filter(id => id !== undefined);
-    // console.log("Training center IDs:", filteredTrainingCenterIds);
         
     if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-        // console.log("No year selected or no training centers found, clearing layer");
+        console.log("No year selected or no training centers found, clearing layer");
         if (AmenitiesCatchmentLayer) {
             map.removeLayer(AmenitiesCatchmentLayer);
             AmenitiesCatchmentLayer = null;
@@ -4725,6 +4700,7 @@ function updateAmenitiesCatchmentLayer() {
         updateFilterDropdown();
         updateFilterValues();
         updateSummaryStatistics([]);
+        hideBackgroundLoadingIndicator();
         isUpdatingCatchmentLayer = false;
         return;
     }
@@ -4732,23 +4708,26 @@ function updateAmenitiesCatchmentLayer() {
     const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
 
     fetch(csvPath)
-        .then(response => response.text())        .then(csvText => {
+        .then(response => response.text())
+        .then(csvText => {
+            const timestamp4 = new Date().toLocaleTimeString();
+            console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
+            showBackgroundLoadingIndicator(`${timestamp4} - Processing journey times...`);
+            
             const csvData = Papa.parse(csvText, { header: true }).data;
             fullCsvData = csvData;
             
             if (csvData.length === 0) {
                 isUpdatingCatchmentLayer = false;
+                hideBackgroundLoadingIndicator();
                 return;
             }
             
             const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-            // console.log("CSV destination IDs count:", csvDestinationIds.size);
-            
             const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-            // console.log("Matching IDs between filtered training centres and CSV:", matchingIds);
             
             if (matchingIds.length === 0) {
-                // console.log("No matching IDs found, clearing amenities layer");
+                console.log("No matching IDs found, clearing amenities layer");
                 if (AmenitiesCatchmentLayer) {
                     map.removeLayer(AmenitiesCatchmentLayer);
                     AmenitiesCatchmentLayer = null;
@@ -4758,13 +4737,17 @@ function updateAmenitiesCatchmentLayer() {
                 updateFilterDropdown();
                 updateFilterValues();
                 updateSummaryStatistics([]);
+                hideBackgroundLoadingIndicator();
                 isUpdatingCatchmentLayer = false;
                 return;
             }
             
+            const timestamp5 = new Date().toLocaleTimeString();
+            console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
+            showBackgroundLoadingIndicator(`${timestamp5} - Creating catchment layer...`);
+            
             const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
             const eligibleDestinations = new Set();
-            // console.log("Processing training centres for eligibility with year prefix:", yearPrefix);
             
             if (amenityLayers['TrainingCentres']) {
                 amenityLayers['TrainingCentres'].features.forEach(feature => {
@@ -4801,15 +4784,9 @@ function updateAmenitiesCatchmentLayer() {
                     
                     if (hasSelectedSubject) {
                         eligibleDestinations.add(destinationId);
-                        // console.log("Added eligible destination:", destinationId, props.name || 'Unnamed');
-                    } else {
-                        // console.log("Training centre excluded by subject/year filter:", destinationId, props.name || 'Unnamed');
                     }
                 });
             }
-            
-            // console.log("Final eligible destinations count:", eligibleDestinations.size);
-            // console.log("Eligible destination IDs:", Array.from(eligibleDestinations));
             
             gridTimeMap = {};
             
@@ -4829,9 +4806,6 @@ function updateAmenitiesCatchmentLayer() {
                 }
             });
             
-            // console.log("Grid time map entries after CSV processing:", Object.keys(gridTimeMap).length);
-            // console.log("Sample grid time entries:", Object.keys(gridTimeMap).slice(0, 10).map(k => `${k}: ${gridTimeMap[k]}`));
-            
             grid.features.forEach(feature => {
                 const originId = feature.properties.OriginId_tracc;
                 if (gridTimeMap[originId] === undefined) {
@@ -4845,13 +4819,11 @@ function updateAmenitiesCatchmentLayer() {
             }
             
             if (needToCreateNewLayer) {
-                // console.log("=== CREATING NEW AMENITIES CATCHMENT LAYER ===");
-                // console.log("Grid features count:", grid.features.length);
-                // console.log("GridTimeMap entries:", Object.keys(gridTimeMap).length);
-                // console.log("Sample gridTimeMap entries:", Object.keys(gridTimeMap).slice(0, 5).map(k => `${k}: ${gridTimeMap[k]}`));
+                const timestamp6 = new Date().toLocaleTimeString();
+                console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
+                showBackgroundLoadingIndicator(`${timestamp6} - Rendering catchment layer...`);
                 
                 if (AmenitiesCatchmentLayer) {
-                    // console.log("Removing existing AmenitiesCatchmentLayer");
                     map.removeLayer(AmenitiesCatchmentLayer);
                 }
                 
@@ -4885,19 +4857,24 @@ function updateAmenitiesCatchmentLayer() {
                     }
                 }).addTo(map);
                 
-                // console.log("AmenitiesCatchmentLayer created and added to map");
-                // console.log("Layer feature count:", AmenitiesCatchmentLayer.getLayers().length);
-                
                 AmenitiesCatchmentLayer.eachLayer(layer => {
                     layer.feature.properties._opacity = undefined;
                     layer.feature.properties._weight = undefined;
                 });
+                
+                const timestamp7 = new Date().toLocaleTimeString();
+                console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
+                showBackgroundLoadingIndicator(`${timestamp7} - Finalizing layer...`);
                 
                 const updatesComplete = () => {
                   drawSelectedAmenities();
                   updateLegend();
                   updateFilterDropdown();
                   updateFilterValues('amenities');
+                  hideBackgroundLoadingIndicator();
+                  
+                  const timestamp8 = new Date().toLocaleTimeString();
+                  console.log(`🕐 ${timestamp8} - ✅ Amenities catchment layer complete`);
                 };
                 
                 updateSliderRanges('Amenities', 'Opacity');
@@ -4907,22 +4884,14 @@ function updateAmenitiesCatchmentLayer() {
               } else {
                   applyAmenitiesCatchmentLayerStyling();
                   updateSummaryStatistics(getCurrentFeatures());
+                  hideBackgroundLoadingIndicator();
               }
-              
-              // console.log("=== AMENITIES CATCHMENT LAYER UPDATE COMPLETE ===");
-              // console.log("Final eligible destinations:", eligibleDestinations.size);
-              // console.log("Final grid time map entries:", Object.keys(gridTimeMap).length);
-              // console.log("Amenities layer features:", AmenitiesCatchmentLayer ? AmenitiesCatchmentLayer.getLayers().length : 0);
-              // console.log("Layer successfully reflects training centre filtering based on:");
-              // console.log("  - Year:", selectedYear);
-              // console.log("  - Subjects:", isAllSubjectsSelected ? 'All' : selectedSubjects);
-              // console.log("  - Aim levels:", isAllAimLevelsSelected ? 'All' : selectedAimLevels);
-              // console.log("=== END AMENITIES CATCHMENT LAYER UPDATE ===");
               
               isUpdatingCatchmentLayer = false;
         })
         .catch(error => {
             console.error("Error loading journey time data:", error);
+            hideBackgroundLoadingIndicator();
             isUpdatingCatchmentLayer = false;
         });
 }
