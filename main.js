@@ -772,7 +772,7 @@ function loadBackgroundData() {
  */
 async function loadGridData() {
   const timestamp = new Date().toLocaleTimeString();
-  showBackgroundLoadingIndicator(`${timestamp} - Loading grid data...`);
+  showBackgroundLoadingIndicator(`Loading grid data...`);
   
   try {
     console.log(`🕐 ${timestamp} - 🚀 === Starting fast CSV+GeoJSON data loading ===`);
@@ -4648,7 +4648,7 @@ function updateAmenitiesCatchmentLayer() {
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Selected year: ${selectedYear}`);
     
-    showBackgroundLoadingIndicator(`${timestamp2} - Loading journey time data...`);
+    showBackgroundLoadingIndicator(`Loading journey time data...`);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
@@ -5460,9 +5460,8 @@ async function updateSummaryStatistics(features, source = 'filter') {
       return;
     }
 
-    // Show loading indicator for large datasets
     if (filteredFeatures.length > 50000) {
-      showBackgroundLoadingIndicator(`${timestamp} - Calculating statistics for ${filteredFeatures.length} features...`);
+      showBackgroundLoadingIndicator(`Calculating statistics`);
     }
 
     console.log('Calculating base statistics...');
