@@ -75,7 +75,8 @@ let lastAmenitiesState = {
 };
 let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
-
+let pendingAmenitiesUpdate = false;
+let amenitiesUpdateRequested = false;
 
 function convertMultiPolygonToPolygons(geoJson) {
   // console.log('Converting MultiPolygon to Polygon...');
@@ -756,7 +757,7 @@ function loadBackgroundData() {
  */
 async function loadGridData() {
   const timestamp = new Date().toLocaleTimeString();
-  showBackgroundLoadingIndicator(`${timestamp} - Loading grid data...`);
+  showBackgroundLoadingIndicator(`Loading grid data...`);
   
   try {
     console.log(`🕐 ${timestamp} - 🚀 === Starting fast CSV+GeoJSON data loading ===`);
@@ -765,7 +766,7 @@ async function loadGridData() {
     // Load files in parallel - much faster than single parquet
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - 📥 Loading CSV and GeoJSON files in parallel...`);
-    showBackgroundLoadingIndicator(`${timestamp2} - Loading data files...`);
+    showBackgroundLoadingIndicator(`Loading data files...`);
     const loadStart = performance.now();
     
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -782,7 +783,7 @@ async function loadGridData() {
     // Process data quickly without DuckDB overhead
     const timestamp4 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp4} - 📊 Processing grid data...`);
-    showBackgroundLoadingIndicator(`${timestamp4} - Processing grid data...`);
+    showBackgroundLoadingIndicator(`Processing grid data...`);
     const processStart = performance.now();
     const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
     const processTime = performance.now() - processStart;
@@ -798,7 +799,7 @@ async function loadGridData() {
     
     const timestamp7 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp7} - 📊 Calculating statistics...`);
-    showBackgroundLoadingIndicator(`${timestamp7} - Calculating statistics...`);
+    showBackgroundLoadingIndicator(`Calculating statistics...`);
     const statsStart = performance.now();
     calculateGridStatistics(grid);
     const statsTime = performance.now() - statsStart;
@@ -807,7 +808,7 @@ async function loadGridData() {
     
     const timestamp9 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp9} - 🔄 Updating UI components...`);
-    showBackgroundLoadingIndicator(`${timestamp9} - Updating interface...`);
+    showBackgroundLoadingIndicator(`Updating interface...`);
     const uiStart = performance.now();
     updateFilterDropdown();
     updateFilterValues();
@@ -4669,7 +4670,7 @@ function updateAmenitiesCatchmentLayer() {
     const timestamp2 = new Date().toLocaleTimeString();
     console.log(`🕐 ${timestamp2} - Selected year: ${selectedYear}`);
     
-    showBackgroundLoadingIndicator(`${timestamp2} - Loading journey time data...`);
+    showBackgroundLoadingIndicator(`Loading journey time data...`);
     
     const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
     const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
@@ -4712,7 +4713,7 @@ function updateAmenitiesCatchmentLayer() {
         .then(csvText => {
             const timestamp4 = new Date().toLocaleTimeString();
             console.log(`🕐 ${timestamp4} - Processing journey time CSV data...`);
-            showBackgroundLoadingIndicator(`${timestamp4} - Processing journey times...`);
+            showBackgroundLoadingIndicator(`Processing journey times...`);
             
             const csvData = Papa.parse(csvText, { header: true }).data;
             fullCsvData = csvData;
@@ -4744,7 +4745,7 @@ function updateAmenitiesCatchmentLayer() {
             
             const timestamp5 = new Date().toLocaleTimeString();
             console.log(`🕐 ${timestamp5} - Creating journey time catchment layer...`);
-            showBackgroundLoadingIndicator(`${timestamp5} - Creating catchment layer...`);
+            showBackgroundLoadingIndicator(`Creating catchment layer...`);
             
             const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
             const eligibleDestinations = new Set();
@@ -4821,7 +4822,7 @@ function updateAmenitiesCatchmentLayer() {
             if (needToCreateNewLayer) {
                 const timestamp6 = new Date().toLocaleTimeString();
                 console.log(`🕐 ${timestamp6} - Creating new amenities catchment layer with ${grid.features.length} features`);
-                showBackgroundLoadingIndicator(`${timestamp6} - Rendering catchment layer...`);
+                showBackgroundLoadingIndicator(`Rendering catchment layer...`);
                 
                 if (AmenitiesCatchmentLayer) {
                     map.removeLayer(AmenitiesCatchmentLayer);
@@ -4864,7 +4865,7 @@ function updateAmenitiesCatchmentLayer() {
                 
                 const timestamp7 = new Date().toLocaleTimeString();
                 console.log(`🕐 ${timestamp7} - Finalizing catchment layer...`);
-                showBackgroundLoadingIndicator(`${timestamp7} - Finalizing layer...`);
+                showBackgroundLoadingIndicator(`Finalizing layer...`);
                 
                 const updatesComplete = () => {
                   drawSelectedAmenities();
@@ -5544,7 +5545,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
 
     // Show loading indicator for large datasets
     if (filteredFeatures.length > 50000) {
-      showBackgroundLoadingIndicator(`${timestamp} - Calculating statistics for ${filteredFeatures.length} features...`);
+      showBackgroundLoadingIndicator(`Calculating statistics for ${filteredFeatures.length} features...`);
     }
 
     console.log('Calculating base statistics...');
