@@ -549,7 +549,6 @@ function setupMapPanes() {
  */
 function loadBaseLayers() {
   showBackgroundLoadingIndicator('Loading map layers...');
-  
   return Promise.all([
     loadBoundaryData(),
     loadTransportInfrastructure()
@@ -730,7 +729,6 @@ function loadTransportInfrastructure() {
  * Loads heavier data (grid, training centers) in the background
  */
 function loadBackgroundData() {  
-  showBackgroundLoadingIndicator('Loading facilities data...');
   loadTrainingCentres()
     .then(() => {
       hideBackgroundLoadingIndicator();
@@ -741,7 +739,6 @@ function loadBackgroundData() {
       console.error('Error loading training centres:', error);
       hideBackgroundLoadingIndicator();
       showErrorNotification('Error loading training center data. Some features may be limited.');
-      
       loadGridData();
     });
 }
@@ -1209,26 +1206,6 @@ function showErrorNotification(message) {
       }, 500);
     }
   }, 5000);
-}
-
-/**
- * Shows a loading overlay during important operations
- */
-function showLoadingOverlay() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.classList.add('active');
-  }
-}
-
-/**
- * Hides the loading overlay when operations complete
- */
-function hideLoadingOverlay() {
-  const overlay = document.getElementById('loading-overlay');
-  if (overlay) {
-    overlay.classList.remove('active');
-  }
 }
 
 map.on('zoomend', () => {
@@ -4465,249 +4442,239 @@ function drawSelectedAmenities() {
  * Enhanced updateAmenitiesCatchmentLayer that waits for dependencies and retries automatically
  */
 function updateAmenitiesCatchmentLayer() {
+  showBackgroundLoadingIndicator('Updating catchment layer...');
+  amenitiesUpdateRequested = true;
+  
+  if (isUpdatingCatchmentLayer) {
+      return;
+  }
+  
+  const hasRequiredData = checkAmenitiesDataReady();
+  
+  if (!hasRequiredData.ready) {
+      setupAmenitiesAutoRetry();
+      return;
+  }
+  
+  clearAmenitiesAutoRetry();
+  
+  isUpdatingCatchmentLayer = true;
+  
+  const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
+      .classList.contains("collapsed") === false;
+  
+  if (!amenitiesPanelOpen) {
+    isUpdatingCatchmentLayer = false;
+    amenitiesUpdateRequested = false;
+    hideBackgroundLoadingIndicator();
+    return;
+  }
+
+  const selectedYear = AmenitiesYear.value;
     
-    amenitiesUpdateRequested = true;
-    
-    if (isUpdatingCatchmentLayer) {
-        return;
-    }
-    
-    const hasRequiredData = checkAmenitiesDataReady();
-    
-    if (!hasRequiredData.ready) {
-        setupAmenitiesAutoRetry();
-        return;
-    }
-    
-    clearAmenitiesAutoRetry();
-    
-    isUpdatingCatchmentLayer = true;
-    
-    const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
-        .classList.contains("collapsed") === false;
-    
-    if (!amenitiesPanelOpen) {
+  const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
+  const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
+  const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
+  const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
+  
+  const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
+  const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
+  const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
+  const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
+  
+  const filteredTrainingCentres = filterTrainingCentres();
+  
+  const filteredTrainingCenterIds = filteredTrainingCentres.features
+      .map(feature => feature.properties.DestinationId_tracc)
+      .filter(id => id !== undefined);
+      
+  if (!selectedYear || filteredTrainingCenterIds.length === 0) {
+      if (AmenitiesCatchmentLayer) {
+          map.removeLayer(AmenitiesCatchmentLayer);
+          AmenitiesCatchmentLayer = null;
+      }
+      drawSelectedAmenities([]);
+      updateLegend();
+      updateFilterDropdown();
+      updateFilterValues();
+      updateSummaryStatistics([]);
+      hideBackgroundLoadingIndicator();
+      isUpdatingCatchmentLayer = false;
+      amenitiesUpdateRequested = false;
+      return;
+  }
+
+  const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+
+  fetch(csvPath)
+    .then(response => response.text())
+    .then(csvText => {        
+        const csvData = Papa.parse(csvText, { header: true }).data;
+        fullCsvData = csvData;
+        
+        if (csvData.length === 0) {
+            isUpdatingCatchmentLayer = false;
+            hideBackgroundLoadingIndicator();
+            return;
+        }
+        
+        const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+        const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
+        
+        if (matchingIds.length === 0) {
+            if (AmenitiesCatchmentLayer) {
+                map.removeLayer(AmenitiesCatchmentLayer);
+                AmenitiesCatchmentLayer = null;
+            }
+            drawSelectedAmenities([]);
+            updateLegend();
+            updateFilterDropdown();
+            updateFilterValues();
+            updateSummaryStatistics([]);
+            hideBackgroundLoadingIndicator();
+            isUpdatingCatchmentLayer = false;
+            return;
+        }
+                
+        const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
+        const eligibleDestinations = new Set();
+        
+        if (amenityLayers['TrainingCentres']) {
+            amenityLayers['TrainingCentres'].features.forEach(feature => {
+                const props = feature.properties;
+                const destinationId = props.DestinationId_tracc;
+                
+                if (!destinationId || !matchingIds.includes(destinationId)) {
+                    return;
+                }
+                
+                const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
+                    selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
+                
+                if (!hasSelectedAimLevel) {
+                    return;
+                }
+                
+                let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
+                
+                if (!hasSelectedSubject && yearPrefix) {
+                    hasSelectedSubject = selectedSubjects.some(subject => {
+                        const columnName = `${yearPrefix}_${subject}`;
+                        return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                    });
+                } else if (!hasSelectedSubject) {
+                    const years = ["2122", "2223", "2324", "2425"];
+                    hasSelectedSubject = years.some(year => {
+                        return selectedSubjects.some(subject => {
+                            const columnName = `${year}_${subject}`;
+                            return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+                        });
+                    });
+                }
+                
+                if (hasSelectedSubject) {
+                    eligibleDestinations.add(destinationId);
+                }
+            });
+        }
+        
+        gridTimeMap = {};
+        
+        csvData.forEach(row => {
+            const originId = row.origin;
+            const destinationId = row.destination;
+            const totalTime = parseFloat(row.totaltime);
+            
+            if (!originId || !destinationId || isNaN(totalTime)) {
+                return;
+            }
+            
+            if (eligibleDestinations.has(destinationId)) {
+                if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
+                    gridTimeMap[originId] = totalTime;
+                }
+            }
+        });
+        
+        const gridTimeKeys = new Set(Object.keys(gridTimeMap));
+        for (let i = 0; i < grid.features.length; i++) {
+          const originId = grid.features[i].properties.OriginId_tracc;
+          if (!gridTimeKeys.has(String(originId))) {
+            gridTimeMap[originId] = 120;
+          }
+        }
+        
+        let needToCreateNewLayer = false;
+        if (!AmenitiesCatchmentLayer) {
+            needToCreateNewLayer = true;
+        }
+        
+        if (needToCreateNewLayer) {            
+            if (AmenitiesCatchmentLayer) {
+                map.removeLayer(AmenitiesCatchmentLayer);
+            }
+            
+            AmenitiesCatchmentLayer = L.geoJSON(grid, {
+                pane: 'polygonLayers',
+                style: function(feature) {
+                    const OriginId_tracc = feature.properties.OriginId_tracc;
+                    const time = gridTimeMap[OriginId_tracc];
+                    
+                    let fillColor = 'transparent';
+                    let fillOpacity = 0;
+                    
+                    if (time !== undefined && time < 120) {
+                        if (time <= 10) fillColor = '#fde725';
+                        else if (time <= 20) fillColor = '#8fd744';
+                        else if (time <= 30) fillColor = '#35b779';
+                        else if (time <= 40) fillColor = '#21908d';
+                        else if (time <= 50) fillColor = '#31688e';
+                        else if (time <= 60) fillColor = '#443a82';
+                        else fillColor = '#440154';
+                        fillOpacity = 0.7;
+                    }
+                    
+                    return {
+                        weight: 0.5,
+                        fillOpacity: fillOpacity,
+                        opacity: fillOpacity > 0 ? 0.8 : 0,
+                        fillColor: fillColor,
+                        color: '#ffffff'
+                    };
+                }
+            }).addTo(map);
+            
+            AmenitiesCatchmentLayer.eachLayer(layer => {
+                layer.feature.properties._opacity = undefined;
+                layer.feature.properties._weight = undefined;
+            });
+            const updatesComplete = () => {
+              drawSelectedAmenities();
+              updateLegend();
+              updateFilterDropdown();
+              updateFilterValues('amenities');
+              hideBackgroundLoadingIndicator();
+            };
+            
+            updateSliderRanges('Amenities', 'Opacity');
+            updateSliderRanges('Amenities', 'Outline');
+            
+            setTimeout(updatesComplete, 50);
+          } else {
+              applyAmenitiesCatchmentLayerStyling();
+              updateSummaryStatistics(getCurrentFeatures());
+              hideBackgroundLoadingIndicator();
+          }
+          
         isUpdatingCatchmentLayer = false;
         amenitiesUpdateRequested = false;
-        return;
-    }
-
-    const selectedYear = AmenitiesYear.value;
-    
-    showBackgroundLoadingIndicator(`Loading journey time data...`);
-    
-    const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
-    const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
-    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-    const selectedSubjects = Array.from(subjectCheckboxes).map(checkbox => checkbox.value.toLowerCase());
-    
-    const aimLevelAllCheckbox = document.querySelector('#aimlevelCheckboxesContainer input[value="All"]');
-    const isAllAimLevelsSelected = aimLevelAllCheckbox && aimLevelAllCheckbox.checked;
-    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
-    const selectedAimLevels = Array.from(aimLevelCheckboxes).map(checkbox => checkbox.value);
-    
-    const filteredTrainingCentres = filterTrainingCentres();
-    
-    const filteredTrainingCenterIds = filteredTrainingCentres.features
-        .map(feature => feature.properties.DestinationId_tracc)
-        .filter(id => id !== undefined);
-        
-    if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-        if (AmenitiesCatchmentLayer) {
-            map.removeLayer(AmenitiesCatchmentLayer);
-            AmenitiesCatchmentLayer = null;
-        }
-        drawSelectedAmenities([]);
-        updateLegend();
-        updateFilterDropdown();
-        updateFilterValues();
-        updateSummaryStatistics([]);
+    })
+    .catch(error => {
+        console.error("Error loading journey time data:", error);
         hideBackgroundLoadingIndicator();
         isUpdatingCatchmentLayer = false;
         amenitiesUpdateRequested = false;
-        return;
-    }
-
-    const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-
-    fetch(csvPath)
-      .then(response => response.text())
-      .then(csvText => {
-          showBackgroundLoadingIndicator(`Processing journey times...`);
-          
-          const csvData = Papa.parse(csvText, { header: true }).data;
-          fullCsvData = csvData;
-          
-          if (csvData.length === 0) {
-              isUpdatingCatchmentLayer = false;
-              hideBackgroundLoadingIndicator();
-              return;
-          }
-          
-          const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-          const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-          
-          if (matchingIds.length === 0) {
-              if (AmenitiesCatchmentLayer) {
-                  map.removeLayer(AmenitiesCatchmentLayer);
-                  AmenitiesCatchmentLayer = null;
-              }
-              drawSelectedAmenities([]);
-              updateLegend();
-              updateFilterDropdown();
-              updateFilterValues();
-              updateSummaryStatistics([]);
-              hideBackgroundLoadingIndicator();
-              isUpdatingCatchmentLayer = false;
-              return;
-          }
-          
-          showBackgroundLoadingIndicator(`Creating catchment layer...`);
-          
-          const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-          const eligibleDestinations = new Set();
-          
-          if (amenityLayers['TrainingCentres']) {
-              amenityLayers['TrainingCentres'].features.forEach(feature => {
-                  const props = feature.properties;
-                  const destinationId = props.DestinationId_tracc;
-                  
-                  if (!destinationId || !matchingIds.includes(destinationId)) {
-                      return;
-                  }
-                  
-                  const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-                      selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-                  
-                  if (!hasSelectedAimLevel) {
-                      return;
-                  }
-                  
-                  let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-                  
-                  if (!hasSelectedSubject && yearPrefix) {
-                      hasSelectedSubject = selectedSubjects.some(subject => {
-                          const columnName = `${yearPrefix}_${subject}`;
-                          return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                      });
-                  } else if (!hasSelectedSubject) {
-                      const years = ["2122", "2223", "2324", "2425"];
-                      hasSelectedSubject = years.some(year => {
-                          return selectedSubjects.some(subject => {
-                              const columnName = `${year}_${subject}`;
-                              return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                          });
-                      });
-                  }
-                  
-                  if (hasSelectedSubject) {
-                      eligibleDestinations.add(destinationId);
-                  }
-              });
-          }
-          
-          gridTimeMap = {};
-          
-          csvData.forEach(row => {
-              const originId = row.origin;
-              const destinationId = row.destination;
-              const totalTime = parseFloat(row.totaltime);
-              
-              if (!originId || !destinationId || isNaN(totalTime)) {
-                  return;
-              }
-              
-              if (eligibleDestinations.has(destinationId)) {
-                  if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-                      gridTimeMap[originId] = totalTime;
-                  }
-              }
-          });
-          
-          const gridTimeKeys = new Set(Object.keys(gridTimeMap));
-          for (let i = 0; i < grid.features.length; i++) {
-            const originId = grid.features[i].properties.OriginId_tracc;
-            if (!gridTimeKeys.has(String(originId))) {
-              gridTimeMap[originId] = 120;
-            }
-          }
-          
-          let needToCreateNewLayer = false;
-          if (!AmenitiesCatchmentLayer) {
-              needToCreateNewLayer = true;
-          }
-          
-          if (needToCreateNewLayer) {
-              showBackgroundLoadingIndicator(`Rendering catchment layer...`);
-              
-              if (AmenitiesCatchmentLayer) {
-                  map.removeLayer(AmenitiesCatchmentLayer);
-              }
-              
-              AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                  pane: 'polygonLayers',
-                  style: function(feature) {
-                      const OriginId_tracc = feature.properties.OriginId_tracc;
-                      const time = gridTimeMap[OriginId_tracc];
-                      
-                      let fillColor = 'transparent';
-                      let fillOpacity = 0;
-                      
-                      if (time !== undefined && time < 120) {
-                          if (time <= 10) fillColor = '#fde725';
-                          else if (time <= 20) fillColor = '#8fd744';
-                          else if (time <= 30) fillColor = '#35b779';
-                          else if (time <= 40) fillColor = '#21908d';
-                          else if (time <= 50) fillColor = '#31688e';
-                          else if (time <= 60) fillColor = '#443a82';
-                          else fillColor = '#440154';
-                          fillOpacity = 0.7;
-                      }
-                      
-                      return {
-                          weight: 0.5,
-                          fillOpacity: fillOpacity,
-                          opacity: fillOpacity > 0 ? 0.8 : 0,
-                          fillColor: fillColor,
-                          color: '#ffffff'
-                      };
-                  }
-              }).addTo(map);
-              
-              AmenitiesCatchmentLayer.eachLayer(layer => {
-                  layer.feature.properties._opacity = undefined;
-                  layer.feature.properties._weight = undefined;
-              });
-              
-              showBackgroundLoadingIndicator(`Finalizing layer...`);
-              
-              const updatesComplete = () => {
-                drawSelectedAmenities();
-                updateLegend();
-                updateFilterDropdown();
-                updateFilterValues('amenities');
-                hideBackgroundLoadingIndicator();
-              };
-              
-              updateSliderRanges('Amenities', 'Opacity');
-              updateSliderRanges('Amenities', 'Outline');
-              
-              setTimeout(updatesComplete, 50);
-            } else {
-                applyAmenitiesCatchmentLayerStyling();
-                updateSummaryStatistics(getCurrentFeatures());
-                hideBackgroundLoadingIndicator();
-            }
-            
-          isUpdatingCatchmentLayer = false;
-          amenitiesUpdateRequested = false;
-      })
-      .catch(error => {
-          console.error("Error loading journey time data:", error);
-          hideBackgroundLoadingIndicator();
-          isUpdatingCatchmentLayer = false;
-          amenitiesUpdateRequested = false;
-      });
+    });
 }
 
 /**
@@ -4792,7 +4759,8 @@ function clearAmenitiesAutoRetry() {
 
 function applyAmenitiesCatchmentLayerStyling() {    
     if (!AmenitiesCatchmentLayer) {
-        return;
+      hideBackgroundLoadingIndicator();
+      return;
     }
     
     try {
@@ -4851,10 +4819,11 @@ function applyAmenitiesCatchmentLayerStyling() {
                 opacity: isVisible ? 1 : 0
             };
         });
-        
+      hideBackgroundLoadingIndicator();
     } catch (error) {
-        console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-        console.error("Error stack:", error.stack);
+      console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
+      console.error("Error stack:", error.stack);
+      hideBackgroundLoadingIndicator();
     }
 }
 
@@ -5372,6 +5341,7 @@ function updateFilterValues(source = 'filter') {
  * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
  */
 async function updateSummaryStatistics(features, source = 'filter') {
+  showBackgroundLoadingIndicator('Calculating statistics...');
   if (isCalculatingStats) {
     return;
   }
@@ -5405,6 +5375,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
   try {
     if (!grid && (!features || features.length === 0)) {
       displayEmptyStatistics();
+      hideBackgroundLoadingIndicator();
       return;
     }
     
@@ -5423,11 +5394,8 @@ async function updateSummaryStatistics(features, source = 'filter') {
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
       displayEmptyStatistics();
+      hideBackgroundLoadingIndicator();
       return;
-    }
-
-    if (filteredFeatures.length > 50000) {
-      showBackgroundLoadingIndicator(`Calculating statistics`);
     }
 
     const baseStats = await calculateBaseStatistics(filteredFeatures);
@@ -5439,11 +5407,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
     } else {
       updateStatisticsUI(baseStats);
     }
-    
-    if (filteredFeatures.length > 50000) {
-      hideBackgroundLoadingIndicator();
-    }
-    
+    hideBackgroundLoadingIndicator();
   } catch (error) {
     console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
@@ -5936,7 +5900,7 @@ async function calculateBaseStatistics(features) {
         return await calculateStatisticsWithDuckDB(features);
       }
     } catch (error) {
-      console.warn(`⚠️ DuckDB not ready, falling back to JavaScript calculation:`, error);
+      console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
     }
   }
   
