@@ -510,7 +510,7 @@ function initializeCollapsiblePanels() {
     }
   });
 
-    function handlePanelStateChange(header, isOpen) {
+  function handlePanelStateChange(header, isOpen) {
     const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
     if (isOpen) {
@@ -558,7 +558,7 @@ function initializeCollapsiblePanels() {
     }
   }
 
-  const panelHeaders = document.querySelectorAll(".panel-header");
+  const panelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
   panelHeaders.forEach(header => {
     const content = header.nextElementSibling;
     if (content) {
@@ -572,17 +572,36 @@ function initializeCollapsiblePanels() {
         this.classList.toggle("collapsed");
         content.style.display = willOpen ? "block" : "none";
         
-        if (!this.classList.contains('summary-header')) {
-          handlePanelStateChange(this, willOpen);
-        }
+        // Only call handlePanelStateChange for non-summary headers
+        handlePanelStateChange(this, willOpen);
       });
     }
   });
   
+  // Handle the summary panel separately with a simpler approach
   const summaryHeader = document.getElementById('toggle-summary-panel');
   const summaryContent = document.getElementById('summary-content');
   
-  Utils.setupCollapsiblePanel(summaryHeader, summaryContent);
+  if (summaryHeader && summaryContent) {
+    // Set initial state
+    summaryContent.style.display = "none";
+    summaryHeader.classList.add("collapsed");
+    
+    summaryHeader.addEventListener("click", function() {
+      // Simple toggle logic for summary panel
+      const isCurrentlyCollapsed = this.classList.contains("collapsed");
+      
+      if (isCurrentlyCollapsed) {
+        // Open the panel
+        this.classList.remove("collapsed");
+        summaryContent.style.display = "block";
+      } else {
+        // Close the panel
+        this.classList.add("collapsed");
+        summaryContent.style.display = "none";
+      }
+    });
+  }
 }
 
 /**
