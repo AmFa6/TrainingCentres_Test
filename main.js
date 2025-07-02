@@ -180,7 +180,7 @@ function debounce(func, wait) {
 
 AmenitiesYear.addEventListener("change", debounce(() => {
   showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
   updateAmenitiesCatchmentLayer();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
@@ -206,7 +206,7 @@ AmenitiesInverseOutline.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Outline');
 });
 filterTypeDropdown.addEventListener('change', () => {
-  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
   updateFilterValues();
   updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
   
@@ -227,7 +227,7 @@ filterTypeDropdown.addEventListener('change', () => {
   }
 });
 filterValueDropdown.addEventListener('change', () => {
-  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
   updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
@@ -474,7 +474,7 @@ function initializeCollapsiblePanels() {
     
     if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
       showLoadingIndicator('amenities-catchment', 'Loading amenities catchment...');
-      showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
       
       if (lastAmenitiesState.selectingFromMap) {
         selectingFromMap = lastAmenitiesState.selectingFromMap;
@@ -4764,7 +4764,7 @@ function updateAmenitiesCatchmentLayer() {
         setTimeout(updatesComplete, 50);
       } else {
         applyAmenitiesCatchmentLayerStyling();
-        updateSummaryStatistics(getCurrentFeatures());
+        updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
         hideLoadingIndicator('amenities-catchment');
       }
         
@@ -5382,7 +5382,7 @@ function updateFilterValues(source = 'filter') {
       checkbox.addEventListener('change', function() {
         updateStoredSelections();
         updateFilterButtonText();
-        showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+        showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
         updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
@@ -5395,7 +5395,7 @@ function updateFilterValues(source = 'filter') {
       checkboxes.forEach(cb => cb.checked = isChecked);
       updateStoredSelections();
       updateFilterButtonText();
-      showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
       updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
@@ -5506,7 +5506,7 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     let baseStats = {};
     let timeStats = {};
     
-    if (source === 'filter' || forceBaseStatsUpdate || !window.lastBaseStats) {
+    if (forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
       baseStats = await calculateBaseStatistics(filteredFeatures);
       window.lastBaseStats = baseStats;
     } else {
@@ -5994,7 +5994,7 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
-  showLoadingIndicator('base-statistics', 'Calculating base statistics...');
+  showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
   if (!features || features.length === 0) {
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
