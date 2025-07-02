@@ -208,7 +208,7 @@ AmenitiesInverseOutline.addEventListener("click", () => {
 filterTypeDropdown.addEventListener('change', () => {
   showLoadingIndicator('calculating-stats', 'Calculating statistics...');
   updateFilterValues();
-  updateSummaryStatistics(getCurrentFeatures());
+  updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
   
   const highlightCheckbox = document.getElementById('highlightAreaCheckbox');
   if (filterTypeDropdown.value === 'Range') {
@@ -228,7 +228,7 @@ filterTypeDropdown.addEventListener('change', () => {
 });
 filterValueDropdown.addEventListener('change', () => {
   showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-  updateSummaryStatistics(getCurrentFeatures());
+  updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
   }
@@ -447,7 +447,7 @@ function initializeCollapsiblePanels() {
     }
   });
 
-    function handlePanelStateChange(header, isOpen) {
+  function handlePanelStateChange(header, isOpen) {
     const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
     
     if (isOpen) {
@@ -473,6 +473,9 @@ function initializeCollapsiblePanels() {
     }
     
     if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
+      showLoadingIndicator('amenities-catchment', 'Loading amenities catchment...');
+      showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+      
       if (lastAmenitiesState.selectingFromMap) {
         selectingFromMap = lastAmenitiesState.selectingFromMap;
         selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
@@ -2009,7 +2012,6 @@ function setupTrainingCenterFilters() {
   
   function handleSubjectAimChange() {
     showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-    showLoadingIndicator('calculating-stats', 'Calculating statistics...');
     debouncedHandler();
   }
   
@@ -4550,14 +4552,19 @@ function updateAmenitiesCatchmentLayer() {
   
   isUpdatingCatchmentLayer = true;
   
-  const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
-    .classList.contains("collapsed") === false;
+  const amenitiesPanelOpen = !document.querySelector(".panel-header:not(.summary-header)")
+    ?.classList.contains("collapsed");
   
   if (!amenitiesPanelOpen) {
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     hideLoadingIndicator('amenities-catchment');
+    hideLoadingIndicator('calculating-stats');
     return;
+  }
+
+  if (!activeLoadingIndicators.has('amenities-catchment')) {
+    showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   }
 
   const selectedYear = AmenitiesYear.value;
@@ -4586,8 +4593,9 @@ function updateAmenitiesCatchmentLayer() {
     updateLegend();
     updateFilterDropdown();
     updateFilterValues();
-    updateSummaryStatistics([]);
+    updateSummaryStatistics([], 'amenities', false);
     hideLoadingIndicator('amenities-catchment');
+    hideLoadingIndicator('calculating-stats');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4604,6 +4612,7 @@ function updateAmenitiesCatchmentLayer() {
       if (csvData.length === 0) {
         isUpdatingCatchmentLayer = false;
         hideLoadingIndicator('amenities-catchment');
+        hideLoadingIndicator('calculating-stats');
         return;
       }
       
@@ -4619,8 +4628,9 @@ function updateAmenitiesCatchmentLayer() {
         updateLegend();
         updateFilterDropdown();
         updateFilterValues();
-        updateSummaryStatistics([]);
+        updateSummaryStatistics([], 'amenities', false);
         hideLoadingIndicator('amenities-catchment');
+        hideLoadingIndicator('calculating-stats');
         isUpdatingCatchmentLayer = false;
         return;
       }
@@ -4743,6 +4753,8 @@ function updateAmenitiesCatchmentLayer() {
           updateLegend();
           updateFilterDropdown();
           updateFilterValues('amenities');
+          showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+          updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
           hideLoadingIndicator('amenities-catchment');
         };
         
@@ -4762,6 +4774,7 @@ function updateAmenitiesCatchmentLayer() {
     .catch(error => {
       console.error("Error loading journey time data:", error);
       hideLoadingIndicator('amenities-catchment');
+      hideLoadingIndicator('calculating-stats');
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
@@ -5365,12 +5378,12 @@ function updateFilterValues(source = 'filter') {
       label.appendChild(checkbox);
       label.appendChild(span);
       filterValueContainer.appendChild(label);
-      
+
       checkbox.addEventListener('change', function() {
         updateStoredSelections();
         updateFilterButtonText();
         showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-        updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
+        updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
         }
@@ -5383,7 +5396,7 @@ function updateFilterValues(source = 'filter') {
       updateStoredSelections();
       updateFilterButtonText();
       showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-      updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
+      updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
       }
@@ -5422,7 +5435,7 @@ function updateFilterValues(source = 'filter') {
     updateFilterButtonText();
     
     if (source === 'filter') {
-      updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
+      updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
     }
 
   } finally {
