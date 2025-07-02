@@ -181,28 +181,28 @@ function debounce(func, wait) {
 AmenitiesYear.addEventListener("change", debounce(() => {
   showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
-  updateAmenitiesCatchmentLayer();
+  recalculateJourneyTimes();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   updateSliderRanges('Amenities', 'Opacity');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesOutline.addEventListener("change", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   updateSliderRanges('Amenities', 'Outline');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesInverseOpacity.addEventListener("click", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   toggleInverseScale('Amenities', 'Opacity');
 });
 AmenitiesInverseOutline.addEventListener("click", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   toggleInverseScale('Amenities', 'Outline');
 });
 filterTypeDropdown.addEventListener('change', () => {
@@ -265,7 +265,25 @@ document.addEventListener('DOMContentLoaded', (event) => {
     map.fire('baselayersloaded');
     initialLoadComplete = true;
     
+    // Load journey time CSV first
     await loadJourneyTimeCsv();
+    
+    // Set default filter to MCA and calculate initial demographics
+    setTimeout(() => {
+      filterTypeDropdown.value = 'LA';
+      updateFilterValues();
+      // Select MCA by default
+      const filterValueContainer = document.getElementById('filterValueContainer');
+      if (filterValueContainer) {
+        const mcaCheckbox = filterValueContainer.querySelector('input[value="MCA"]');
+        if (mcaCheckbox) {
+          mcaCheckbox.checked = true;
+        }
+      }
+      // Calculate initial MCA demographics
+      updateSummaryStatistics(getCurrentFeatures(), 'initial', true);
+    }, 100);
+    
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
