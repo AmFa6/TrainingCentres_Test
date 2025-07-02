@@ -249,6 +249,7 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
  * Using a phased loading approach to improve perceived performance
  */
 document.addEventListener('DOMContentLoaded', (event) => {
+  clearAllLoadingIndicators();
   initializeUI();
   setupMapPanes();
   
@@ -269,6 +270,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   }).catch(error => {
     console.error('Error loading base layers:', error);
     showErrorNotification('Error loading map layers. Please try refreshing the page.');
+    clearAllLoadingIndicators();
   });
 });
 
@@ -558,12 +560,12 @@ function setupMapPanes() {
  * @returns {Promise} A promise that resolves when all base layers are loaded
  */
 function loadBaseLayers() {
-  showLoadingIndicator('Loading map layers...');
+  showLoadingIndicator('base-layers', 'Loading map layers...');
   return Promise.all([
     loadBoundaryData(),
     loadTransportInfrastructure()
   ]).then(() => {
-    hideLoadingIndicator();
+    hideLoadingIndicator('base-layers');
   });
 }
 
@@ -739,22 +741,23 @@ function loadTransportInfrastructure() {
  * Loads heavier data (grid, training centers) in the background
  */
 function loadBackgroundData() {  
+  showLoadingIndicator('background-data', 'Loading training centres...');
   loadTrainingCentres()
     .then(() => {
-      hideLoadingIndicator();
+      hideLoadingIndicator('background-data');
       initializeTrainingCentres();
       loadGridData();
     })
     .catch(error => {
       console.error('Error loading training centres:', error);
-      hideLoadingIndicator();
+      hideLoadingIndicator('background-data');
       showErrorNotification('Error loading training center data. Some features may be limited.');
       loadGridData();
     });
 }
 
 async function loadGridData() {
-  showLoadingIndicator(`Loading grid data...`);
+  showLoadingIndicator('grid-data', 'Loading grid data...');
   
   try {
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -784,11 +787,11 @@ async function loadGridData() {
       }, 500);
     }
     
-    hideLoadingIndicator();
+    hideLoadingIndicator('grid-data');
     
   } catch (error) {
     console.error(`Error loading grid data:`, error);
-    hideLoadingIndicator();
+    hideLoadingIndicator('grid-data');
   }
 }
 
@@ -1232,6 +1235,29 @@ function repositionLoadingIndicators() {
   activeLoadingIndicators.forEach((indicator, processId) => {
     indicator.style.bottom = `${10 + (index * 60)}px`;
     index++;
+  });
+}
+
+function clearAllLoadingIndicators() {
+  const allIndicators = document.querySelectorAll('[id^="loading-indicator-"]');
+  allIndicators.forEach(indicator => {
+    if (indicator.parentNode) {
+      indicator.parentNode.removeChild(indicator);
+    }
+  });
+  
+  activeLoadingIndicators.clear();
+}
+
+function debugLoadingIndicators() {
+  console.log('Active loading indicators:', activeLoadingIndicators.size);
+  console.log('Active indicator process IDs:', Array.from(activeLoadingIndicators.keys()));
+  
+  const visibleIndicators = document.querySelectorAll('[id^="loading-indicator-"]');
+  console.log('Visible indicators in DOM:', visibleIndicators.length);
+  
+  visibleIndicators.forEach(indicator => {
+    console.log('Indicator ID:', indicator.id, 'Display:', indicator.style.display);
   });
 }
 
@@ -5955,7 +5981,7 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
-  showLoadingIndicator('Calculating base statistics...');
+  showLoadingIndicator('base-statistics', 'Calculating base statistics...');
   if (!features || features.length === 0) {
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
@@ -5966,17 +5992,20 @@ async function calculateBaseStatistics(features) {
     };
   }
 
-  
   try {
     await waitForDuckDBAnalytics(10000);
     if (window.duckdbAnalyticsReady) {
-      return await calculateStatisticsWithDuckDB(features);
+      const result = await calculateStatisticsWithDuckDB(features);
+      hideLoadingIndicator('base-statistics');
+      return result;
     }
   } catch (error) {
     console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
   }
   
-  return await calculateStatisticsWithJavaScript(features);
+  const result = await calculateStatisticsWithJavaScript(features);
+  hideLoadingIndicator('base-statistics');
+  return result;
 }
 
 function calculateTimeStatistics(features) {  
