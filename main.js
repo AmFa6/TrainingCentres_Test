@@ -79,6 +79,9 @@ let pendingAmenitiesUpdate = false;
 let amenitiesUpdateRequested = false;
 let activeLoadingIndicators = new Map();
 let indicatorZIndex = 1000;
+let needsDemographicStatsUpdate = false;
+let needsJourneyTimeStatsUpdate = false;
+let currentJourneyTimeDataset = null;
 
 function convertMultiPolygonToPolygons(geoJson) {
   return new Promise((resolve) => {
@@ -179,37 +182,32 @@ function debounce(func, wait) {
 }
 
 AmenitiesYear.addEventListener("change", debounce(() => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
-  recalculateJourneyTimes();
+  needsJourneyTimeStatsUpdate = true;
+  updateAmenitiesCatchmentLayer();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   updateSliderRanges('Amenities', 'Opacity');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesOutline.addEventListener("change", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   updateSliderRanges('Amenities', 'Outline');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesInverseOpacity.addEventListener("click", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   toggleInverseScale('Amenities', 'Opacity');
 });
 AmenitiesInverseOutline.addEventListener("click", () => {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities display...');
   toggleInverseScale('Amenities', 'Outline');
 });
 filterTypeDropdown.addEventListener('change', () => {
-  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
   updateFilterValues();
-  updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
-  
+  needsDemographicStatsUpdate = true;
+  needsJourneyTimeStatsUpdate = true;
+  updateSummaryStatistics(getCurrentFeatures(), 'filter', true); 
   const highlightCheckbox = document.getElementById('highlightAreaCheckbox');
   if (filterTypeDropdown.value === 'Range') {
     highlightCheckbox.disabled = true;
@@ -227,8 +225,9 @@ filterTypeDropdown.addEventListener('change', () => {
   }
 });
 filterValueDropdown.addEventListener('change', () => {
-  showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
-  updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
+  needsDemographicStatsUpdate = true;
+  needsJourneyTimeStatsUpdate = true;
+  updateSummaryStatistics(getCurrentFeatures(), 'filter', true); 
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
   }
@@ -265,25 +264,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
     map.fire('baselayersloaded');
     initialLoadComplete = true;
     
-    // Load journey time CSV first
     await loadJourneyTimeCsv();
-    
-    // Set default filter to MCA and calculate initial demographics
-    setTimeout(() => {
-      filterTypeDropdown.value = 'LA';
-      updateFilterValues();
-      // Select MCA by default
-      const filterValueContainer = document.getElementById('filterValueContainer');
-      if (filterValueContainer) {
-        const mcaCheckbox = filterValueContainer.querySelector('input[value="MCA"]');
-        if (mcaCheckbox) {
-          mcaCheckbox.checked = true;
-        }
-      }
-      // Calculate initial MCA demographics
-      updateSummaryStatistics(getCurrentFeatures(), 'initial', true);
-    }, 100);
-    
     loadBackgroundData();
   }).catch(error => {
     console.error('Error loading base layers:', error);
@@ -2012,7 +1993,9 @@ function getTrainingCenterPopupContent(properties) {
 
 function setupTrainingCenterFilters() {    
   const debouncedHandler = debounce(() => {
-    drawSelectedAmenities();
+    drawSelectedAmenites();
+    
+    needsJourneyTimeStatsUpdate = true;
     updateAmenitiesCatchmentLayer();
   }, 2000);
   
@@ -3483,6 +3466,8 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
     filterCheckboxesSection.appendChild(hiddenDiv);
     filterValueContainer.appendChild(filterCheckboxesSection);
 
+    needsDemographicStatsUpdate = true;
+    if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
     updateSummaryStatistics(getCurrentFeatures());
     
     if (document.getElementById('highlightAreaCheckbox').checked) {
@@ -3539,6 +3524,9 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
     
     checkbox.addEventListener('change', function() {
       updateFilterButtonText();
+      
+      needsDemographicStatsUpdate = true;
+      if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
       updateSummaryStatistics(getCurrentFeatures());
       
       if (document.getElementById('highlightAreaCheckbox').checked) {
@@ -3551,6 +3539,9 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
     const isChecked = this.checked;
     checkboxes.forEach(cb => cb.checked = isChecked);
     updateFilterButtonText();
+    
+    needsDemographicStatsUpdate = true;
+    if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
     updateSummaryStatistics(getCurrentFeatures());
     
     if (document.getElementById('highlightAreaCheckbox').checked) {
@@ -3580,6 +3571,8 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
   filterValueContainer.appendChild(filterCheckboxesSection);
   updateFilterButtonText();
   
+  needsDemographicStatsUpdate = true;
+  if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
   updateSummaryStatistics(getCurrentFeatures());
   
   if (document.getElementById('highlightAreaCheckbox').checked) {
@@ -3770,6 +3763,8 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
 
 function updateSliderRanges(type, scaleType) {
   if (isUpdatingSliders) return;
+  
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingSliders = true;
 
   let field, rangeElement, minElement, maxElement, isInverse;
@@ -3847,13 +3842,16 @@ function updateSliderRanges(type, scaleType) {
   } else {
     setTimeout(() => {
       rangeElement._isInitialized = true;
+      hideLoadingIndicator('amenities-catchment');
     }, 200);
   }
   
   isUpdatingSliders = false;
 }
 
-function toggleInverseScale(type, scaleType) {  
+function toggleInverseScale(type, scaleType) {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  
   let isInverse, rangeElement;
 
   if (scaleType === 'Opacity') {
@@ -3874,6 +3872,10 @@ function toggleInverseScale(type, scaleType) {
   
   if (rangeElement.noUiSlider) {
     rangeElement.noUiSlider.set(currentValues, false);
+  }
+
+  if (!isUpdatingOpacityOutlineFields) {
+    debouncedUpdateOpacityOutlineFields();
   }
 }
 
@@ -4559,6 +4561,8 @@ function updateAmenitiesCatchmentLayer() {
     return;
   }
   
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  
   const hasRequiredData = checkAmenitiesDataReady();
   
   if (!hasRequiredData.ready) {
@@ -4577,13 +4581,11 @@ function updateAmenitiesCatchmentLayer() {
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     hideLoadingIndicator('amenities-catchment');
-    hideLoadingIndicator('calculating-stats');
     return;
   }
 
-  if (!activeLoadingIndicators.has('amenities-catchment')) {
-    showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  }
+  // Show journey time calculation indicator
+  showLoadingIndicator('calculating-journey-times', 'Calculating journey times...');
 
   const selectedYear = AmenitiesYear.value;
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
@@ -4607,13 +4609,17 @@ function updateAmenitiesCatchmentLayer() {
       map.removeLayer(AmenitiesCatchmentLayer);
       AmenitiesCatchmentLayer = null;
     }
+    
+    gridTimeMap = {};
+    currentJourneyTimeDataset = null;
+    
     drawSelectedAmenities([]);
     updateLegend();
     updateFilterDropdown();
     updateFilterValues();
     updateSummaryStatistics([], 'amenities', false);
     hideLoadingIndicator('amenities-catchment');
-    hideLoadingIndicator('calculating-stats');
+    hideLoadingIndicator('calculating-journey-times');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4630,7 +4636,7 @@ function updateAmenitiesCatchmentLayer() {
       if (csvData.length === 0) {
         isUpdatingCatchmentLayer = false;
         hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-stats');
+        hideLoadingIndicator('calculating-journey-times');
         return;
       }
       
@@ -4642,17 +4648,25 @@ function updateAmenitiesCatchmentLayer() {
           map.removeLayer(AmenitiesCatchmentLayer);
           AmenitiesCatchmentLayer = null;
         }
-        drawSelectedAmenities([]);
+        
+        gridTimeMap = {};
+        currentJourneyTimeDataset = null;
+        
+        drawSelectedAmenities();
         updateLegend();
         updateFilterDropdown();
         updateFilterValues();
         updateSummaryStatistics([], 'amenities', false);
         hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-stats');
+        hideLoadingIndicator('calculating-journey-times');
         isUpdatingCatchmentLayer = false;
         return;
       }
-              
+      
+      // Journey time calculation completed
+      hideLoadingIndicator('calculating-journey-times');
+      
+      // Continue with existing logic...
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
       
@@ -4713,6 +4727,7 @@ function updateAmenitiesCatchmentLayer() {
         }
       });
       
+      // Fill missing times
       const gridTimeKeys = new Set(Object.keys(gridTimeMap));
       for (let i = 0; i < grid.features.length; i++) {
         const originId = grid.features[i].properties.OriginId_tracc;
@@ -4721,12 +4736,18 @@ function updateAmenitiesCatchmentLayer() {
         }
       }
       
+      currentJourneyTimeDataset = {...gridTimeMap};
+      needsJourneyTimeStatsUpdate = true;
+      
       let needToCreateNewLayer = false;
       if (!AmenitiesCatchmentLayer) {
         needToCreateNewLayer = true;
       }
       
       if (needToCreateNewLayer) {            
+        // Show rendering indicator
+        showLoadingIndicator('rendering-layer', 'Rendering...');
+        
         if (AmenitiesCatchmentLayer) {
           map.removeLayer(AmenitiesCatchmentLayer);
         }
@@ -4767,12 +4788,16 @@ function updateAmenitiesCatchmentLayer() {
         });
 
         const updatesComplete = () => {
+          hideLoadingIndicator('rendering-layer');
+          
           drawSelectedAmenities();
           updateLegend();
           updateFilterDropdown();
           updateFilterValues('amenities');
-          showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-          updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+          
+          // Now calculate journey time statistics
+          calculateJourneyTimeStatistics();
+          
           hideLoadingIndicator('amenities-catchment');
         };
         
@@ -4781,8 +4806,9 @@ function updateAmenitiesCatchmentLayer() {
         
         setTimeout(updatesComplete, 50);
       } else {
+        // Just apply styling and calculate stats
         applyAmenitiesCatchmentLayerStyling();
-        updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+        calculateJourneyTimeStatistics();
         hideLoadingIndicator('amenities-catchment');
       }
         
@@ -4792,12 +4818,20 @@ function updateAmenitiesCatchmentLayer() {
     .catch(error => {
       console.error("Error loading journey time data:", error);
       hideLoadingIndicator('amenities-catchment');
-      hideLoadingIndicator('calculating-stats');
+      hideLoadingIndicator('calculating-journey-times');
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
 }
 
+function calculateJourneyTimeStatistics() {
+  showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
+  
+  setTimeout(() => {
+    updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+    hideLoadingIndicator('calculating-journey-time-stats');
+  }, 100);
+}
 /**
  * Check if all required data for amenities catchment layer is ready
  */
@@ -4880,9 +4914,10 @@ function clearAmenitiesAutoRetry() {
 
 function applyAmenitiesCatchmentLayerStyling() {    
   if (!AmenitiesCatchmentLayer) {
-    hideLoadingIndicator('amenities-catchment');
     return;
   }
+  
+  showLoadingIndicator('rendering-layer', 'Rendering...');
   
   try {
     AmenitiesCatchmentLayer.eachLayer(layer => {
@@ -4941,11 +4976,10 @@ function applyAmenitiesCatchmentLayerStyling() {
       };
     });
     
-    hideLoadingIndicator('amenities-catchment');
+    hideLoadingIndicator('rendering-layer');
   } catch (error) {
     console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-    console.error("Error stack:", error);
-    hideLoadingIndicator('amenities-catchment');
+    hideLoadingIndicator('rendering-layer');
   }
 }
 
@@ -4954,10 +4988,12 @@ function updateOpacityAndOutlineFields() {
     return;
   }
   
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingOpacityOutlineFields = true;
   
   if (!AmenitiesCatchmentLayer) {
     isUpdatingOpacityOutlineFields = false;
+    hideLoadingIndicator('amenities-catchment');
     return;
   }
   
@@ -5063,9 +5099,12 @@ function updateOpacityAndOutlineFields() {
       if (currentIndex < features.length) {
         requestAnimationFrame(processBatch);
       } else {
+        // Apply styling with rendering indicator
+        showLoadingIndicator('rendering-layer', 'Rendering...');
         applyAmenitiesCatchmentLayerStyling();
         isUpdatingStyles = false;
         isUpdatingOpacityOutlineFields = false;
+        hideLoadingIndicator('amenities-catchment');
       }
     }
     
@@ -5133,9 +5172,12 @@ function updateOpacityAndOutlineFields() {
         layer.feature.properties._weight = result._weight;
       });
       
+      // Apply styling with rendering indicator
+      showLoadingIndicator('rendering-layer', 'Rendering...');
       applyAmenitiesCatchmentLayerStyling();
       isUpdatingStyles = false;
       isUpdatingOpacityOutlineFields = false;
+      hideLoadingIndicator('amenities-catchment');
       worker.terminate();
     };
     
@@ -5468,6 +5510,8 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
   if (isCalculatingStats) {
     return;
   }
+  
+  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
     
   const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
   
@@ -5524,20 +5568,27 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     let baseStats = {};
     let timeStats = {};
     
-    if (forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
+    if (needsDemographicStatsUpdate || forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
       baseStats = await calculateBaseStatistics(filteredFeatures);
       window.lastBaseStats = baseStats;
+      needsDemographicStatsUpdate = false;
     } else {
       baseStats = window.lastBaseStats;
     }
     
-    if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+    if (needsJourneyTimeStatsUpdate && AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
       timeStats = calculateTimeStatistics(filteredFeatures);
-      const stats = {...baseStats, ...timeStats};
-      updateStatisticsUI(stats);
-    } else {
-      updateStatisticsUI(baseStats);
+      needsJourneyTimeStatsUpdate = false;
+    } else if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0 && window.lastTimeStats) {
+      timeStats = window.lastTimeStats || calculateTimeStatistics(filteredFeatures);
     }
+    
+    if (Object.keys(timeStats).length > 0) {
+      window.lastTimeStats = timeStats;
+    }
+    
+    const stats = {...baseStats, ...timeStats};
+    updateStatisticsUI(stats);
     
     hideLoadingIndicator('calculating-stats');
   } catch (error) {
