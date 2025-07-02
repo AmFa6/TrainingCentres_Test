@@ -558,12 +558,12 @@ function setupMapPanes() {
  * @returns {Promise} A promise that resolves when all base layers are loaded
  */
 function loadBaseLayers() {
-  showloadingindicator('Loading map layers...');
+  showLoadingIndicator('Loading map layers...');
   return Promise.all([
     loadBoundaryData(),
     loadTransportInfrastructure()
   ]).then(() => {
-    hideloadingindicator();
+    hideLoadingIndicator();
   });
 }
 
@@ -741,20 +741,20 @@ function loadTransportInfrastructure() {
 function loadBackgroundData() {  
   loadTrainingCentres()
     .then(() => {
-      hideloadingindicator();
+      hideLoadingIndicator();
       initializeTrainingCentres();
       loadGridData();
     })
     .catch(error => {
       console.error('Error loading training centres:', error);
-      hideloadingindicator();
+      hideLoadingIndicator();
       showErrorNotification('Error loading training center data. Some features may be limited.');
       loadGridData();
     });
 }
 
 async function loadGridData() {
-  showloadingindicator(`Loading grid data...`);
+  showLoadingIndicator(`Loading grid data...`);
   
   try {
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -784,11 +784,11 @@ async function loadGridData() {
       }, 500);
     }
     
-    hideloadingindicator();
+    hideLoadingIndicator();
     
   } catch (error) {
     console.error(`Error loading grid data:`, error);
-    hideloadingindicator();
+    hideLoadingIndicator();
   }
 }
 
@@ -5955,7 +5955,7 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
-  showloadingindicator('Calculating base statistics...');
+  showLoadingIndicator('Calculating base statistics...');
   if (!features || features.length === 0) {
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
