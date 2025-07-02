@@ -77,6 +77,8 @@ let isUpdatingStyles = false;
 let isUpdatingOpacityOutlineFields = false;
 let pendingAmenitiesUpdate = false;
 let amenitiesUpdateRequested = false;
+let activeLoadingIndicators = new Map();
+let indicatorZIndex = 1000;
 
 function convertMultiPolygonToPolygons(geoJson) {
   return new Promise((resolve) => {
@@ -177,27 +179,34 @@ function debounce(func, wait) {
 }
 
 AmenitiesYear.addEventListener("change", debounce(() => {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
   updateAmenitiesCatchmentLayer();
 }, 250));
 AmenitiesOpacity.addEventListener("change", () => {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   updateSliderRanges('Amenities', 'Opacity');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesOutline.addEventListener("change", () => {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   updateSliderRanges('Amenities', 'Outline');
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
 });
 AmenitiesInverseOpacity.addEventListener("click", () => {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   toggleInverseScale('Amenities', 'Opacity');
 });
 AmenitiesInverseOutline.addEventListener("click", () => {
+  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   toggleInverseScale('Amenities', 'Outline');
 });
 filterTypeDropdown.addEventListener('change', () => {
+  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
   updateFilterValues();
   updateSummaryStatistics(getCurrentFeatures());
   
@@ -218,6 +227,7 @@ filterTypeDropdown.addEventListener('change', () => {
   }
 });
 filterValueDropdown.addEventListener('change', () => {
+  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
   updateSummaryStatistics(getCurrentFeatures());
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
@@ -548,12 +558,12 @@ function setupMapPanes() {
  * @returns {Promise} A promise that resolves when all base layers are loaded
  */
 function loadBaseLayers() {
-  showBackgroundLoadingIndicator('Loading map layers...');
+  showloadingindicator('Loading map layers...');
   return Promise.all([
     loadBoundaryData(),
     loadTransportInfrastructure()
   ]).then(() => {
-    hideBackgroundLoadingIndicator();
+    hideloadingindicator();
   });
 }
 
@@ -731,20 +741,20 @@ function loadTransportInfrastructure() {
 function loadBackgroundData() {  
   loadTrainingCentres()
     .then(() => {
-      hideBackgroundLoadingIndicator();
+      hideloadingindicator();
       initializeTrainingCentres();
       loadGridData();
     })
     .catch(error => {
       console.error('Error loading training centres:', error);
-      hideBackgroundLoadingIndicator();
+      hideloadingindicator();
       showErrorNotification('Error loading training center data. Some features may be limited.');
       loadGridData();
     });
 }
 
 async function loadGridData() {
-  showBackgroundLoadingIndicator(`Loading grid data...`);
+  showloadingindicator(`Loading grid data...`);
   
   try {
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -774,11 +784,11 @@ async function loadGridData() {
       }, 500);
     }
     
-    hideBackgroundLoadingIndicator();
+    hideloadingindicator();
     
   } catch (error) {
     console.error(`Error loading grid data:`, error);
-    hideBackgroundLoadingIndicator();
+    hideloadingindicator();
   }
 }
 
@@ -1106,47 +1116,81 @@ function calculateGridStatistics(gridData) {
 }
 
 /**
- * Shows a subtle loading indicator for background processes with progress support
- * @param {String} message The message to display in the indicator
+ * Shows a loading indicator that can overlap with others
+ * @param {String} processId Unique identifier for this process
+ * @param {String} message The message to display
  * @param {Number} progress Optional progress percentage (0-100)
  */
-function showBackgroundLoadingIndicator(message = 'Loading data...', progress = null) {
-  
-  let indicator = document.getElementById('background-loading-indicator');
+function showLoadingIndicator(processId, message = 'Loading...', progress = null) {
+  let indicator = document.getElementById(`loading-indicator-${processId}`);
   
   if (!indicator) {
     indicator = document.createElement('div');
-    indicator.id = 'background-loading-indicator';
-    indicator.style.cssText = 'position:absolute;bottom:10px;left:10px;background:rgba(255,255,255,0.95);padding:8px 12px;border-radius:6px;font-size:12px;z-index:1000;display:flex;flex-direction:column;box-shadow:0 2px 8px rgba(0,0,0,0.1);border-left:3px solid #3388ff;';
+    indicator.id = `loading-indicator-${processId}`;
+    indicator.style.cssText = `
+      position: fixed;
+      bottom: ${10 + (activeLoadingIndicators.size * 60)}px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      z-index: ${indicatorZIndex++};
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-left: 3px solid #3388ff;
+      min-width: 200px;
+    `;
     
     const topRow = document.createElement('div');
     topRow.style.cssText = 'display:flex;align-items:center;';
     
     const spinner = document.createElement('div');
     spinner.className = 'mini-spinner';
-    spinner.style.cssText = 'width:14px;height:14px;border:2px solid #e0e0e0;border-top-color:#3388ff;border-radius:50%;margin-right:10px;animation:spin 1s linear infinite;';
+    spinner.style.cssText = `
+      width: 14px;
+      height: 14px;
+      border: 2px solid #e0e0e0;
+      border-top-color: #3388ff;
+      border-radius: 50%;
+      margin-right: 10px;
+      animation: spin 1s linear infinite;
+    `;
     
-    const style = document.createElement('style');
-    style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
-    document.head.appendChild(style);
+    if (!document.querySelector('#spinner-animation-style')) {
+      const style = document.createElement('style');
+      style.id = 'spinner-animation-style';
+      style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(style);
+    }
     
     const text = document.createElement('span');
-    text.id = 'background-loading-text';
+    text.id = `loading-text-${processId}`;
     text.style.cssText = 'font-weight:500;color:#333;';
     
     const progressBar = document.createElement('div');
-    progressBar.id = 'background-loading-progress';
-    progressBar.style.cssText = 'width:0%;height:2px;background:#3388ff;margin-top:4px;transition:width 0.3s ease;display:none;';
+    progressBar.id = `loading-progress-${processId}`;
+    progressBar.style.cssText = `
+      width: 0%;
+      height: 2px;
+      background: #3388ff;
+      margin-top: 4px;
+      transition: width 0.3s ease;
+      display: none;
+    `;
     
     topRow.appendChild(spinner);
     topRow.appendChild(text);
     indicator.appendChild(topRow);
     indicator.appendChild(progressBar);
     document.body.appendChild(indicator);
+    
+    activeLoadingIndicators.set(processId, indicator);
   }
   
-  const textElement = document.getElementById('background-loading-text');
-  const progressElement = document.getElementById('background-loading-progress');
+  const textElement = document.getElementById(`loading-text-${processId}`);
+  const progressElement = document.getElementById(`loading-progress-${processId}`);
   
   if (textElement) textElement.textContent = message;
   
@@ -1161,18 +1205,34 @@ function showBackgroundLoadingIndicator(message = 'Loading data...', progress = 
 }
 
 /**
- * Hides the background loading indicator
+ * Hides a specific loading indicator
+ * @param {String} processId The process identifier
  */
-function hideBackgroundLoadingIndicator() {
-  const indicator = document.getElementById('background-loading-indicator');
+function hideLoadingIndicator(processId) {
+  const indicator = document.getElementById(`loading-indicator-${processId}`);
   if (indicator) {
-    indicator.style.transition = 'opacity 0.5s';
+    indicator.style.transition = 'opacity 0.3s';
     indicator.style.opacity = '0';
     setTimeout(() => {
-      indicator.style.display = 'none';
-      indicator.style.opacity = '1';
-    }, 500);
+      if (indicator.parentNode) {
+        indicator.parentNode.removeChild(indicator);
+      }
+      activeLoadingIndicators.delete(processId);
+      
+      repositionLoadingIndicators();
+    }, 300);
   }
+}
+
+/**
+ * Repositions remaining loading indicators to prevent gaps
+ */
+function repositionLoadingIndicators() {
+  let index = 0;
+  activeLoadingIndicators.forEach((indicator, processId) => {
+    indicator.style.bottom = `${10 + (index * 60)}px`;
+    index++;
+  });
 }
 
 /**
@@ -1904,25 +1964,31 @@ function getTrainingCenterPopupContent(properties) {
 }
 
 function setupTrainingCenterFilters() {    
-    const debouncedHandler = debounce(() => {
-        drawSelectedAmenities();
-        updateAmenitiesCatchmentLayer();
-    }, 2000);
-    
-    const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
-    subjectCheckboxes.forEach(checkbox => {
-        checkbox.removeEventListener('change', debouncedHandler);
-        checkbox.addEventListener('change', debouncedHandler);
-    });
-    
-    const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]');
-    aimLevelCheckboxes.forEach(checkbox => {
-        checkbox.removeEventListener('change', debouncedHandler);
-        checkbox.addEventListener('change', debouncedHandler);
-    });
-    
-    updateSubjectDropdownLabel();
-    updateAimLevelDropdownLabel();
+  const debouncedHandler = debounce(() => {
+    drawSelectedAmenities();
+    updateAmenitiesCatchmentLayer();
+  }, 2000);
+  
+  const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]');
+  subjectCheckboxes.forEach(checkbox => {
+    checkbox.removeEventListener('change', handleSubjectAimChange);
+    checkbox.addEventListener('change', handleSubjectAimChange);
+  });
+  
+  const aimLevelCheckboxes = document.querySelectorAll('#aimlevelCheckboxesContainer input[type="checkbox"]');
+  aimLevelCheckboxes.forEach(checkbox => {
+    checkbox.removeEventListener('change', handleSubjectAimChange);
+    checkbox.addEventListener('change', handleSubjectAimChange);
+  });
+  
+  function handleSubjectAimChange() {
+    showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
+    showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+    debouncedHandler();
+  }
+  
+  updateSubjectDropdownLabel();
+  updateAimLevelDropdownLabel();
 }
 
 function updateSubjectDropdownLabel() {
@@ -3594,8 +3660,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     sliderElement.noUiSlider.destroy();
   }
 
-  const isInitialSetup = true;
-
   noUiSlider.create(sliderElement, {
     start: ['', ''],
     connect: [true, true, true],
@@ -3646,6 +3710,7 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     handleElement.setAttribute('data-value', formattedValue);
     
     if (sliderElement._isInitialized) {
+      showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
       requestAnimationFrame(() => {
         debouncedUpdateOpacityOutlineFields();
       });
@@ -4442,18 +4507,17 @@ function drawSelectedAmenities() {
  * Enhanced updateAmenitiesCatchmentLayer that waits for dependencies and retries automatically
  */
 function updateAmenitiesCatchmentLayer() {
-  showBackgroundLoadingIndicator('Updating catchment layer...');
   amenitiesUpdateRequested = true;
   
   if (isUpdatingCatchmentLayer) {
-      return;
+    return;
   }
   
   const hasRequiredData = checkAmenitiesDataReady();
   
   if (!hasRequiredData.ready) {
-      setupAmenitiesAutoRetry();
-      return;
+    setupAmenitiesAutoRetry();
+    return;
   }
   
   clearAmenitiesAutoRetry();
@@ -4461,17 +4525,16 @@ function updateAmenitiesCatchmentLayer() {
   isUpdatingCatchmentLayer = true;
   
   const amenitiesPanelOpen = document.querySelector(".panel-header:not(.summary-header)")
-      .classList.contains("collapsed") === false;
+    .classList.contains("collapsed") === false;
   
   if (!amenitiesPanelOpen) {
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
-    hideBackgroundLoadingIndicator();
+    hideLoadingIndicator('amenities-catchment');
     return;
   }
 
   const selectedYear = AmenitiesYear.value;
-    
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
   const isAllSubjectsSelected = subjectAllCheckbox && subjectAllCheckbox.checked;
   const subjectCheckboxes = document.querySelectorAll('#subjectCheckboxesContainer input[type="checkbox"]:checked:not([value="All"])');
@@ -4485,23 +4548,23 @@ function updateAmenitiesCatchmentLayer() {
   const filteredTrainingCentres = filterTrainingCentres();
   
   const filteredTrainingCenterIds = filteredTrainingCentres.features
-      .map(feature => feature.properties.DestinationId_tracc)
-      .filter(id => id !== undefined);
+    .map(feature => feature.properties.DestinationId_tracc)
+    .filter(id => id !== undefined);
       
   if (!selectedYear || filteredTrainingCenterIds.length === 0) {
-      if (AmenitiesCatchmentLayer) {
-          map.removeLayer(AmenitiesCatchmentLayer);
-          AmenitiesCatchmentLayer = null;
-      }
-      drawSelectedAmenities([]);
-      updateLegend();
-      updateFilterDropdown();
-      updateFilterValues();
-      updateSummaryStatistics([]);
-      hideBackgroundLoadingIndicator();
-      isUpdatingCatchmentLayer = false;
-      amenitiesUpdateRequested = false;
-      return;
+    if (AmenitiesCatchmentLayer) {
+      map.removeLayer(AmenitiesCatchmentLayer);
+      AmenitiesCatchmentLayer = null;
+    }
+    drawSelectedAmenities([]);
+    updateLegend();
+    updateFilterDropdown();
+    updateFilterValues();
+    updateSummaryStatistics([]);
+    hideLoadingIndicator('amenities-catchment');
+    isUpdatingCatchmentLayer = false;
+    amenitiesUpdateRequested = false;
+    return;
   }
 
   const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
@@ -4509,171 +4572,172 @@ function updateAmenitiesCatchmentLayer() {
   fetch(csvPath)
     .then(response => response.text())
     .then(csvText => {        
-        const csvData = Papa.parse(csvText, { header: true }).data;
-        fullCsvData = csvData;
-        
-        if (csvData.length === 0) {
-            isUpdatingCatchmentLayer = false;
-            hideBackgroundLoadingIndicator();
+      const csvData = Papa.parse(csvText, { header: true }).data;
+      fullCsvData = csvData;
+      
+      if (csvData.length === 0) {
+        isUpdatingCatchmentLayer = false;
+        hideLoadingIndicator('amenities-catchment');
+        return;
+      }
+      
+      const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
+      const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
+      
+      if (matchingIds.length === 0) {
+        if (AmenitiesCatchmentLayer) {
+          map.removeLayer(AmenitiesCatchmentLayer);
+          AmenitiesCatchmentLayer = null;
+        }
+        drawSelectedAmenities([]);
+        updateLegend();
+        updateFilterDropdown();
+        updateFilterValues();
+        updateSummaryStatistics([]);
+        hideLoadingIndicator('amenities-catchment');
+        isUpdatingCatchmentLayer = false;
+        return;
+      }
+              
+      const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
+      const eligibleDestinations = new Set();
+      
+      if (amenityLayers['TrainingCentres']) {
+        amenityLayers['TrainingCentres'].features.forEach(feature => {
+          const props = feature.properties;
+          const destinationId = props.DestinationId_tracc;
+          
+          if (!destinationId || !matchingIds.includes(destinationId)) {
             return;
-        }
-        
-        const csvDestinationIds = new Set(csvData.map(row => row.destination).filter(Boolean));
-        const matchingIds = filteredTrainingCenterIds.filter(id => csvDestinationIds.has(id));
-        
-        if (matchingIds.length === 0) {
-            if (AmenitiesCatchmentLayer) {
-                map.removeLayer(AmenitiesCatchmentLayer);
-                AmenitiesCatchmentLayer = null;
-            }
-            drawSelectedAmenities([]);
-            updateLegend();
-            updateFilterDropdown();
-            updateFilterValues();
-            updateSummaryStatistics([]);
-            hideBackgroundLoadingIndicator();
-            isUpdatingCatchmentLayer = false;
-            return;
-        }
-                
-        const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
-        const eligibleDestinations = new Set();
-        
-        if (amenityLayers['TrainingCentres']) {
-            amenityLayers['TrainingCentres'].features.forEach(feature => {
-                const props = feature.properties;
-                const destinationId = props.DestinationId_tracc;
-                
-                if (!destinationId || !matchingIds.includes(destinationId)) {
-                    return;
-                }
-                
-                const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
-                    selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
-                
-                if (!hasSelectedAimLevel) {
-                    return;
-                }
-                
-                let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
-                
-                if (!hasSelectedSubject && yearPrefix) {
-                    hasSelectedSubject = selectedSubjects.some(subject => {
-                        const columnName = `${yearPrefix}_${subject}`;
-                        return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                    });
-                } else if (!hasSelectedSubject) {
-                    const years = ["2122", "2223", "2324", "2425"];
-                    hasSelectedSubject = years.some(year => {
-                        return selectedSubjects.some(subject => {
-                            const columnName = `${year}_${subject}`;
-                            return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
-                        });
-                    });
-                }
-                
-                if (hasSelectedSubject) {
-                    eligibleDestinations.add(destinationId);
-                }
-            });
-        }
-        
-        gridTimeMap = {};
-        
-        csvData.forEach(row => {
-            const originId = row.origin;
-            const destinationId = row.destination;
-            const totalTime = parseFloat(row.totaltime);
-            
-            if (!originId || !destinationId || isNaN(totalTime)) {
-                return;
-            }
-            
-            if (eligibleDestinations.has(destinationId)) {
-                if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
-                    gridTimeMap[originId] = totalTime;
-                }
-            }
-        });
-        
-        const gridTimeKeys = new Set(Object.keys(gridTimeMap));
-        for (let i = 0; i < grid.features.length; i++) {
-          const originId = grid.features[i].properties.OriginId_tracc;
-          if (!gridTimeKeys.has(String(originId))) {
-            gridTimeMap[originId] = 120;
-          }
-        }
-        
-        let needToCreateNewLayer = false;
-        if (!AmenitiesCatchmentLayer) {
-            needToCreateNewLayer = true;
-        }
-        
-        if (needToCreateNewLayer) {            
-            if (AmenitiesCatchmentLayer) {
-                map.removeLayer(AmenitiesCatchmentLayer);
-            }
-            
-            AmenitiesCatchmentLayer = L.geoJSON(grid, {
-                pane: 'polygonLayers',
-                style: function(feature) {
-                    const OriginId_tracc = feature.properties.OriginId_tracc;
-                    const time = gridTimeMap[OriginId_tracc];
-                    
-                    let fillColor = 'transparent';
-                    let fillOpacity = 0;
-                    
-                    if (time !== undefined && time < 120) {
-                        if (time <= 10) fillColor = '#fde725';
-                        else if (time <= 20) fillColor = '#8fd744';
-                        else if (time <= 30) fillColor = '#35b779';
-                        else if (time <= 40) fillColor = '#21908d';
-                        else if (time <= 50) fillColor = '#31688e';
-                        else if (time <= 60) fillColor = '#443a82';
-                        else fillColor = '#440154';
-                        fillOpacity = 0.7;
-                    }
-                    
-                    return {
-                        weight: 0.5,
-                        fillOpacity: fillOpacity,
-                        opacity: fillOpacity > 0 ? 0.8 : 0,
-                        fillColor: fillColor,
-                        color: '#ffffff'
-                    };
-                }
-            }).addTo(map);
-            
-            AmenitiesCatchmentLayer.eachLayer(layer => {
-                layer.feature.properties._opacity = undefined;
-                layer.feature.properties._weight = undefined;
-            });
-            const updatesComplete = () => {
-              drawSelectedAmenities();
-              updateLegend();
-              updateFilterDropdown();
-              updateFilterValues('amenities');
-              hideBackgroundLoadingIndicator();
-            };
-            
-            updateSliderRanges('Amenities', 'Opacity');
-            updateSliderRanges('Amenities', 'Outline');
-            
-            setTimeout(updatesComplete, 50);
-          } else {
-              applyAmenitiesCatchmentLayerStyling();
-              updateSummaryStatistics(getCurrentFeatures());
-              hideBackgroundLoadingIndicator();
           }
           
-        isUpdatingCatchmentLayer = false;
-        amenitiesUpdateRequested = false;
+          const hasSelectedAimLevel = isAllAimLevelsSelected || selectedAimLevels.length === 0 ||
+            selectedAimLevels.some(level => props[`AimLevel_${level}`] === "1");
+          
+          if (!hasSelectedAimLevel) {
+            return;
+          }
+          
+          let hasSelectedSubject = isAllSubjectsSelected || selectedSubjects.length === 0;
+          
+          if (!hasSelectedSubject && yearPrefix) {
+            hasSelectedSubject = selectedSubjects.some(subject => {
+              const columnName = `${yearPrefix}_${subject}`;
+              return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+            });
+          } else if (!hasSelectedSubject) {
+            const years = ["2122", "2223", "2324", "2425"];
+            hasSelectedSubject = years.some(year => {
+              return selectedSubjects.some(subject => {
+                const columnName = `${year}_${subject}`;
+                return props[columnName] && props[columnName] !== "" && props[columnName] !== "0";
+              });
+            });
+          }
+          
+          if (hasSelectedSubject) {
+            eligibleDestinations.add(destinationId);
+          }
+        });
+      }
+      
+      gridTimeMap = {};
+      
+      csvData.forEach(row => {
+        const originId = row.origin;
+        const destinationId = row.destination;
+        const totalTime = parseFloat(row.totaltime);
+        
+        if (!originId || !destinationId || isNaN(totalTime)) {
+          return;
+        }
+        
+        if (eligibleDestinations.has(destinationId)) {
+          if (!gridTimeMap[originId] || totalTime < gridTimeMap[originId]) {
+            gridTimeMap[originId] = totalTime;
+          }
+        }
+      });
+      
+      const gridTimeKeys = new Set(Object.keys(gridTimeMap));
+      for (let i = 0; i < grid.features.length; i++) {
+        const originId = grid.features[i].properties.OriginId_tracc;
+        if (!gridTimeKeys.has(String(originId))) {
+          gridTimeMap[originId] = 120;
+        }
+      }
+      
+      let needToCreateNewLayer = false;
+      if (!AmenitiesCatchmentLayer) {
+        needToCreateNewLayer = true;
+      }
+      
+      if (needToCreateNewLayer) {            
+        if (AmenitiesCatchmentLayer) {
+          map.removeLayer(AmenitiesCatchmentLayer);
+        }
+        
+        AmenitiesCatchmentLayer = L.geoJSON(grid, {
+          pane: 'polygonLayers',
+          style: function(feature) {
+            const OriginId_tracc = feature.properties.OriginId_tracc;
+            const time = gridTimeMap[OriginId_tracc];
+            
+            let fillColor = 'transparent';
+            let fillOpacity = 0;
+            
+            if (time !== undefined && time < 120) {
+              if (time <= 10) fillColor = '#fde725';
+              else if (time <= 20) fillColor = '#8fd744';
+              else if (time <= 30) fillColor = '#35b779';
+              else if (time <= 40) fillColor = '#21908d';
+              else if (time <= 50) fillColor = '#31688e';
+              else if (time <= 60) fillColor = '#443a82';
+              else fillColor = '#440154';
+              fillOpacity = 0.7;
+            }
+            
+            return {
+              weight: 0.5,
+              fillOpacity: fillOpacity,
+              opacity: fillOpacity > 0 ? 0.8 : 0,
+              fillColor: fillColor,
+              color: '#ffffff'
+            };
+          }
+        }).addTo(map);
+        
+        AmenitiesCatchmentLayer.eachLayer(layer => {
+          layer.feature.properties._opacity = undefined;
+          layer.feature.properties._weight = undefined;
+        });
+
+        const updatesComplete = () => {
+          drawSelectedAmenities();
+          updateLegend();
+          updateFilterDropdown();
+          updateFilterValues('amenities');
+          hideLoadingIndicator('amenities-catchment');
+        };
+        
+        updateSliderRanges('Amenities', 'Opacity');
+        updateSliderRanges('Amenities', 'Outline');
+        
+        setTimeout(updatesComplete, 50);
+      } else {
+        applyAmenitiesCatchmentLayerStyling();
+        updateSummaryStatistics(getCurrentFeatures());
+        hideLoadingIndicator('amenities-catchment');
+      }
+        
+      isUpdatingCatchmentLayer = false;
+      amenitiesUpdateRequested = false;
     })
     .catch(error => {
-        console.error("Error loading journey time data:", error);
-        hideBackgroundLoadingIndicator();
-        isUpdatingCatchmentLayer = false;
-        amenitiesUpdateRequested = false;
+      console.error("Error loading journey time data:", error);
+      hideLoadingIndicator('amenities-catchment');
+      isUpdatingCatchmentLayer = false;
+      amenitiesUpdateRequested = false;
     });
 }
 
@@ -4758,279 +4822,278 @@ function clearAmenitiesAutoRetry() {
 }
 
 function applyAmenitiesCatchmentLayerStyling() {    
-    if (!AmenitiesCatchmentLayer) {
-      hideBackgroundLoadingIndicator();
-      return;
-    }
+  if (!AmenitiesCatchmentLayer) {
+    hideLoadingIndicator('amenities-catchment');
+    return;
+  }
+  
+  try {
+    AmenitiesCatchmentLayer.eachLayer(layer => {
+      const OriginId_tracc = layer.feature.properties.OriginId_tracc;
+      const time = gridTimeMap[OriginId_tracc];
+      
+      if (layer.feature.properties._opacity === undefined) {
+        layer.feature.properties._opacity = 0.5;
+      }
+      
+      if (layer.feature.properties._weight === undefined) {
+        layer.feature.properties._weight = 0;
+      }
+      
+      let fillColor = 'transparent';
+      if (time !== undefined) {
+        if (time <= 10) fillColor = '#fde725';
+        else if (time <= 20) fillColor = '#8fd744';
+        else if (time <= 30) fillColor = '#35b779';
+        else if (time <= 40) fillColor = '#21908d';
+        else if (time <= 50) fillColor = '#31688e';
+        else if (time <= 60) fillColor = '#443a82';
+        else fillColor = '#440154';
+      }
+      
+      layer.feature.properties._fillColor = fillColor;
+      layer.feature.properties._range = time <= 10 ? "0-10" :
+                          time <= 20 ? "10-20" :
+                          time <= 30 ? "20-30" :
+                          time <= 40 ? "30-40" :
+                          time <= 50 ? "40-50" :
+                          time <= 60 ? "50-60" : ">60";
+    });
     
-    try {
-        AmenitiesCatchmentLayer.eachLayer(layer => {
-            const OriginId_tracc = layer.feature.properties.OriginId_tracc;
-            const time = gridTimeMap[OriginId_tracc];
+    const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
+    const visibleRanges = Array.from(legendCheckboxes)
+      .filter(checkbox => checkbox.checked)
+      .map(checkbox => checkbox.getAttribute('data-range'));
+    
+    const hasLegendCheckboxes = legendCheckboxes.length > 0;
+    const hasAnyVisibleRanges = visibleRanges.length > 0;
             
-            if (layer.feature.properties._opacity === undefined) {
-                layer.feature.properties._opacity = 0.5;
-            }
-            
-            if (layer.feature.properties._weight === undefined) {
-                layer.feature.properties._weight = 0;
-            }
-            
-            let fillColor = 'transparent';
-            if (time !== undefined) {
-                if (time <= 10) fillColor = '#fde725';
-                else if (time <= 20) fillColor = '#8fd744';
-                else if (time <= 30) fillColor = '#35b779';
-                else if (time <= 40) fillColor = '#21908d';
-                else if (time <= 50) fillColor = '#31688e';
-                else if (time <= 60) fillColor = '#443a82';
-                else fillColor = '#440154';
-            }
-            
-            layer.feature.properties._fillColor = fillColor;
-            layer.feature.properties._range = time <= 10 ? "0-10" :
-                                time <= 20 ? "10-20" :
-                                time <= 30 ? "20-30" :
-                                time <= 40 ? "30-40" :
-                                time <= 50 ? "40-50" :
-                                time <= 60 ? "50-60" : ">60";
-        });
-        
-        const legendCheckboxes = document.querySelectorAll('.legend-checkbox');
-        const visibleRanges = Array.from(legendCheckboxes)
-            .filter(checkbox => checkbox.checked)
-            .map(checkbox => checkbox.getAttribute('data-range'));
-        
-        const hasLegendCheckboxes = legendCheckboxes.length > 0;
-        const hasAnyVisibleRanges = visibleRanges.length > 0;
-                
-        AmenitiesCatchmentLayer.setStyle(function(feature) {
-            const range = feature.properties._range;
-            
-            const isVisible = !hasLegendCheckboxes || 
-                            (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
-                            (!hasAnyVisibleRanges);
-            
-            return {
-                fillColor: feature.properties._fillColor,
-                color: 'black',
-                weight: isVisible ? feature.properties._weight : 0,
-                fillOpacity: isVisible ? feature.properties._opacity : 0,
-                opacity: isVisible ? 1 : 0
-            };
-        });
-      hideBackgroundLoadingIndicator();
-    } catch (error) {
-      console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-      console.error("Error stack:", error.stack);
-      hideBackgroundLoadingIndicator();
-    }
+    AmenitiesCatchmentLayer.setStyle(function(feature) {
+      const range = feature.properties._range;
+      
+      const isVisible = !hasLegendCheckboxes || 
+                      (hasAnyVisibleRanges && visibleRanges.includes(range)) || 
+                      (!hasAnyVisibleRanges);
+      
+      return {
+        fillColor: feature.properties._fillColor,
+        color: 'black',
+        weight: isVisible ? feature.properties._weight : 0,
+        fillOpacity: isVisible ? feature.properties._opacity : 0,
+        opacity: isVisible ? 1 : 0
+      };
+    });
+    
+    hideLoadingIndicator('amenities-catchment');
+  } catch (error) {
+    console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
+    console.error("Error stack:", error);
+    hideLoadingIndicator('amenities-catchment');
+  }
 }
 
 function updateOpacityAndOutlineFields() {
-    if (isUpdatingOpacityOutlineFields) {
-        return;
+  if (isUpdatingOpacityOutlineFields) {
+    return;
+  }
+  
+  isUpdatingOpacityOutlineFields = true;
+  
+  if (!AmenitiesCatchmentLayer) {
+    isUpdatingOpacityOutlineFields = false;
+    return;
+  }
+  
+  const currentUpdateTime = Date.now();
+  updateOpacityAndOutlineFields.lastUpdateTime = currentUpdateTime;
+  
+  if (isUpdatingStyles) {
+    setTimeout(() => {
+      if (updateOpacityAndOutlineFields.lastUpdateTime === currentUpdateTime) {
+        updateOpacityAndOutlineFields();
+      }
+    }, 250);
+    isUpdatingOpacityOutlineFields = false;
+    return;
+  }
+  
+  isUpdatingStyles = true;
+  
+  const opacityField = AmenitiesOpacity.value;
+  const outlineField = AmenitiesOutline.value;
+  const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
+  const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
+  
+  const needOpacity = opacityField !== "None";
+  const needOutline = outlineField !== "None";
+  const opacityMin = opacityRange[0];
+  const opacityMax = opacityRange[1];
+  const outlineMin = outlineRange[0];
+  const outlineMax = outlineRange[1];
+  
+  const opacityLookup = {};
+  const outlineLookup = {};
+  
+  if (needOpacity) {
+    const step = Math.max((opacityMax - opacityMin) / 100, 0.1);
+    for (let value = opacityMin; value <= opacityMax; value += step) {
+      const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+      opacityLookup[value.toFixed(1)] = isInverseAmenitiesOpacity ? 
+        0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
     }
+  }
+  
+  if (needOutline) {
+    const step = Math.max((outlineMax - outlineMin) / 100, 0.1);
+    for (let value = outlineMin; value <= outlineMax; value += step) {
+      const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+      outlineLookup[value.toFixed(1)] = isInverseAmenitiesOutline ? 
+        3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
+    }
+  }
+  
+  const features = AmenitiesCatchmentLayer.getLayers();
+  const batchSize = 20000;
+  
+  if (window.Worker && features.length > 1000) {
+    processWithWorker();
+  } else {
+    processWithBatches();
+  }
+  
+  function processWithBatches() {
+    let currentIndex = 0;
     
-    isUpdatingOpacityOutlineFields = true;
-    
-    if (!AmenitiesCatchmentLayer) {
+    function processBatch() {
+      const endIndex = Math.min(currentIndex + batchSize, features.length);
+      
+      for (let i = currentIndex; i < endIndex; i++) {
+        const layer = features[i];
+        layer.feature.properties._opacity = 0.5;
+        layer.feature.properties._weight = 0;
+        
+        if (needOpacity) {
+          const value = parseFloat(layer.feature.properties[opacityField]);
+          if (!isNaN(value)) {
+            const key = value.toFixed(1);
+            if (opacityLookup[key] !== undefined) {
+              layer.feature.properties._opacity = opacityLookup[key];
+            } else if (value >= opacityMin && value <= opacityMax) {
+              const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+              const scaledValue = isInverseAmenitiesOpacity ? (1 - normalized) : normalized;
+              layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
+            }
+          }
+        }
+        
+        if (needOutline) {
+          const value = parseFloat(layer.feature.properties[outlineField]);
+          if (!isNaN(value)) {
+            const key = value.toFixed(1);
+            if (outlineLookup[key] !== undefined) {
+              layer.feature.properties._weight = outlineLookup[key];
+            } else if (value >= outlineMin && value <= outlineMax) {
+              const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+              const scaledValue = isInverseAmenitiesOutline ? (1 - normalized) : normalized;
+              layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
+            }
+          }
+        }
+      }
+      
+      currentIndex = endIndex;
+      
+      if (currentIndex < features.length) {
+        requestAnimationFrame(processBatch);
+      } else {
+        applyAmenitiesCatchmentLayerStyling();
+        isUpdatingStyles = false;
         isUpdatingOpacityOutlineFields = false;
-        return;
+      }
     }
     
-    const currentUpdateTime = Date.now();
-    updateOpacityAndOutlineFields.lastUpdateTime = currentUpdateTime;
-    
-    if (isUpdatingStyles) {
-        setTimeout(() => {
-            if (updateOpacityAndOutlineFields.lastUpdateTime === currentUpdateTime) {
-                updateOpacityAndOutlineFields();
-            }
-        }, 250);
-        isUpdatingOpacityOutlineFields = false;
-        return;
-    }
-    
-    isUpdatingStyles = true;
-    
-    const opacityField = AmenitiesOpacity.value;
-    const outlineField = AmenitiesOutline.value;
-    const opacityRange = AmenitiesOpacityRange.noUiSlider.get().map(parseFloat);
-    const outlineRange = AmenitiesOutlineRange.noUiSlider.get().map(parseFloat);
-    
-    const needOpacity = opacityField !== "None";
-    const needOutline = outlineField !== "None";
-    const opacityMin = opacityRange[0];
-    const opacityMax = opacityRange[1];
-    const outlineMin = outlineRange[0];
-    const outlineMax = outlineRange[1];
-    
-    const opacityLookup = {};
-    const outlineLookup = {};
-    
-    if (needOpacity) {
-        const step = Math.max((opacityMax - opacityMin) / 100, 0.1);
-        for (let value = opacityMin; value <= opacityMax; value += step) {
-            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-            opacityLookup[value.toFixed(1)] = isInverseAmenitiesOpacity ? 
-                0.8 - (normalized * 0.7) : 0.1 + (normalized * 0.7);
-        }
-    }
-    
-    if (needOutline) {
-        const step = Math.max((outlineMax - outlineMin) / 100, 0.1);
-        for (let value = outlineMin; value <= outlineMax; value += step) {
-            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-            outlineLookup[value.toFixed(1)] = isInverseAmenitiesOutline ? 
-                3 - (normalized * 2.5) : 0.5 + (normalized * 2.5);
-        }
-    }
-    
-    const features = AmenitiesCatchmentLayer.getLayers();
-    const batchSize = 20000;
-    
-    if (window.Worker && features.length > 1000) {
-        processWithWorker();
-    } else {
-        processWithBatches();
-    }
-    
-    function processWithBatches() {
-        let currentIndex = 0;
+    processBatch();
+  }
+  
+  function processWithWorker() {
+    const workerCode = `
+      self.onmessage = function(e) {
+        const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
+                  isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
         
-        function processBatch() {
-            const endIndex = Math.min(currentIndex + batchSize, features.length);
-            
-            for (let i = currentIndex; i < endIndex; i++) {
-                const layer = features[i];
-                layer.feature.properties._opacity = 0.5;
-                layer.feature.properties._weight = 0;
-                
-                if (needOpacity) {
-                    const value = parseFloat(layer.feature.properties[opacityField]);
-                    if (!isNaN(value)) {
-                        const key = value.toFixed(1);
-                        if (opacityLookup[key] !== undefined) {
-                            layer.feature.properties._opacity = opacityLookup[key];
-                        } else if (value >= opacityMin && value <= opacityMax) {
-                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                            const scaledValue = isInverseAmenitiesOpacity ? 
-                                (1 - normalized) : normalized;
-                            layer.feature.properties._opacity = 0.1 + (scaledValue * 0.7);
-                        }
-                    }
-                }
-                
-                if (needOutline) {
-                    const value = parseFloat(layer.feature.properties[outlineField]);
-                    if (!isNaN(value)) {
-                        const key = value.toFixed(1);
-                        if (outlineLookup[key] !== undefined) {
-                            layer.feature.properties._weight = outlineLookup[key];
-                        } else if (value >= outlineMin && value <= outlineMax) {
-                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                            const scaledValue = isInverseAmenitiesOutline ? 
-                                (1 - normalized) : normalized;
-                            layer.feature.properties._weight = 0.5 + (scaledValue * 2.5);
-                        }
-                    }
-                }
+        const needOpacity = opacityField !== "None";
+        const needOutline = outlineField !== "None";
+        const results = [];
+        
+        for (let i = 0; i < features.length; i++) {
+          const feature = features[i];
+          const result = {
+            index: i,
+            _opacity: 0.5,
+            _weight: 0
+          };
+          
+          if (needOpacity) {
+            const value = parseFloat(feature.properties[opacityField]);
+            if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
+              const normalized = (value - opacityMin) / (opacityMax - opacityMin);
+              const scaledValue = isInverseAmenitiesOpacity ? 
+                (1 - normalized) : normalized;
+              result._opacity = 0.1 + (scaledValue * 0.7);
             }
-            
-            currentIndex = endIndex;
-            
-            if (currentIndex < features.length) {
-                requestAnimationFrame(processBatch);
-            } else {
-                applyAmenitiesCatchmentLayerStyling();
-                isUpdatingStyles = false;
-                isUpdatingOpacityOutlineFields = false;
+          }
+          
+          if (needOutline) {
+            const value = parseFloat(feature.properties[outlineField]);
+            if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
+              const normalized = (value - outlineMin) / (outlineMax - outlineMin);
+              const scaledValue = isInverseAmenitiesOutline ? 
+                (1 - normalized) : normalized;
+              result._weight = 0.5 + (scaledValue * 2.5);
             }
+          }
+          
+          results.push(result);
         }
         
-        processBatch();
-    }
+        self.postMessage(results);
+      };
+    `;
     
-    function processWithWorker() {
-        const workerCode = `
-            self.onmessage = function(e) {
-                const { features, opacityField, outlineField, opacityMin, opacityMax, outlineMin, outlineMax, 
-                          isInverseAmenitiesOpacity, isInverseAmenitiesOutline } = e.data;
-                
-                const needOpacity = opacityField !== "None";
-                const needOutline = outlineField !== "None";
-                const results = [];
-                
-                for (let i = 0; i < features.length; i++) {
-                    const feature = features[i];
-                    const result = {
-                        index: i,
-                        _opacity: 0.5,
-                        _weight: 0
-                    };
-                    
-                    if (needOpacity) {
-                        const value = parseFloat(feature.properties[opacityField]);
-                        if (!isNaN(value) && value >= opacityMin && value <= opacityMax) {
-                            const normalized = (value - opacityMin) / (opacityMax - opacityMin);
-                            const scaledValue = isInverseAmenitiesOpacity ? 
-                                (1 - normalized) : normalized;
-                            result._opacity = 0.1 + (scaledValue * 0.7);
-                        }
-                    }
-                    
-                    if (needOutline) {
-                        const value = parseFloat(feature.properties[outlineField]);
-                        if (!isNaN(value) && value >= outlineMin && value <= outlineMax) {
-                            const normalized = (value - outlineMin) / (outlineMax - outlineMin);
-                            const scaledValue = isInverseAmenitiesOutline ? 
-                                (1 - normalized) : normalized;
-                            result._weight = 0.5 + (scaledValue * 2.5);
-                        }
-                    }
-                    
-                    results.push(result);
-                }
-                
-                self.postMessage(results);
-            };
-        `;
-        
-        const blob = new Blob([workerCode], { type: 'application/javascript' });
-        const worker = new Worker(URL.createObjectURL(blob));
-        
-        const featureData = features.map(layer => ({
-            properties: layer.feature.properties
-        }));
-        
-        worker.onmessage = function(e) {
-            const results = e.data;
-            
-            results.forEach(result => {
-                const layer = features[result.index];
-                layer.feature.properties._opacity = result._opacity;
-                layer.feature.properties._weight = result._weight;
-            });
-            
-            applyAmenitiesCatchmentLayerStyling();
-            isUpdatingStyles = false;
-            isUpdatingOpacityOutlineFields = false;
-            worker.terminate();
-        };
-        
-        worker.postMessage({
-            features: featureData,
-            opacityField,
-            outlineField,
-            opacityMin,
-            opacityMax,
-            outlineMin,
-            outlineMax,
-            isInverseAmenitiesOpacity,
-            isInverseAmenitiesOutline
-        });
-    }
+    const blob = new Blob([workerCode], { type: 'application/javascript' });
+    const worker = new Worker(URL.createObjectURL(blob));
+    
+    const featureData = features.map(layer => ({
+      properties: layer.feature.properties
+    }));
+    
+    worker.onmessage = function(e) {
+      const results = e.data;
+      
+      results.forEach(result => {
+        const layer = features[result.index];
+        layer.feature.properties._opacity = result._opacity;
+        layer.feature.properties._weight = result._weight;
+      });
+      
+      applyAmenitiesCatchmentLayerStyling();
+      isUpdatingStyles = false;
+      isUpdatingOpacityOutlineFields = false;
+      worker.terminate();
+    };
+    
+    worker.postMessage({
+      features: featureData,
+      opacityField,
+      outlineField,
+      opacityMin,
+      opacityMax,
+      outlineMin,
+      outlineMax,
+      isInverseAmenitiesOpacity,
+      isInverseAmenitiesOutline
+    });
+  }
 }
 
 function updateFilterDropdown() {
@@ -5280,7 +5343,8 @@ function updateFilterValues(source = 'filter') {
       checkbox.addEventListener('change', function() {
         updateStoredSelections();
         updateFilterButtonText();
-        updateSummaryStatistics(getCurrentFeatures());
+        showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+        updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
         }
@@ -5292,7 +5356,8 @@ function updateFilterValues(source = 'filter') {
       checkboxes.forEach(cb => cb.checked = isChecked);
       updateStoredSelections();
       updateFilterButtonText();
-      updateSummaryStatistics(getCurrentFeatures());
+      showLoadingIndicator('calculating-stats', 'Calculating statistics...');
+      updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
       }
@@ -5310,7 +5375,6 @@ function updateFilterValues(source = 'filter') {
       const selectedValues = checkboxes
         .filter(cb => cb.checked)
         .map(cb => cb.value);
-      
       
       if (selectedValues.length === 0) {
         filterValueButton.textContent = '\u00A0';
@@ -5330,7 +5394,10 @@ function updateFilterValues(source = 'filter') {
     }
     
     updateFilterButtonText();
-    updateSummaryStatistics(getCurrentFeatures());
+    
+    if (source === 'filter') {
+      updateSummaryStatistics(getCurrentFeatures(), 'filter', true);
+    }
 
   } finally {
     isUpdatingFilterValues = false;
@@ -5340,8 +5407,7 @@ function updateFilterValues(source = 'filter') {
 /**
  * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
  */
-async function updateSummaryStatistics(features, source = 'filter') {
-  showBackgroundLoadingIndicator('Calculating statistics...');
+async function updateSummaryStatistics(features, source = 'filter', forceBaseStatsUpdate = false) {
   if (isCalculatingStats) {
     return;
   }
@@ -5349,7 +5415,6 @@ async function updateSummaryStatistics(features, source = 'filter') {
   const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
   
   if (needsAmenitiesCatchment && isUpdatingCatchmentLayer) {
-    
     const waitForCatchment = () => {
       return new Promise((resolve) => {
         const checkInterval = setInterval(() => {
@@ -5375,7 +5440,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
   try {
     if (!grid && (!features || features.length === 0)) {
       displayEmptyStatistics();
-      hideBackgroundLoadingIndicator();
+      hideLoadingIndicator('calculating-stats');
       return;
     }
     
@@ -5386,6 +5451,7 @@ async function updateSummaryStatistics(features, source = 'filter') {
       
       if (selectedValues.length === 0) {
         displayEmptyStatistics();
+        hideLoadingIndicator('calculating-stats');
         return;
       }
     }
@@ -5394,24 +5460,33 @@ async function updateSummaryStatistics(features, source = 'filter') {
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
       displayEmptyStatistics();
-      hideBackgroundLoadingIndicator();
+      hideLoadingIndicator('calculating-stats');
       return;
     }
 
-    const baseStats = await calculateBaseStatistics(filteredFeatures);
+    let baseStats = {};
+    let timeStats = {};
+    
+    if (source === 'filter' || forceBaseStatsUpdate || !window.lastBaseStats) {
+      baseStats = await calculateBaseStatistics(filteredFeatures);
+      window.lastBaseStats = baseStats;
+    } else {
+      baseStats = window.lastBaseStats;
+    }
     
     if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
-      const timeStats = calculateTimeStatistics(filteredFeatures);
+      timeStats = calculateTimeStatistics(filteredFeatures);
       const stats = {...baseStats, ...timeStats};
       updateStatisticsUI(stats);
     } else {
       updateStatisticsUI(baseStats);
     }
-    hideBackgroundLoadingIndicator();
+    
+    hideLoadingIndicator('calculating-stats');
   } catch (error) {
     console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
-    hideBackgroundLoadingIndicator();
+    hideLoadingIndicator('calculating-stats');
   } finally {
     isCalculatingStats = false;
   }
@@ -5880,7 +5955,7 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
-  showBackgroundLoadingIndicator('Calculating base statistics...');
+  showloadingindicator('Calculating base statistics...');
   if (!features || features.length === 0) {
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
