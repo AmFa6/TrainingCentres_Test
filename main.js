@@ -817,28 +817,32 @@ async function loadJourneyTimeCsv() {
  */
 async function waitForDuckDBModule() {
   return new Promise((resolve, reject) => {
-    if (window.duckdb && window.duckdbLoaded) {
+    if (window.duckdb) {
+      console.log('🦆✅ [DUCKDB MODULE] DuckDB module already available');
       resolve();
       return;
     }
     
     const handleDuckDBReady = (event) => {
+      console.log('🦆✅ [DUCKDB MODULE] Received duckdb-ready event');
       window.removeEventListener('duckdb-ready', handleDuckDBReady);
       window.removeEventListener('duckdb-error', handleDuckDBError);
       resolve();
     };
     
     const handleDuckDBError = (event) => {
-      console.error('DuckDB-WASM error event received:', event.detail);
+      console.error('🦆❌ [DUCKDB MODULE] DuckDB-WASM error event received:', event.detail);
       window.removeEventListener('duckdb-ready', handleDuckDBReady);
       window.removeEventListener('duckdb-error', handleDuckDBError);
       reject(new Error(`Failed to load DuckDB-WASM: ${event.detail.message}`));
     };
     
+    console.log('🦆⏰ [DUCKDB MODULE] Waiting for duckdb-ready event...');
     window.addEventListener('duckdb-ready', handleDuckDBReady);
     window.addEventListener('duckdb-error', handleDuckDBError);
     
     setTimeout(() => {
+      console.log('🦆❌ [DUCKDB MODULE] Timeout waiting for DuckDB-WASM to load (30s)');
       window.removeEventListener('duckdb-ready', handleDuckDBReady);
       window.removeEventListener('duckdb-error', handleDuckDBError);
       reject(new Error('Timeout waiting for DuckDB-WASM to load'));
@@ -980,17 +984,23 @@ async function initializeDuckDBForAnalytics(gridData) {
     setTimeout(async () => {
       console.log('🦆⏰ [DUCKDB ANALYTICS] Beginning background initialization after 100ms delay');
       try {
+        console.log('🦆🔄 [DUCKDB ANALYTICS] Waiting for DuckDB module...');
         await waitForDuckDBModule();
+        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB module ready, initializing database...');
         await initializeDuckDB();
+        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB database initialized, connecting...');
         
         const db = window.duckdbInstance;
         const conn = await db.connect();
+        console.log('🦆✅ [DUCKDB ANALYTICS] Connected to DuckDB, checking grid data...');
         
         if (!gridData || !gridData.features || gridData.features.length === 0) {
-          console.warn('No grid data available for DuckDB analytics');
+          console.warn('🦆⚠️ [DUCKDB ANALYTICS] No grid data available for DuckDB analytics');
           await conn.close();
           return;
         }
+        
+        console.log(`🦆📊 [DUCKDB ANALYTICS] Creating analytics table for ${gridData.features.length} features...`);
                 
         await conn.query(`
           CREATE TABLE grid_analytics (
@@ -1005,9 +1015,14 @@ async function initializeDuckDBForAnalytics(gridData) {
           )
         `);
         
+        console.log('🦆📝 [DUCKDB ANALYTICS] Table created, inserting data in batches...');
         const BATCH_SIZE = 20000;
         for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
           const batch = gridData.features.slice(i, i + BATCH_SIZE);
+          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+          const totalBatches = Math.ceil(gridData.features.length / BATCH_SIZE);
+          console.log(`🦆📦 [DUCKDB ANALYTICS] Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
+          
           const values = batch.map(f => {
             const props = f.properties;
             return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
@@ -1017,6 +1032,8 @@ async function initializeDuckDBForAnalytics(gridData) {
             INSERT INTO grid_analytics VALUES ${values}
           `);
         }
+        
+        console.log('🦆🔐 [DUCKDB ANALYTICS] Data insertion complete, closing connection...');
         
         await conn.close();
         
