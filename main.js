@@ -5653,6 +5653,25 @@ async function calculateDemoStatistics(features) {
   }
 
   try {
+    // Check if DuckDB instance exists and initialize if needed
+    if (!window.duckdbInstance) {
+      console.warn('DuckDB instance not available, attempting to initialize...');
+      try {
+        await waitForDuckDBModule();
+        await initializeDuckDB();
+      } catch (initError) {
+        console.error('Failed to initialize DuckDB:', initError);
+        // Return default values if DuckDB initialization fails
+        return {
+          totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
+          avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
+          avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
+          avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
+          totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+        };
+      }
+    }
+
     const conn = await window.duckdbInstance.connect();
     
     const originIds = features.map(f => f.properties.OriginId_tracc).filter(id => id);
