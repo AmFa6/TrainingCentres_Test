@@ -774,9 +774,6 @@ async function loadGridData() {
     
     calculateGridStatistics(grid);
     
-    // Initialize DuckDB for analytics with the processed grid data
-    initializeDuckDBForAnalytics(grid);
-    
     updateFilterDropdown();
     updateFilterValues();
     
@@ -812,90 +809,6 @@ async function loadJourneyTimeCsv() {
   }
 }
 
-/**
- * Wait for DuckDB-WASM ES module to be loaded
- */
-async function waitForDuckDBModule() {
-  return new Promise((resolve, reject) => {
-    if (window.duckdb) {
-      console.log('🦆✅ [DUCKDB MODULE] DuckDB module already available');
-      resolve();
-      return;
-    }
-    
-    const handleDuckDBReady = (event) => {
-      console.log('🦆✅ [DUCKDB MODULE] Received duckdb-ready event');
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      resolve();
-    };
-    
-    const handleDuckDBError = (event) => {
-      console.error('🦆❌ [DUCKDB MODULE] DuckDB-WASM error event received:', event.detail);
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      reject(new Error(`Failed to load DuckDB-WASM: ${event.detail.message}`));
-    };
-    
-    console.log('🦆⏰ [DUCKDB MODULE] Waiting for duckdb-ready event...');
-    window.addEventListener('duckdb-ready', handleDuckDBReady);
-    window.addEventListener('duckdb-error', handleDuckDBError);
-    
-    setTimeout(() => {
-      console.log('🦆❌ [DUCKDB MODULE] Timeout waiting for DuckDB-WASM to load (30s)');
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      reject(new Error('Timeout waiting for DuckDB-WASM to load'));
-    }, 30000);
-  });
-}
-
-/**
- * Initialize DuckDB-WASM with reduced logging
- */
-async function initializeDuckDB() {
-  try {    
-    if (!window.duckdb) {
-      throw new Error('DuckDB-WASM module not available');
-    }
-    
-    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'VoidLogger'];
-    const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
-    
-    if (missingMethods.length > 0) {
-      console.error('Missing required DuckDB methods:', missingMethods);
-      throw new Error(`DuckDB-WASM is missing required methods: ${missingMethods.join(', ')}`);
-    }
-    
-    if (!window.duckdbInstance) {      
-      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
-      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
-      
-      const worker_url = URL.createObjectURL(
-        new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
-      );
-      const worker = new Worker(worker_url);
-      
-      const logger = new window.duckdb.VoidLogger();
-      
-      const db = new window.duckdb.AsyncDuckDB(logger, worker);
-      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      
-      URL.revokeObjectURL(worker_url);
-      
-      window.duckdbInstance = db;
-    }
-    
-    return window.duckdbInstance;
-  } catch (error) {
-    console.error('Failed to initialize DuckDB-WASM:', error);
-    throw error;
-  }
-}
-
-/**
- * Fast processing of grid data with key type matching fix
- */
 async function processGridDataFast(data1, data2, csvText1, csvText2) {
   return new Promise((resolve) => {    
     const csvData1 = Papa.parse(csvText1, { 
@@ -975,84 +888,6 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
   });
 }
 
-/**
- * Initialize DuckDB in background for advanced analytics (non-blocking)
- */
-async function initializeDuckDBForAnalytics(gridData) {
-  console.log('🦆🚀 [DUCKDB ANALYTICS] Starting DuckDB analytics initialization...');
-  try {    
-    setTimeout(async () => {
-      console.log('🦆⏰ [DUCKDB ANALYTICS] Beginning background initialization after 100ms delay');
-      try {
-        console.log('🦆🔄 [DUCKDB ANALYTICS] Waiting for DuckDB module...');
-        await waitForDuckDBModule();
-        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB module ready, initializing database...');
-        await initializeDuckDB();
-        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB database initialized, connecting...');
-        
-        const db = window.duckdbInstance;
-        const conn = await db.connect();
-        console.log('🦆✅ [DUCKDB ANALYTICS] Connected to DuckDB, checking grid data...');
-        
-        if (!gridData || !gridData.features || gridData.features.length === 0) {
-          console.warn('🦆⚠️ [DUCKDB ANALYTICS] No grid data available for DuckDB analytics');
-          await conn.close();
-          return;
-        }
-        
-        console.log(`🦆📊 [DUCKDB ANALYTICS] Creating analytics table for ${gridData.features.length} features...`);
-                
-        await conn.query(`
-          CREATE TABLE grid_analytics (
-            OriginId_tracc INTEGER,
-            pop DOUBLE,
-            pop_growth DOUBLE,
-            imd_score_mhclg DOUBLE,
-            imd_decile_mhclg INTEGER,
-            hh_caravail_ts045 DOUBLE,
-            lad24cd VARCHAR,
-            wd24cd VARCHAR
-          )
-        `);
-        
-        console.log('🦆📝 [DUCKDB ANALYTICS] Table created, inserting data in batches...');
-        const BATCH_SIZE = 20000;
-        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
-          const batch = gridData.features.slice(i, i + BATCH_SIZE);
-          const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-          const totalBatches = Math.ceil(gridData.features.length / BATCH_SIZE);
-          console.log(`🦆📦 [DUCKDB ANALYTICS] Processing batch ${batchNum}/${totalBatches} (${batch.length} features)...`);
-          
-          const values = batch.map(f => {
-            const props = f.properties;
-            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
-          }).join(', ');
-          
-          await conn.query(`
-            INSERT INTO grid_analytics VALUES ${values}
-          `);
-        }
-        
-        console.log('🦆🔐 [DUCKDB ANALYTICS] Data insertion complete, closing connection...');
-        
-        await conn.close();
-        
-        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB analytics initialization completed successfully');
-        window.duckdbAnalyticsReady = true;
-        
-      } catch (error) {
-        console.error('🦆❌ [DUCKDB ANALYTICS] DuckDB analytics initialization failed:', error);
-      }
-    }, 100);
-    
-  } catch (error) {
-    console.error('🦆❌ [DUCKDB ANALYTICS] Background DuckDB initialization failed:', error);
-  }
-}
-
-/**
- * Process batch geometries with optimized JSON parsing and memory management
- */
 async function processBatchGeometries(batchRows, batchStartIndex) {
   const features = [];
   const geometryParseErrors = [];
@@ -5866,112 +5701,6 @@ function applyRangeFilter(features, filterValue) {
   return features;
 }
 
-/**
- * Wait for DuckDB analytics to be ready
- */
-function waitForDuckDBAnalytics(timeoutMs = 10000) {
-  return new Promise((resolve, reject) => {
-    if (window.duckdbAnalyticsReady) {
-      resolve();
-      return;
-    }
-    
-    const startTime = Date.now();
-    const checkInterval = setInterval(() => {
-      if (window.duckdbAnalyticsReady) {
-        clearInterval(checkInterval);
-        resolve();
-      } else if (Date.now() - startTime > timeoutMs) {
-        clearInterval(checkInterval);
-        reject(new Error('DuckDB analytics timeout'));
-      }
-    }, 100);
-  });
-}
-
-/**
- * Calculate statistics using DuckDB for better performance on large datasets
- */
-async function calculateStatisticsWithDuckDB(features) {  
-  const startTime = performance.now();
-  console.log(`🦆🔢 [DUCKDB CALC] Starting DuckDB statistics calculation for ${features.length} features`);
-  
-  try {
-    const conn = await window.duckdbInstance.connect();
-    
-    const originIds = features.map(f => f.properties.OriginId_tracc).filter(id => id);
-    
-    if (originIds.length === 0) {
-      console.log(`🦆⚠️ [DUCKDB CALC] No valid origin IDs found, falling back to JavaScript`);
-      await conn.close();
-      return await calculateStatisticsWithJavaScript(features);
-    }
-    
-    console.log(`🦆📊 [DUCKDB CALC] Processing ${originIds.length} origin IDs with DuckDB SQL query`);
-    const batchSize = 20000;
-    await conn.query('CREATE TEMP TABLE filtered_origins (id INTEGER)');
-    
-    for (let i = 0; i < originIds.length; i += batchSize) {
-      const batch = originIds.slice(i, i + batchSize);
-      const values = batch.map(id => `(${id})`).join(',');
-      await conn.query(`INSERT INTO filtered_origins VALUES ${values}`);
-    }
-    
-    const result = await conn.query(`
-      SELECT 
-        SUM(pop) as total_population,
-        MIN(pop) as min_population,
-        MAX(pop) as max_population,
-        SUM(pop * imd_score_mhclg) / NULLIF(SUM(CASE WHEN imd_score_mhclg IS NOT NULL THEN pop END), 0) as avg_imd_score,
-        MIN(imd_score_mhclg) as min_imd_score,
-        MAX(imd_score_mhclg) as max_imd_score,
-        SUM(pop * imd_decile_mhclg) / NULLIF(SUM(CASE WHEN imd_decile_mhclg IS NOT NULL THEN pop END), 0) as avg_imd_decile,
-        MIN(imd_decile_mhclg) as min_imd_decile,
-        MAX(imd_decile_mhclg) as max_imd_decile,
-        SUM(pop * hh_caravail_ts045) / NULLIF(SUM(CASE WHEN hh_caravail_ts045 IS NOT NULL THEN pop END), 0) as avg_car_availability,
-        MIN(hh_caravail_ts045) as min_car_availability,
-        MAX(hh_caravail_ts045) as max_car_availability,
-        SUM(pop_growth) as total_pop_growth,
-        MIN(pop_growth) as min_pop_growth,
-        MAX(pop_growth) as max_pop_growth
-      FROM grid_analytics g
-      INNER JOIN filtered_origins f ON g.OriginId_tracc = f.id
-    `);
-    
-    await conn.close();
-    
-    const row = result.toArray()[0];
-    
-    const endTime = performance.now();
-    console.log(`🦆✅ [DUCKDB CALC] DuckDB calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
-    
-    return {
-      totalPopulation: Number(row.total_population) || 0,
-      minPopulation: Number(row.min_population) || 0,
-      maxPopulation: Number(row.max_population) || 0,
-      avgImdScore: Number(row.avg_imd_score) || 0,
-      minImdScore: Number(row.min_imd_score) || 0,
-      maxImdScore: Number(row.max_imd_score) || 0,
-      avgImdDecile: Number(row.avg_imd_decile) || 0,
-      minImdDecile: Number(row.min_imd_decile) || 0,
-      maxImdDecile: Number(row.max_imd_decile) || 0,
-      avgCarAvailability: Number(row.avg_car_availability) || 0,
-      minCarAvailability: Number(row.min_car_availability) || 0,
-      maxCarAvailability: Number(row.max_car_availability) || 0,
-      totalPopGrowth: Number(row.total_pop_growth) || 0,
-      minPopGrowth: Number(row.min_pop_growth) || 0,
-      maxPopGrowth: Number(row.max_pop_growth) || 0
-    };
-  } catch (error) {
-    const endTime = performance.now();
-    console.error(`🦆❌ [DUCKDB CALC] Error in DuckDB statistics calculation after ${(endTime - startTime).toFixed(2)}ms:`, error);
-    return await calculateStatisticsWithJavaScript(features);
-  }
-}
-
-/**
- * Original JavaScript-based statistics calculation (renamed for clarity)
- */
 function calculateStatisticsWithJavaScript(features) {
   const startTime = performance.now();
   const timestamp = new Date().toLocaleTimeString();
@@ -6109,15 +5838,14 @@ function calculateStatisticsWithJavaScript(features) {
   });
 }
 
-/**
- * Enhanced statistics calculation that can use DuckDB for large datasets
- */
 async function calculateBaseStatistics(features) {
   console.log(`🔢 [CALC BASE] Starting base statistics calculation for ${features ? features.length : 0} features`);
   
   showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
+  
   if (!features || features.length === 0) {
     console.log(`⚠️ [CALC BASE] No features provided, returning empty statistics`);
+    hideLoadingIndicator('base-statistics');
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
       avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
@@ -6127,21 +5855,7 @@ async function calculateBaseStatistics(features) {
     };
   }
 
-  try {
-    console.log(`🦆 [DUCKDB CHECK] Waiting for DuckDB analytics to be ready...`);
-    await waitForDuckDBAnalytics(10000);
-    if (window.duckdbAnalyticsReady) {
-      console.log(`🦆 [DUCKDB] DuckDB is ready! Using DuckDB for statistics calculation`);
-      const result = await calculateStatisticsWithDuckDB(features);
-      hideLoadingIndicator('base-statistics');
-      console.log(`✅ [DUCKDB] DuckDB calculation completed successfully`);
-      return result;
-    }
-  } catch (error) {
-    console.warn(`🦆❌ [DUCKDB FALLBACK] DuckDB not ready, falling back to JavaScript calculation:`, error);
-  }
-  
-  console.log(`🟨 [JAVASCRIPT] Using JavaScript for statistics calculation (DuckDB not available)`);
+  console.log(`🟨 [JAVASCRIPT] Using JavaScript for statistics calculation`);
   const result = await calculateStatisticsWithJavaScript(features);
   hideLoadingIndicator('base-statistics');
   console.log(`✅ [JAVASCRIPT] JavaScript calculation completed successfully`);
