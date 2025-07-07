@@ -14,36 +14,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
   <script src="https://unpkg.com/@mapbox/togeojson@0.16.0/togeojson.js"></script>
-  
-  <!-- Load DuckDB-WASM as ES module - This is the correct way -->
-  <script type="module">
-    console.log('=== Loading DuckDB-WASM as ES Module ===');
-    
-    try {
-      // Import DuckDB-WASM as ES module
-      const duckdb = await import('https://cdn.jsdelivr.net/npm/@duckdb/duckdb-wasm/+esm');
-      
-      console.log('✅ DuckDB-WASM ES module loaded successfully');
-      console.log('DuckDB module:', duckdb);
-      console.log('Available exports:', Object.keys(duckdb));
-      
-      // Make duckdb available globally for the main application
-      window.duckdb = duckdb;
-      window.duckdbLoaded = true;
-      
-      // Dispatch a custom event to notify that DuckDB is ready
-      window.dispatchEvent(new CustomEvent('duckdb-ready', { detail: duckdb }));
-      
-      console.log('DuckDB-WASM is now available globally as window.duckdb');
-      
-    } catch (error) {
-      console.error('❌ Failed to load DuckDB-WASM ES module:', error);
-      console.error('Error details:', error.message);
-      
-      // Dispatch error event
-      window.dispatchEvent(new CustomEvent('duckdb-error', { detail: error }));
-    }
-  </script>
   <style>
   html, body {
     height: 100%;
@@ -216,7 +186,7 @@
   }
   .noUi-handle-transparent {
     background: transparent !important;
-    border: 2px solid #767676 !important;
+    border: 1px solid #767676 !important;
   }
   .noUi-handle::after {
     content: attr(data-value);
