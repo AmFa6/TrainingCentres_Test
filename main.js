@@ -219,7 +219,6 @@ filterTypeDropdown.addEventListener('change', () => {
   } else {
     highlightCheckbox.disabled = false;
   }
-  
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
   }
@@ -243,10 +242,6 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
   }
 });
 
-/**
- * Main application initialization
- * Using a phased loading approach to improve perceived performance
- */
 document.addEventListener('DOMContentLoaded', (event) => {
   clearAllLoadingIndicators();
   initializeUI();
@@ -272,1239 +267,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
     clearAllLoadingIndicators();
   });
 });
-
-/**
- * Initializes the basic UI components
- * This is the first function called during application initialization
- */
-function initializeUI() {
-  createStaticLegendControls();
-
-  initializeLegendControls();
-  
-  const dataLayerCategory = document.getElementById('data-layer-category');
-  if (dataLayerCategory) {
-    dataLayerCategory.style.display = 'none';
-  }
-  
-  setupAdditionalUIListeners();
-}
-
-/**
- * Sets up event listeners for UI elements like checkboxes and buttons
- */
-function setupAdditionalUIListeners() {
-  document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
-    checkbox.addEventListener('change', () => {
-      if (AmenitiesCatchmentLayer) {
-        applyAmenitiesCatchmentLayerStyling();
-      }
-    });
-  });
-}
-
-/**
- * Creates and sets up event listeners for static legend controls
- */
-function createStaticLegendControls() {
-  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-  if (amenitiesCheckbox) {
-    amenitiesCheckbox.addEventListener('change', () => {
-      if (amenitiesCheckbox.checked) {
-        drawSelectedAmenities();
-        amenitiesLayerGroup.addTo(map);
-      } else {
-        map.removeLayer(amenitiesLayerGroup);
-      }
-    });
-  }
-
-  const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
-  if (uaBoundariesCheckbox) {
-    uaBoundariesCheckbox.addEventListener('change', () => {
-      if (uaBoundariesLayer) {
-        if (uaBoundariesCheckbox.checked) {
-          uaBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          uaBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
-
-  const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
-  if (wardBoundariesCheckbox) {
-    wardBoundariesCheckbox.addEventListener('change', () => {
-      if (wardBoundariesLayer) {
-        if (wardBoundariesCheckbox.checked) {
-          wardBoundariesLayer.setStyle({ opacity: 1 });
-        } else {
-          wardBoundariesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
-  
-  const busStopsCheckbox = document.getElementById('busStopsCheckbox');
-  if (busStopsCheckbox) {
-    busStopsCheckbox.addEventListener('change', () => {
-      if (busStopsLayer) {
-        if (busStopsCheckbox.checked) {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ 
-              opacity: 1, 
-              fillOpacity: layer.options._calculatedFillOpacity 
-            });
-          });
-        } else {
-          busStopsLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: 0, fillOpacity: 0 });
-          });
-        }
-      }
-    });
-  }
-  
-  const busLinesCheckbox = document.getElementById('busLinesCheckbox');
-  if (busLinesCheckbox) {
-    busLinesCheckbox.addEventListener('change', () => {
-      if (busLinesLayer) {
-        if (busLinesCheckbox.checked) {
-          busLinesLayer.eachLayer(layer => {
-            layer.setStyle({ opacity: layer.options._calculatedOpacity });
-          });
-        } else {
-          busLinesLayer.setStyle({ opacity: 0 });
-        }
-      }
-    });
-  }
-
-  const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
-  if (roadNetworkCheckbox) {
-    roadNetworkCheckbox.addEventListener('change', () => {
-      if (roadNetworkLayer) {
-        if (roadNetworkCheckbox.checked) {
-          roadNetworkLayer.setStyle({
-            opacity: 1,
-          });
-        } else {
-          roadNetworkLayer.setStyle({
-            opacity: 0,
-          });
-        }
-      }
-    });
-  }
-}
-
-/**
- * Initializes collapsible legend controls
- */
-function initializeLegendControls() {  
-  document.querySelectorAll('.legend-category-header').forEach(header => {
-    header.addEventListener('click', function() {
-      const category = this.closest('.legend-category');
-      category.classList.toggle('legend-category-collapsed');
-    });
-  });
-  
-  const legendHeader = document.querySelector('.legend-header');
-  let isLegendExpanded = true;
-  
-  if (legendHeader) {
-    legendHeader.addEventListener('click', function() {
-      isLegendExpanded = !isLegendExpanded;
-      
-      const legend = document.getElementById('legend');
-      legend.classList.toggle('collapsed', !isLegendExpanded);
-      
-      const legendContent = document.getElementById('legend-content-wrapper');
-      if (legendContent) {
-        legendContent.style.display = isLegendExpanded ? 'block' : 'none';
-      }
-    });
-  }
-}
-
-/**
- * Initializes collapsible panels and their behavior
- */
-function initializeCollapsiblePanels() {
-  const collapsibleButtons = document.querySelectorAll(".collapsible");
-  collapsibleButtons.forEach(button => {
-    const content = button.nextElementSibling;
-    if (content) {
-      content.style.display = "none";
-      button.classList.add("collapsed");
-
-      button.addEventListener("click", function() {
-        this.classList.toggle("active");
-        content.style.display = content.style.display === "block" ? "none" : "block";
-        this.classList.toggle("collapsed", content.style.display === "none");
-      });
-    }
-  });
-
-  function handlePanelStateChange(header, isOpen) {
-    const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
-    
-    if (isOpen) {
-      dataPanelHeaders.forEach(otherHeader => {
-        if (otherHeader !== header) {
-          otherHeader.classList.add("collapsed");
-          const otherContent = otherHeader.nextElementSibling;
-          if (otherContent) {
-            otherContent.style.display = "none";
-          }
-          
-          if (otherHeader.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
-            lastAmenitiesState = {
-              selectingFromMap,
-              selectedAmenitiesFromMap,
-              selectedAmenitiesAmenities
-            };
-            map.removeLayer(AmenitiesCatchmentLayer);
-            AmenitiesCatchmentLayer = null;
-          } 
-        }
-      });
-    }
-    
-    if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
-      showLoadingIndicator('amenities-catchment', 'Loading amenities catchment...');
-      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
-      
-      if (lastAmenitiesState.selectingFromMap) {
-        selectingFromMap = lastAmenitiesState.selectingFromMap;
-        selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
-        
-        AmenitiesPurpose.forEach(checkbox => {
-          checkbox.checked = lastAmenitiesState.selectedAmenitiesAmenities.includes(checkbox.value);
-        });
-      }
-      
-      updateAmenitiesCatchmentLayer();
-    } else if (!isOpen && header.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
-      lastAmenitiesState = {
-        selectingFromMap,
-        selectedAmenitiesFromMap,
-        selectedAmenitiesAmenities
-      };
-      map.removeLayer(AmenitiesCatchmentLayer);
-      AmenitiesCatchmentLayer = null;
-      drawSelectedAmenities([]);
-    }
-  }
-
-  const panelHeaders = document.querySelectorAll(".panel-header");
-  panelHeaders.forEach(header => {
-    const content = header.nextElementSibling;
-    if (content) {
-      content.style.display = "none";
-      header.classList.add("collapsed");
-
-      header.addEventListener("click", function() {
-        const isCurrentlyOpen = !this.classList.contains('collapsed');
-        const willOpen = !isCurrentlyOpen;
-        
-        this.classList.toggle("collapsed");
-        content.style.display = willOpen ? "block" : "none";
-        
-        if (!this.classList.contains('summary-header')) {
-          handlePanelStateChange(this, willOpen);
-        }
-      });
-    }
-  });
-  
-  const summaryHeader = document.getElementById('toggle-summary-panel');
-  const summaryContent = document.getElementById('summary-content');
-  
-  if (summaryHeader && summaryContent) {
-    summaryContent.style.display = "none";
-    summaryHeader.classList.add("collapsed");
-    
-    summaryHeader.addEventListener("click", function() {
-      const isCollapsed = this.classList.contains("collapsed");
-      this.classList.toggle("collapsed");
-      summaryContent.style.display = isCollapsed ? "block" : "none";
-    });
-    
-    summaryHeader.addEventListener("click", function() {
-      this.classList.toggle("collapsed");
-      const isNowCollapsed = this.classList.contains("collapsed");
-      summaryContent.style.display = isNowCollapsed ? "none" : "block";
-    });
-  }
-}
-
-/**
- * Creates and sets up map panes with appropriate z-index values
- */
-function setupMapPanes() {
-  const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
-  existingPanes.forEach(pane => {
-    if (pane.className.includes('custom-pane')) {
-      pane.parentNode.removeChild(pane);
-    }
-  });
-  
-  map.createPane('polygonLayers').style.zIndex = 300;
-  map.createPane('boundaryLayers').style.zIndex = 400;
-  map.createPane('roadLayers').style.zIndex = 500;
-  map.createPane('busLayers').style.zIndex = 600;
-  map.createPane('userLayers').style.zIndex = 700;
-}
-
-/**
- * Loads base map layers (boundaries, transport infrastructure)
- * @returns {Promise} A promise that resolves when all base layers are loaded
- */
-function loadBaseLayers() {
-  showLoadingIndicator('base-layers', 'Loading map layers...');
-  return Promise.all([
-    loadBoundaryData(),
-    loadTransportInfrastructure()
-  ]).then(() => {
-    hideLoadingIndicator('base-layers');
-  });
-}
-
-/**
- * Enhanced loadBoundaryData that triggers pending amenities updates when complete
- */
-function loadBoundaryData() {
-  const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
-  
-  return Promise.all([
-    fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
-      .then(response => response.json())
-      .then(data => {
-        return convertMultiPolygonToPolygons(data).then(convertedData => {
-          convertedData.features.forEach(feature => {
-            const code = feature.properties.LAD24CD;
-            const name = feature.properties.LAD24NM;
-            if (code && name) {
-              ladCodeToNameMap[code] = name;
-            }
-          });
-          
-          uaBoundariesLayer = L.geoJSON(convertedData, {
-            pane: 'boundaryLayers',
-            style: function (feature) {
-              return {
-                color: 'black',
-                weight: 1.5,
-                fillOpacity: 0,
-                opacity: 0
-              };
-            },
-          }).addTo(map);
-          
-          updateFilterDropdown();
-          updateFilterValues();
-
-          if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
-            const dataStatus = checkAmenitiesDataReady();
-            if (dataStatus.ready) {
-              setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
-            }
-          }
-        });
-      }),
-    
-    fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
-      .then(response => response.json())
-      .then(data => {
-        return convertMultiPolygonToPolygons(data)
-          .then(convertedData => {
-            const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
-            
-            filteredFeatures.forEach(feature => {
-              const code = feature.properties.WD24CD;
-              const name = feature.properties.WD24NM;
-              
-              if (code && name) {
-                wardCodeToNameMap[code] = name;
-              }
-            });
-            
-            const wardGeoJson = {
-              type: 'FeatureCollection',
-              features: filteredFeatures
-            };
-
-            wardBoundariesLayer = L.geoJSON(wardGeoJson, {
-              pane: 'boundaryLayers',
-              style: function () {
-                return {
-                  color: 'black',
-                  weight: 1,
-                  fillOpacity: 0,
-                  opacity: 0
-                };
-              },
-            }).addTo(map);
-            
-            updateFilterDropdown();
-            updateFilterValues();
-
-            if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
-              const dataStatus = checkAmenitiesDataReady();
-              if (dataStatus.ready) {
-                setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
-              }
-            }
-          });
-      })
-  ]).catch(error => {
-    console.error("Error loading boundary data:", error);
-  });
-}
-
-/**
- * Loads transport infrastructure (bus lines, stops, road network)
- * @returns {Promise} A promise that resolves when transport infrastructure is loaded
- */
-function loadTransportInfrastructure() {  
-  return Promise.all([
-    fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
-      .then(response => response.json())
-      .then(data => {
-        busLinesLayer = L.geoJSON(data, {
-          pane: 'busLayers',
-          style: function (feature) {
-            const frequency = parseFloat(feature.properties.am_peak_service_frequency) || 0;
-            const opacity = frequency === 0 ? 0.1 : Math.min(0.1 + (frequency / 6) * 0.4, 0.5);
-            
-            return {
-              color: 'green',
-              weight: 2,
-              fillOpacity: 0,
-              opacity: 0,
-              _calculatedOpacity: opacity
-            };
-          },
-        }).addTo(map);
-      }),
-    
-    fetch('https://AmFa6.github.io/TAF_test/stops.geojson')
-      .then(response => response.json())
-      .then(data => {
-        busStopsLayer = L.geoJSON(data, {
-          pane: 'busLayers',
-          pointToLayer: function(feature, latlng) {
-            const frequency = parseFloat(feature.properties.am_peak_combined_frequency) || 0;
-            const fillOpacity = frequency === 0 ? 0 : Math.min(frequency / 12, 1);
-            
-            return L.circleMarker(latlng, {
-              radius: 3,
-              fillColor: 'green',
-              color: 'green',
-              weight: 0.5,
-              opacity: 0,
-              fillOpacity: 0,
-              _calculatedFillOpacity: fillOpacity
-            });
-          }
-        }).addTo(map);
-      }),
-    
-    fetch('https://AmFa6.github.io/TAF_test/simplified_network.geojson')
-      .then(response => response.json())
-      .then(data => {
-        roadNetworkLayer = L.geoJSON(data, {
-          pane: 'roadLayers',
-          style: function (feature) {
-            const roadFunction = feature.properties.roadfunction;
-            let weight = 0;
-            
-            if (roadFunction === 'Motorway') {
-              weight = 4;
-            } else if (roadFunction === 'A Road') {
-              weight = 2;
-            }
-            
-            return {
-              color: 'white',
-              weight: weight,
-              opacity: 0,
-            };
-          },
-        }).addTo(map);
-      })
-  ]).catch(error => {
-    console.error("Error loading transport infrastructure:", error);
-  });
-}
-
-/**
- * Loads heavier data (grid, training centers) in the background
- */
-function loadBackgroundData() {  
-  showLoadingIndicator('background-data', 'Loading training centres...');
-  loadTrainingCentres()
-    .then(() => {
-      hideLoadingIndicator('background-data');
-      initializeTrainingCentres();
-      loadGridData();
-    })
-    .catch(error => {
-      console.error('Error loading training centres:', error);
-      hideLoadingIndicator('background-data');
-      showErrorNotification('Error loading training center data. Some features may be limited.');
-      loadGridData();
-    });
-}
-
-async function loadGridData() {
-  showLoadingIndicator('grid-data', 'Loading grid data...');
-  
-  try {
-    const [data1, data2, csvText1, csvText2] = await Promise.all([
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
-      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
-    ]);
-        
-    const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
-    grid = processedGrid;
-    
-    calculateGridStatistics(grid);
-    
-    updateFilterDropdown();
-    updateFilterValues();
-    
-    if (initialLoadComplete) {
-      updateSummaryStatistics(grid.features);
-    }
-        
-    if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
-      setTimeout(() => {
-        if (amenitiesUpdateRequested) {
-          updateAmenitiesCatchmentLayer();
-        }
-      }, 500);
-    }
-    
-    hideLoadingIndicator('grid-data');
-    
-  } catch (error) {
-    console.error(`Error loading grid data:`, error);
-    hideLoadingIndicator('grid-data');
-  }
-}
-
-async function loadJourneyTimeCsv() {
-  const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
-  try {
-    const response = await fetch(csvPath);
-    const csvText = await response.text();
-    fullCsvData = Papa.parse(csvText, { header: true }).data;
-  } catch (err) {
-    console.error('Failed to load journey time CSV:', err);
-    fullCsvData = [];
-  }
-}
-
-/**
- * Wait for DuckDB-WASM ES module to be loaded
- */
-async function waitForDuckDBModule() {
-  return new Promise((resolve, reject) => {
-    if (window.duckdb && window.duckdbLoaded) {
-      resolve();
-      return;
-    }
-    
-    const handleDuckDBReady = (event) => {
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      resolve();
-    };
-    
-    const handleDuckDBError = (event) => {
-      console.error('DuckDB-WASM error event received:', event.detail);
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      reject(new Error(`Failed to load DuckDB-WASM: ${event.detail.message}`));
-    };
-    
-    window.addEventListener('duckdb-ready', handleDuckDBReady);
-    window.addEventListener('duckdb-error', handleDuckDBError);
-    
-    setTimeout(() => {
-      window.removeEventListener('duckdb-ready', handleDuckDBReady);
-      window.removeEventListener('duckdb-error', handleDuckDBError);
-      reject(new Error('Timeout waiting for DuckDB-WASM to load'));
-    }, 30000);
-  });
-}
-
-/**
- * Initialize DuckDB-WASM with reduced logging
- */
-async function initializeDuckDB() {
-  try {    
-    if (!window.duckdb) {
-      throw new Error('DuckDB-WASM module not available');
-    }
-    
-    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'VoidLogger'];
-    const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
-    
-    if (missingMethods.length > 0) {
-      console.error('Missing required DuckDB methods:', missingMethods);
-      throw new Error(`DuckDB-WASM is missing required methods: ${missingMethods.join(', ')}`);
-    }
-    
-    if (!window.duckdbInstance) {      
-      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
-      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
-      
-      const worker_url = URL.createObjectURL(
-        new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
-      );
-      const worker = new Worker(worker_url);
-      
-      const logger = new window.duckdb.VoidLogger();
-      
-      const db = new window.duckdb.AsyncDuckDB(logger, worker);
-      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
-      
-      URL.revokeObjectURL(worker_url);
-      
-      window.duckdbInstance = db;
-    }
-    
-    return window.duckdbInstance;
-  } catch (error) {
-    console.error('Failed to initialize DuckDB-WASM:', error);
-    throw error;
-  }
-}
-
-/**
- * Fast processing of grid data with key type matching fix
- */
-async function processGridDataFast(data1, data2, csvText1, csvText2) {
-  return new Promise((resolve) => {    
-    const csvData1 = Papa.parse(csvText1, { 
-      header: true, 
-      skipEmptyLines: true,
-      fastMode: true
-    }).data;
-    
-    const csvData2 = Papa.parse(csvText2, { 
-      header: true, 
-      skipEmptyLines: true,
-      fastMode: true
-    }).data;
-    
-    const csvLookup = new Map();
-    
-    csvData1.forEach(row => {
-      if (row.OriginId_tracc) {
-        const numericKey = Number(row.OriginId_tracc);
-        if (!isNaN(numericKey)) {
-          csvLookup.set(numericKey, row);
-        }
-      }
-    });
-    
-    csvData2.forEach(row => {
-      if (row.OriginId_tracc) {
-        const numericKey = Number(row.OriginId_tracc);
-        if (!isNaN(numericKey)) {
-          csvLookup.set(numericKey, row);
-        }
-      }
-    });
-        
-    const BATCH_SIZE = 20000;
-    const allFeatures = [...data1.features, ...data2.features];
-    const processedFeatures = [];
-    
-    let processed = 0;
-    const totalFeatures = allFeatures.length;
-        
-    for (let i = 0; i < totalFeatures; i += BATCH_SIZE) {
-      const batchEnd = Math.min(i + BATCH_SIZE, totalFeatures);
-      const batchStart = performance.now();
-      
-      for (let j = i; j < batchEnd; j++) {
-        const feature = allFeatures[j];
-        const originId = feature.properties.OriginId_tracc;
-        
-        if (!originId) {
-          continue;
-        }
-        
-        const csvData = csvLookup.get(originId);
-        
-        if (csvData) {
-          Object.assign(feature.properties, csvData);
-          
-          if (!feature.properties._centroid) {
-            const centroid = turf.centroid(feature);
-            feature.properties._centroid = centroid.geometry.coordinates;
-          }
-          
-          processedFeatures.push(feature);
-        }
-      }
-      
-      processed = batchEnd;
-    }
-    
-    const combinedData = {
-      type: 'FeatureCollection',
-      features: processedFeatures
-    };
-            
-    resolve(combinedData);
-  });
-}
-
-/**
- * Initialize DuckDB in background for advanced analytics (non-blocking)
- */
-async function initializeDuckDBForAnalytics(gridData) {
-  try {    
-    setTimeout(async () => {
-      try {
-        await waitForDuckDBModule();
-        await initializeDuckDB();
-        
-        const db = window.duckdbInstance;
-        const conn = await db.connect();
-        
-        if (!gridData || !gridData.features || gridData.features.length === 0) {
-          console.warn('No grid data available for DuckDB analytics');
-          await conn.close();
-          return;
-        }
-                
-        await conn.query(`
-          CREATE TABLE grid_analytics (
-            OriginId_tracc INTEGER,
-            pop DOUBLE,
-            pop_growth DOUBLE,
-            imd_score_mhclg DOUBLE,
-            imd_decile_mhclg INTEGER,
-            hh_caravail_ts045 DOUBLE,
-            lad24cd VARCHAR,
-            wd24cd VARCHAR
-          )
-        `);
-        
-        const BATCH_SIZE = 20000;
-        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
-          const batch = gridData.features.slice(i, i + BATCH_SIZE);
-          const values = batch.map(f => {
-            const props = f.properties;
-            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
-          }).join(', ');
-          
-          await conn.query(`
-            INSERT INTO grid_analytics VALUES ${values}
-          `);
-        }
-        
-        await conn.close();
-        
-        window.duckdbAnalyticsReady = true;
-        
-      } catch (error) {
-        console.warn('DuckDB analytics initialization failed (optional feature):', error);
-      }
-    }, 100);
-    
-  } catch (error) {
-    console.warn('Background DuckDB initialization failed (optional):', error);
-  }
-}
-
-/**
- * Process batch geometries with optimized JSON parsing and memory management
- */
-async function processBatchGeometries(batchRows, batchStartIndex) {
-  const features = [];
-  const geometryParseErrors = [];
-  
-  features.length = batchRows.length;
-  let validFeatureCount = 0;
-  
-  for (let i = 0; i < batchRows.length; i++) {
-    const rowObj = batchRows[i];
-    
-    let geometry;
-    try {
-      const geomStr = rowObj.geojson_geom;
-      if (!geomStr || geomStr.length === 0) continue;
-      
-      geometry = JSON.parse(geomStr);
-      
-      if (!geometry || !geometry.type || !geometry.coordinates) {
-        continue;
-      }
-    } catch (e) {
-      geometryParseErrors.push({ index: batchStartIndex + i, error: e.message });
-      continue;
-    }
-    
-    features[validFeatureCount] = {
-      type: 'Feature',
-      geometry: geometry,
-      properties: {
-        OriginId_tracc: rowObj.OriginId_tracc,
-        pop: rowObj.pop,
-        pop_growth: rowObj.pop_growth,
-        imd_score_mhclg: rowObj.imd_score_mhclg,
-        imd_decile_mhclg: rowObj.imd_decile_mhclg,
-        hh_caravail_ts045: rowObj.hh_caravail_ts045,
-        lad24cd: rowObj.lad24cd,
-        wd24cd: rowObj.wd24cd
-      }
-    };
-    
-    validFeatureCount++;
-  }
-  
-  features.length = validFeatureCount;
-  
-  if (geometryParseErrors.length > 0) {
-    console.warn(`⚠️ Failed to parse ${geometryParseErrors.length} geometries in batch starting at ${batchStartIndex}`);
-  }
-  
-  return features;
-}
-
-/**
- * Calculates and stores min/max values for important grid attributes with optimized processing
- * @param {Object} gridData The grid GeoJSON data
- */
-function calculateGridStatistics(gridData) {
-  if (!gridData || !gridData.features || gridData.features.length === 0) return;
-  
-  
-  gridStatistics = {
-    pop: { min: Infinity, max: -Infinity },
-    imd_score_mhclg: { min: Infinity, max: -Infinity },
-    hh_caravail_ts045: { min: Infinity, max: -Infinity },
-    pop_growth: { min: Infinity, max: -Infinity },
-    imd_decile_mhclg: { min: Infinity, max: -Infinity }
-  };
-  
-  const features = gridData.features;
-  
-  for (let i = 0; i < features.length; i++) {
-    const props = features[i].properties;
-    if (!props) continue;
-    
-    for (const field in gridStatistics) {
-      const value = props[field];
-      if (value !== undefined && value !== null) {
-        const numValue = parseFloat(value);
-        if (!isNaN(numValue)) {
-          if (numValue < gridStatistics[field].min) gridStatistics[field].min = numValue;
-          if (numValue > gridStatistics[field].max) gridStatistics[field].max = numValue;
-        }
-      }
-    }
-  }
-  
-  updateSliderRanges('Amenities', 'Opacity');
-  updateSliderRanges('Amenities', 'Outline');
-}
-
-/**
- * Shows a loading indicator that can overlap with others
- * @param {String} processId Unique identifier for this process
- * @param {String} message The message to display
- * @param {Number} progress Optional progress percentage (0-100)
- */
-function showLoadingIndicator(processId, message = 'Loading...', progress = null) {
-  let indicator = document.getElementById(`loading-indicator-${processId}`);
-  
-  if (!indicator) {
-    indicator = document.createElement('div');
-    indicator.id = `loading-indicator-${processId}`;
-    indicator.style.cssText = `
-      position: fixed;
-      bottom: ${10 + (activeLoadingIndicators.size * 60)}px;
-      left: 10px;
-      background: rgba(255,255,255,0.95);
-      padding: 8px 12px;
-      border-radius: 6px;
-      font-size: 12px;
-      z-index: ${indicatorZIndex++};
-      display: flex;
-      flex-direction: column;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-      border-left: 3px solid #3388ff;
-      min-width: 200px;
-    `;
-    
-    const topRow = document.createElement('div');
-    topRow.style.cssText = 'display:flex;align-items:center;';
-    
-    const spinner = document.createElement('div');
-    spinner.className = 'mini-spinner';
-    spinner.style.cssText = `
-      width: 14px;
-      height: 14px;
-      border: 2px solid #e0e0e0;
-      border-top-color: #3388ff;
-      border-radius: 50%;
-      margin-right: 10px;
-      animation: spin 1s linear infinite;
-    `;
-    
-    if (!document.querySelector('#spinner-animation-style')) {
-      const style = document.createElement('style');
-      style.id = 'spinner-animation-style';
-      style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
-      document.head.appendChild(style);
-    }
-    
-    const text = document.createElement('span');
-    text.id = `loading-text-${processId}`;
-    text.style.cssText = 'font-weight:500;color:#333;';
-    
-    const progressBar = document.createElement('div');
-    progressBar.id = `loading-progress-${processId}`;
-    progressBar.style.cssText = `
-      width: 0%;
-      height: 2px;
-      background: #3388ff;
-      margin-top: 4px;
-      transition: width 0.3s ease;
-      display: none;
-    `;
-    
-    topRow.appendChild(spinner);
-    topRow.appendChild(text);
-    indicator.appendChild(topRow);
-    indicator.appendChild(progressBar);
-    document.body.appendChild(indicator);
-    
-    activeLoadingIndicators.set(processId, indicator);
-  }
-  
-  const textElement = document.getElementById(`loading-text-${processId}`);
-  const progressElement = document.getElementById(`loading-progress-${processId}`);
-  
-  if (textElement) textElement.textContent = message;
-  
-  if (progressElement && progress !== null) {
-    progressElement.style.display = 'block';
-    progressElement.style.width = `${Math.max(0, Math.min(100, progress))}%`;
-  } else if (progressElement) {
-    progressElement.style.display = 'none';
-  }
-  
-  indicator.style.display = 'flex';
-}
-
-/**
- * Hides a specific loading indicator
- * @param {String} processId The process identifier
- */
-function hideLoadingIndicator(processId) {
-  const indicator = document.getElementById(`loading-indicator-${processId}`);
-  if (indicator) {
-    indicator.style.transition = 'opacity 0.3s';
-    indicator.style.opacity = '0';
-    setTimeout(() => {
-      if (indicator.parentNode) {
-        indicator.parentNode.removeChild(indicator);
-      }
-      activeLoadingIndicators.delete(processId);
-      
-      repositionLoadingIndicators();
-    }, 300);
-  }
-}
-
-/**
- * Repositions remaining loading indicators to prevent gaps
- */
-function repositionLoadingIndicators() {
-  let index = 0;
-  activeLoadingIndicators.forEach((indicator, processId) => {
-    indicator.style.bottom = `${10 + (index * 60)}px`;
-    index++;
-  });
-}
-
-function clearAllLoadingIndicators() {
-  const allIndicators = document.querySelectorAll('[id^="loading-indicator-"]');
-  allIndicators.forEach(indicator => {
-    if (indicator.parentNode) {
-      indicator.parentNode.removeChild(indicator);
-    }
-  });
-  
-  activeLoadingIndicators.clear();
-}
-
-function debugLoadingIndicators() {
-  console.log('Active loading indicators:', activeLoadingIndicators.size);
-  console.log('Active indicator process IDs:', Array.from(activeLoadingIndicators.keys()));
-  
-  const visibleIndicators = document.querySelectorAll('[id^="loading-indicator-"]');
-  console.log('Visible indicators in DOM:', visibleIndicators.length);
-  
-  visibleIndicators.forEach(indicator => {
-    console.log('Indicator ID:', indicator.id, 'Display:', indicator.style.display);
-  });
-}
-
-/**
- * Shows an error notification to the user
- * @param {String} message The error message to display
- */
-function showErrorNotification(message) {
-  const notification = document.createElement('div');
-  notification.className = 'error-notification';
-  notification.style.cssText = 'position:fixed;top:20px;right:20px;background:#f44336;color:white;padding:10px 20px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9999;max-width:80%;';
-  notification.textContent = message;
-  
-  const closeBtn = document.createElement('span');
-  closeBtn.style.cssText = 'margin-left:10px;cursor:pointer;font-weight:bold;';
-  closeBtn.textContent = '×';
-  closeBtn.onclick = function() {
-    document.body.removeChild(notification);
-  };
-  
-  notification.appendChild(closeBtn);
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    if (document.body.contains(notification)) {
-      notification.style.transition = 'opacity 0.5s';
-      notification.style.opacity = '0';
-      setTimeout(() => {
-        if (document.body.contains(notification)) {
-          document.body.removeChild(notification);
-        }
-      }, 500);
-    }
-  }, 5000);
-}
-
-map.on('zoomend', () => {
-  const currentZoom = map.getZoom();
-  const isAboveZoomThreshold = currentZoom >= 14;
-  
-  if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
-    wasAboveZoomThreshold = isAboveZoomThreshold;
-    
-    if (AmenitiesCatchmentLayer) {
-      drawSelectedAmenities(selectedAmenitiesAmenities);
-    }
-  }
-});
-
-const toTitleCase = (str) => {
-  const wordsToNotCapitalize = ['of', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by'];
-  return str.toLowerCase().replace(/\b\w/g, (letter, index) => {
-    const word = str.toLowerCase().match(/\b\w+/g);
-    const currentWordIndex = str.toLowerCase().substring(0, index).split(/\b\w+/).length - 1;
-    const currentWord = word ? word[currentWordIndex] : '';
-    
-    if (currentWordIndex === 0 || !wordsToNotCapitalize.includes(currentWord)) {
-      return letter.toUpperCase();
-    }
-    return letter;
-  });
-}
-
-/**
- * Get journey time data for a specific origin, sorted by travel time (closest first)
- * Only includes destinations that match current filtering criteria
- * @param {string} originId The OriginId_tracc to get journey time data for
- * @returns {Array} Array of journey time records sorted by total time
- */
-function getJourneyTimeData(originId) {
-  
-  if (!fullCsvData || !originId) {
-    return [];
-  }
-  
-  const originIdStr = String(originId);
-  const originIdNum = Number(originId);
-    
-  const filteredTrainingCentres = filterTrainingCentres();
-  const allowedDestinationIds = new Set(
-    filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
-  );
-    
-  const originRecords = fullCsvData.filter(row => {
-    if (!row.origin || !row.destination || !row.totaltime) {
-      return false;
-    }
-    
-    const rowOrigin = String(row.origin).trim();
-    const isOriginMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
-    
-    const destinationId = String(row.destination);
-    const isDestinationAllowed = allowedDestinationIds.has(destinationId);
-    
-    const totalTime = parseFloat(row.totaltime);
-    const hasValidTime = !isNaN(totalTime);
-    
-    return isOriginMatch && isDestinationAllowed && hasValidTime;
-  });
-    
-  if (originRecords.length === 0) {
-    return [];
-  }
-  
-  originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
-  
-  const journeyTimeData = originRecords.map(record => {
-    let destinationLocation = 'Unknown';
-    
-    if (amenityLayers['TrainingCentres']) {
-      const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
-        const featureFid = String(feature.properties.fid);
-        const recordDestination = String(record.destination);
-        return featureFid === recordDestination;
-      });
-      
-      if (matchingCenter && matchingCenter.properties) {
-        const deliveryPostcode = matchingCenter.properties['Delivery Postcode'] || '';
-        const postcode = matchingCenter.properties.postcode || '';
-        
-        const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
-        
-        if (formattedDeliveryPostcode && postcode) {
-          destinationLocation = `${formattedDeliveryPostcode}, ${postcode}`;
-        } else if (formattedDeliveryPostcode) {
-          destinationLocation = formattedDeliveryPostcode;
-        } else if (postcode) {
-          destinationLocation = postcode;
-        }
-      } else {
-      }
-    }
-    
-    let services = record.services || '';
-    if (!services || services.trim() === '' || services.toLowerCase() === 'n/a') {
-      services = 'walking only';
-    } else {
-      services = services.replace(/_/g, ' + ');
-    }
-    
-    return {
-      destination: destinationLocation,
-      journeyTime: Math.round(parseFloat(record.totaltime)),
-      services: services
-    };
-  });
-  
-  return journeyTimeData;
-}
-
-/**
- * Create HTML content for journey time display with navigation
- * @param {Array} journeyTimeData Array of journey time records
- * @returns {string} HTML content for the journey time section
- */
-function createJourneyTimeContent(journeyTimeData) {  
-  if (!journeyTimeData || journeyTimeData.length === 0) {
-    return '<p>No journey time data available</p>';
-  }
-  
-  const totalRecords = journeyTimeData.length;
-  
-  let html = `
-    <div id="journey-time-container">
-      <div id="journey-time-content">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-          <span style="font-size: 0.9em; color: #666;">
-            <span id="journey-current-index">1</span> of ${totalRecords}
-          </span>
-        </div>
-        
-        <div id="journey-time-details">
-          <strong>Provider:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span><br>
-          <strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins<br>
-          <strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span>
-        </div>
-  `;
-  
-  if (totalRecords > 1) {
-    html += `
-      <div style="display: flex; justify-content: space-between; margin-top: 8px;">
-        <button id="journey-prev-btn" onclick="navigateJourneyTime(-1)" disabled 
-                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: not-allowed; opacity: 0.5;">
-          ← Previous
-        </button>
-        <button id="journey-next-btn" onclick="navigateJourneyTime(1)" 
-                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer;">
-          Next →
-        </button>
-      </div>
-    `;
-  }
-  
-  html += `</div></div>`;
-  
-  window.currentJourneyTimeData = journeyTimeData;
-  window.currentJourneyTimeIndex = 0;
-  
-  return html;
-}
-
-/**
- * Navigate through journey time records
- * @param {number} direction -1 for previous, 1 for next
- */
-function navigateJourneyTime(direction) {
-  
-  if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
-    return;
-  }
-  
-  const totalRecords = window.currentJourneyTimeData.length;
-  let newIndex = window.currentJourneyTimeIndex + direction;
-  
-  if (newIndex < 0) newIndex = 0;
-  if (newIndex >= totalRecords) newIndex = totalRecords - 1;
-  
-  window.currentJourneyTimeIndex = newIndex;
-  const record = window.currentJourneyTimeData[newIndex];
-    
-  const currentIndexEl = document.getElementById('journey-current-index');
-  const destinationEl = document.getElementById('journey-destination');
-  const timeEl = document.getElementById('journey-time');
-  const servicesEl = document.getElementById('journey-services');
-  
-  if (currentIndexEl) currentIndexEl.textContent = newIndex + 1;
-  if (destinationEl) destinationEl.textContent = record.destination;
-  if (timeEl) timeEl.textContent = record.journeyTime;
-  if (servicesEl) servicesEl.textContent = record.services;
-  
-  const prevBtn = document.getElementById('journey-prev-btn');
-  const nextBtn = document.getElementById('journey-next-btn');
-  
-  if (prevBtn) {
-    prevBtn.disabled = newIndex === 0;
-    prevBtn.style.opacity = newIndex === 0 ? '0.5' : '1';
-    prevBtn.style.cursor = newIndex === 0 ? 'not-allowed' : 'pointer';
-  }
-  
-  if (nextBtn) {
-    nextBtn.disabled = newIndex === totalRecords - 1;
-    nextBtn.style.opacity = newIndex === totalRecords - 1 ? '0.5' : '1';
-    nextBtn.style.cursor = newIndex === totalRecords - 1 ? 'not-allowed' : 'pointer';
-  }
-}
 
 map.on('click', function (e) {
   if (isDrawingActive) {
@@ -1720,6 +482,1118 @@ map.on('click', function (e) {
     .setContent(content)
     .openOn(map);
 });
+
+map.on('zoomend', () => {
+  const currentZoom = map.getZoom();
+  const isAboveZoomThreshold = currentZoom >= 14;
+  
+  if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
+    wasAboveZoomThreshold = isAboveZoomThreshold;
+    
+    if (AmenitiesCatchmentLayer) {
+      drawSelectedAmenities(selectedAmenitiesAmenities);
+    }
+  }
+});
+
+function initializeUI() {
+  createStaticLegendControls();
+
+  initializeLegendControls();
+  
+  const dataLayerCategory = document.getElementById('data-layer-category');
+  if (dataLayerCategory) {
+    dataLayerCategory.style.display = 'none';
+  }
+  
+  setupAdditionalUIListeners();
+}
+
+function setupAdditionalUIListeners() {
+  document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
+    checkbox.addEventListener('change', () => {
+      if (AmenitiesCatchmentLayer) {
+        applyAmenitiesCatchmentLayerStyling();
+      }
+    });
+  });
+}
+
+function createStaticLegendControls() {
+  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
+  if (amenitiesCheckbox) {
+    amenitiesCheckbox.addEventListener('change', () => {
+      if (amenitiesCheckbox.checked) {
+        drawSelectedAmenities();
+        amenitiesLayerGroup.addTo(map);
+      } else {
+        map.removeLayer(amenitiesLayerGroup);
+      }
+    });
+  }
+
+  const uaBoundariesCheckbox = document.getElementById('uaBoundariesCheckbox');
+  if (uaBoundariesCheckbox) {
+    uaBoundariesCheckbox.addEventListener('change', () => {
+      if (uaBoundariesLayer) {
+        if (uaBoundariesCheckbox.checked) {
+          uaBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          uaBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const wardBoundariesCheckbox = document.getElementById('wardBoundariesCheckbox');
+  if (wardBoundariesCheckbox) {
+    wardBoundariesCheckbox.addEventListener('change', () => {
+      if (wardBoundariesLayer) {
+        if (wardBoundariesCheckbox.checked) {
+          wardBoundariesLayer.setStyle({ opacity: 1 });
+        } else {
+          wardBoundariesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+  
+  const busStopsCheckbox = document.getElementById('busStopsCheckbox');
+  if (busStopsCheckbox) {
+    busStopsCheckbox.addEventListener('change', () => {
+      if (busStopsLayer) {
+        if (busStopsCheckbox.checked) {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ 
+              opacity: 1, 
+              fillOpacity: layer.options._calculatedFillOpacity 
+            });
+          });
+        } else {
+          busStopsLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: 0, fillOpacity: 0 });
+          });
+        }
+      }
+    });
+  }
+  
+  const busLinesCheckbox = document.getElementById('busLinesCheckbox');
+  if (busLinesCheckbox) {
+    busLinesCheckbox.addEventListener('change', () => {
+      if (busLinesLayer) {
+        if (busLinesCheckbox.checked) {
+          busLinesLayer.eachLayer(layer => {
+            layer.setStyle({ opacity: layer.options._calculatedOpacity });
+          });
+        } else {
+          busLinesLayer.setStyle({ opacity: 0 });
+        }
+      }
+    });
+  }
+
+  const roadNetworkCheckbox = document.getElementById('roadNetworkCheckbox');
+  if (roadNetworkCheckbox) {
+    roadNetworkCheckbox.addEventListener('change', () => {
+      if (roadNetworkLayer) {
+        if (roadNetworkCheckbox.checked) {
+          roadNetworkLayer.setStyle({
+            opacity: 1,
+          });
+        } else {
+          roadNetworkLayer.setStyle({
+            opacity: 0,
+          });
+        }
+      }
+    });
+  }
+}
+
+function initializeLegendControls() {  
+  document.querySelectorAll('.legend-category-header').forEach(header => {
+    header.addEventListener('click', function() {
+      const category = this.closest('.legend-category');
+      category.classList.toggle('legend-category-collapsed');
+    });
+  });
+  
+  const legendHeader = document.querySelector('.legend-header');
+  let isLegendExpanded = true;
+  
+  if (legendHeader) {
+    legendHeader.addEventListener('click', function() {
+      isLegendExpanded = !isLegendExpanded;
+      
+      const legend = document.getElementById('legend');
+      legend.classList.toggle('collapsed', !isLegendExpanded);
+      
+      const legendContent = document.getElementById('legend-content-wrapper');
+      if (legendContent) {
+        legendContent.style.display = isLegendExpanded ? 'block' : 'none';
+      }
+    });
+  }
+}
+
+function initializeCollapsiblePanels() {
+  const collapsibleButtons = document.querySelectorAll(".collapsible");
+  collapsibleButtons.forEach(button => {
+    const content = button.nextElementSibling;
+    if (content) {
+      content.style.display = "none";
+      button.classList.add("collapsed");
+
+      button.addEventListener("click", function() {
+        this.classList.toggle("active");
+        content.style.display = content.style.display === "block" ? "none" : "block";
+        this.classList.toggle("collapsed", content.style.display === "none");
+      });
+    }
+  });
+
+  function handlePanelStateChange(header, isOpen) {
+    const dataPanelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
+    
+    if (isOpen) {
+      dataPanelHeaders.forEach(otherHeader => {
+        if (otherHeader !== header) {
+          otherHeader.classList.add("collapsed");
+          const otherContent = otherHeader.nextElementSibling;
+          if (otherContent) {
+            otherContent.style.display = "none";
+          }
+          
+          if (otherHeader.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
+            lastAmenitiesState = {
+              selectingFromMap,
+              selectedAmenitiesFromMap,
+              selectedAmenitiesAmenities
+            };
+            map.removeLayer(AmenitiesCatchmentLayer);
+            AmenitiesCatchmentLayer = null;
+          } 
+        }
+      });
+    }
+    
+    if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {      
+      if (lastAmenitiesState.selectingFromMap) {
+        selectingFromMap = lastAmenitiesState.selectingFromMap;
+        selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
+        
+        AmenitiesPurpose.forEach(checkbox => {
+          checkbox.checked = lastAmenitiesState.selectedAmenitiesAmenities.includes(checkbox.value);
+        });
+      }
+      updateAmenitiesCatchmentLayer();
+    } else if (!isOpen && header.textContent.includes("Journey Time Catchments - Training Centres") && AmenitiesCatchmentLayer) {
+      lastAmenitiesState = {
+        selectingFromMap,
+        selectedAmenitiesFromMap,
+        selectedAmenitiesAmenities
+      };
+      map.removeLayer(AmenitiesCatchmentLayer);
+      AmenitiesCatchmentLayer = null;
+      drawSelectedAmenities([]);
+    }
+  }
+
+  const panelHeaders = document.querySelectorAll(".panel-header");
+  panelHeaders.forEach(header => {
+    const content = header.nextElementSibling;
+    if (content) {
+      content.style.display = "none";
+      header.classList.add("collapsed");
+
+      header.addEventListener("click", function() {
+        const isCurrentlyOpen = !this.classList.contains('collapsed');
+        const willOpen = !isCurrentlyOpen;
+        
+        this.classList.toggle("collapsed");
+        content.style.display = willOpen ? "block" : "none";
+        
+        if (!this.classList.contains('summary-header')) {
+          handlePanelStateChange(this, willOpen);
+        }
+      });
+    }
+  });
+  
+  const summaryHeader = document.getElementById('toggle-summary-panel');
+  const summaryContent = document.getElementById('summary-content');
+  
+  if (summaryHeader && summaryContent) {
+    summaryContent.style.display = "none";
+    summaryHeader.classList.add("collapsed");
+    
+    summaryHeader.addEventListener("click", function() {
+      const isCollapsed = this.classList.contains("collapsed");
+      this.classList.toggle("collapsed");
+      summaryContent.style.display = isCollapsed ? "block" : "none";
+    });
+    
+    summaryHeader.addEventListener("click", function() {
+      this.classList.toggle("collapsed");
+      const isNowCollapsed = this.classList.contains("collapsed");
+      summaryContent.style.display = isNowCollapsed ? "none" : "block";
+    });
+  }
+}
+
+function setupMapPanes() {
+  const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
+  existingPanes.forEach(pane => {
+    if (pane.className.includes('custom-pane')) {
+      pane.parentNode.removeChild(pane);
+    }
+  });
+  
+  map.createPane('polygonLayers').style.zIndex = 300;
+  map.createPane('boundaryLayers').style.zIndex = 400;
+  map.createPane('roadLayers').style.zIndex = 500;
+  map.createPane('busLayers').style.zIndex = 600;
+  map.createPane('userLayers').style.zIndex = 700;
+}
+
+function loadBaseLayers() {
+  return Promise.all([
+    loadBoundaryData(),
+    loadTransportInfrastructure()
+  ]).then(() => {
+  });
+}
+
+function loadBoundaryData() {
+  const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
+  
+  return Promise.all([
+    fetch(`https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Local_Authority_Districts_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=LAD24CD%20IN%20(${ladCodesString})&f=geojson`)
+      .then(response => response.json())
+      .then(data => {
+        return convertMultiPolygonToPolygons(data).then(convertedData => {
+          convertedData.features.forEach(feature => {
+            const code = feature.properties.LAD24CD;
+            const name = feature.properties.LAD24NM;
+            if (code && name) {
+              ladCodeToNameMap[code] = name;
+            }
+          });
+          
+          uaBoundariesLayer = L.geoJSON(convertedData, {
+            pane: 'boundaryLayers',
+            style: function (feature) {
+              return {
+                color: 'black',
+                weight: 1.5,
+                fillOpacity: 0,
+                opacity: 0
+              };
+            },
+          }).addTo(map);
+          
+          updateFilterDropdown();
+          updateFilterValues();
+
+          if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+            const dataStatus = checkAmenitiesDataReady();
+            if (dataStatus.ready) {
+              setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
+            }
+          }
+        });
+      }),
+    
+    fetch('https://services1.arcgis.com/ESMARspQHYMw9BZ9/arcgis/rest/services/Wards_December_2024_Boundaries_UK_BGC/FeatureServer/0/query?outFields=*&where=1%3D1&geometry=-3.073689%2C51.291726%2C-2.327195%2C51.656841&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects&outSR=4326&f=geojson')
+      .then(response => response.json())
+      .then(data => {
+        return convertMultiPolygonToPolygons(data)
+          .then(convertedData => {
+            const filteredFeatures = convertedData.features.filter(feature => ladCodes.includes(feature.properties.LAD24CD));
+            
+            filteredFeatures.forEach(feature => {
+              const code = feature.properties.WD24CD;
+              const name = feature.properties.WD24NM;
+              
+              if (code && name) {
+                wardCodeToNameMap[code] = name;
+              }
+            });
+            
+            const wardGeoJson = {
+              type: 'FeatureCollection',
+              features: filteredFeatures
+            };
+
+            wardBoundariesLayer = L.geoJSON(wardGeoJson, {
+              pane: 'boundaryLayers',
+              style: function () {
+                return {
+                  color: 'black',
+                  weight: 1,
+                  fillOpacity: 0,
+                  opacity: 0
+                };
+              },
+            }).addTo(map);
+            
+            updateFilterDropdown();
+            updateFilterValues();
+
+            if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+              const dataStatus = checkAmenitiesDataReady();
+              if (dataStatus.ready) {
+                setTimeout(() => updateAmenitiesCatchmentLayer(), 100);
+              }
+            }
+          });
+      })
+  ]).catch(error => {
+    console.error("Error loading boundary data:", error);
+  });
+}
+
+function loadTransportInfrastructure() {  
+  return Promise.all([
+    fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
+      .then(response => response.json())
+      .then(data => {
+        busLinesLayer = L.geoJSON(data, {
+          pane: 'busLayers',
+          style: function (feature) {
+            const frequency = parseFloat(feature.properties.am_peak_service_frequency) || 0;
+            const opacity = frequency === 0 ? 0.1 : Math.min(0.1 + (frequency / 6) * 0.4, 0.5);
+            
+            return {
+              color: 'green',
+              weight: 2,
+              fillOpacity: 0,
+              opacity: 0,
+              _calculatedOpacity: opacity
+            };
+          },
+        }).addTo(map);
+      }),
+    
+    fetch('https://AmFa6.github.io/TAF_test/stops.geojson')
+      .then(response => response.json())
+      .then(data => {
+        busStopsLayer = L.geoJSON(data, {
+          pane: 'busLayers',
+          pointToLayer: function(feature, latlng) {
+            const frequency = parseFloat(feature.properties.am_peak_combined_frequency) || 0;
+            const fillOpacity = frequency === 0 ? 0 : Math.min(frequency / 12, 1);
+            
+            return L.circleMarker(latlng, {
+              radius: 3,
+              fillColor: 'green',
+              color: 'green',
+              weight: 0.5,
+              opacity: 0,
+              fillOpacity: 0,
+              _calculatedFillOpacity: fillOpacity
+            });
+          }
+        }).addTo(map);
+      }),
+    
+    fetch('https://AmFa6.github.io/TAF_test/simplified_network.geojson')
+      .then(response => response.json())
+      .then(data => {
+        roadNetworkLayer = L.geoJSON(data, {
+          pane: 'roadLayers',
+          style: function (feature) {
+            const roadFunction = feature.properties.roadfunction;
+            let weight = 0;
+            
+            if (roadFunction === 'Motorway') {
+              weight = 4;
+            } else if (roadFunction === 'A Road') {
+              weight = 2;
+            }
+            
+            return {
+              color: 'white',
+              weight: weight,
+              opacity: 0,
+            };
+          },
+        }).addTo(map);
+      })
+  ]).catch(error => {
+    console.error("Error loading transport infrastructure:", error);
+  });
+}
+
+function loadBackgroundData() {  
+  loadTrainingCentres()
+    .then(() => {
+      initializeTrainingCentres();
+      loadGridData();
+    })
+    .catch(error => {
+      console.error('Error loading training centres:', error);
+      showErrorNotification('Error loading training center data. Some features may be limited.');
+      loadGridData();
+    });
+}
+
+async function loadGridData() {
+  try {
+    const [data1, data2, csvText1, csvText2] = await Promise.all([
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.geojson').then(response => response.json()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.csv').then(response => response.text()),
+      fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_2.csv').then(response => response.text())
+    ]);
+        
+    const processedGrid = await processGridData(data1, data2, csvText1, csvText2);
+    grid = processedGrid;
+    
+    calculateGridStatistics(grid);
+    
+    updateFilterDropdown();
+    updateFilterValues();
+    
+    if (initialLoadComplete) {
+      updateSummaryStatistics(grid.features);
+    }
+        
+    if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
+      setTimeout(() => {
+        if (amenitiesUpdateRequested) {
+          updateAmenitiesCatchmentLayer();
+        }
+      }, 500);
+    }
+        
+  } catch (error) {
+    console.error(`Error loading grid data:`, error);
+  }
+}
+
+async function loadJourneyTimeCsv() {
+  const csvPath = 'https://AmFa6.github.io/TrainingCentres/trainingcentres_od.csv';
+  try {
+    const response = await fetch(csvPath);
+    const csvText = await response.text();
+    fullCsvData = Papa.parse(csvText, { header: true }).data;
+  } catch (err) {
+    console.error('Failed to load journey time CSV:', err);
+    fullCsvData = [];
+  }
+}
+
+async function waitForDuckDBModule() {
+  return new Promise((resolve, reject) => {
+    if (window.duckdb && window.duckdbLoaded) {
+      resolve();
+      return;
+    }
+    
+    const handleDuckDBReady = (event) => {
+      window.removeEventListener('duckdb-ready', handleDuckDBReady);
+      window.removeEventListener('duckdb-error', handleDuckDBError);
+      resolve();
+    };
+    
+    const handleDuckDBError = (event) => {
+      console.error('DuckDB-WASM error event received:', event.detail);
+      window.removeEventListener('duckdb-ready', handleDuckDBReady);
+      window.removeEventListener('duckdb-error', handleDuckDBError);
+      reject(new Error(`Failed to load DuckDB-WASM: ${event.detail.message}`));
+    };
+    
+    window.addEventListener('duckdb-ready', handleDuckDBReady);
+    window.addEventListener('duckdb-error', handleDuckDBError);
+    
+    setTimeout(() => {
+      window.removeEventListener('duckdb-ready', handleDuckDBReady);
+      window.removeEventListener('duckdb-error', handleDuckDBError);
+      reject(new Error('Timeout waiting for DuckDB-WASM to load'));
+    }, 30000);
+  });
+}
+
+async function initializeDuckDB() {
+  try {    
+    if (!window.duckdb) {
+      throw new Error('DuckDB-WASM module not available');
+    }
+    
+    const requiredMethods = ['getJsDelivrBundles', 'selectBundle', 'AsyncDuckDB', 'VoidLogger'];
+    const missingMethods = requiredMethods.filter(method => !window.duckdb[method]);
+    
+    if (missingMethods.length > 0) {
+      console.error('Missing required DuckDB methods:', missingMethods);
+      throw new Error(`DuckDB-WASM is missing required methods: ${missingMethods.join(', ')}`);
+    }
+    
+    if (!window.duckdbInstance) {      
+      const JSDELIVR_BUNDLES = window.duckdb.getJsDelivrBundles();
+      const bundle = await window.duckdb.selectBundle(JSDELIVR_BUNDLES);
+      
+      const worker_url = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker}");`], { type: 'text/javascript' })
+      );
+      const worker = new Worker(worker_url);
+      
+      const logger = new window.duckdb.VoidLogger();
+      
+      const db = new window.duckdb.AsyncDuckDB(logger, worker);
+      await db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      
+      URL.revokeObjectURL(worker_url);
+      
+      window.duckdbInstance = db;
+    }
+    
+    return window.duckdbInstance;
+  } catch (error) {
+    console.error('Failed to initialize DuckDB-WASM:', error);
+    throw error;
+  }
+}
+
+async function processGridData(data1, data2, csvText1, csvText2) {
+  return new Promise((resolve) => {    
+    const csvData1 = Papa.parse(csvText1, { 
+      header: true, 
+      skipEmptyLines: true,
+      fastMode: true
+    }).data;
+    
+    const csvData2 = Papa.parse(csvText2, { 
+      header: true, 
+      skipEmptyLines: true,
+      fastMode: true
+    }).data;
+    
+    const csvLookup = new Map();
+    
+    csvData1.forEach(row => {
+      if (row.OriginId_tracc) {
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
+      }
+    });
+    
+    csvData2.forEach(row => {
+      if (row.OriginId_tracc) {
+        const numericKey = Number(row.OriginId_tracc);
+        if (!isNaN(numericKey)) {
+          csvLookup.set(numericKey, row);
+        }
+      }
+    });
+        
+    const BATCH_SIZE = 20000;
+    const allFeatures = [...data1.features, ...data2.features];
+    const processedFeatures = [];
+    
+    let processed = 0;
+    const totalFeatures = allFeatures.length;
+        
+    for (let i = 0; i < totalFeatures; i += BATCH_SIZE) {
+      const batchEnd = Math.min(i + BATCH_SIZE, totalFeatures);
+      const batchStart = performance.now();
+      
+      for (let j = i; j < batchEnd; j++) {
+        const feature = allFeatures[j];
+        const originId = feature.properties.OriginId_tracc;
+        
+        if (!originId) {
+          continue;
+        }
+        
+        const csvData = csvLookup.get(originId);
+        
+        if (csvData) {
+          Object.assign(feature.properties, csvData);
+          
+          if (!feature.properties._centroid) {
+            const centroid = turf.centroid(feature);
+            feature.properties._centroid = centroid.geometry.coordinates;
+          }
+          
+          processedFeatures.push(feature);
+        }
+      }
+      
+      processed = batchEnd;
+    }
+    
+    const combinedData = {
+      type: 'FeatureCollection',
+      features: processedFeatures
+    };
+            
+    resolve(combinedData);
+  });
+}
+
+async function initializeDuckDB(gridData) {
+  try {    
+    setTimeout(async () => {
+      try {
+        await waitForDuckDBModule();
+        await initializeDuckDB();
+        
+        const db = window.duckdbInstance;
+        const conn = await db.connect();
+        
+        if (!gridData || !gridData.features || gridData.features.length === 0) {
+          console.warn('No grid data available for DuckDB analytics');
+          await conn.close();
+          return;
+        }
+                
+        await conn.query(`
+          CREATE TABLE grid_analytics (
+            OriginId_tracc INTEGER,
+            pop DOUBLE,
+            pop_growth DOUBLE,
+            imd_score_mhclg DOUBLE,
+            imd_decile_mhclg INTEGER,
+            hh_caravail_ts045 DOUBLE,
+            lad24cd VARCHAR,
+            wd24cd VARCHAR
+          )
+        `);
+        
+        const BATCH_SIZE = 20000;
+        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
+          const batch = gridData.features.slice(i, i + BATCH_SIZE);
+          const values = batch.map(f => {
+            const props = f.properties;
+            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
+          }).join(', ');
+          
+          await conn.query(`
+            INSERT INTO grid_analytics VALUES ${values}
+          `);
+        }
+        
+        await conn.close();
+        
+        window.duckdbAnalyticsReady = true;
+        
+      } catch (error) {
+        console.warn('DuckDB analytics initialization failed (optional feature):', error);
+      }
+    }, 100);
+    
+  } catch (error) {
+    console.warn('Background DuckDB initialization failed (optional):', error);
+  }
+}
+
+async function processBatchGeometries(batchRows, batchStartIndex) {
+  const features = [];
+  const geometryParseErrors = [];
+  
+  features.length = batchRows.length;
+  let validFeatureCount = 0;
+  
+  for (let i = 0; i < batchRows.length; i++) {
+    const rowObj = batchRows[i];
+    
+    let geometry;
+    try {
+      const geomStr = rowObj.geojson_geom;
+      if (!geomStr || geomStr.length === 0) continue;
+      
+      geometry = JSON.parse(geomStr);
+      
+      if (!geometry || !geometry.type || !geometry.coordinates) {
+        continue;
+      }
+    } catch (e) {
+      geometryParseErrors.push({ index: batchStartIndex + i, error: e.message });
+      continue;
+    }
+    
+    features[validFeatureCount] = {
+      type: 'Feature',
+      geometry: geometry,
+      properties: {
+        OriginId_tracc: rowObj.OriginId_tracc,
+        pop: rowObj.pop,
+        pop_growth: rowObj.pop_growth,
+        imd_score_mhclg: rowObj.imd_score_mhclg,
+        imd_decile_mhclg: rowObj.imd_decile_mhclg,
+        hh_caravail_ts045: rowObj.hh_caravail_ts045,
+        lad24cd: rowObj.lad24cd,
+        wd24cd: rowObj.wd24cd
+      }
+    };
+    
+    validFeatureCount++;
+  }
+  
+  features.length = validFeatureCount;
+  
+  if (geometryParseErrors.length > 0) {
+    console.warn(`⚠️ Failed to parse ${geometryParseErrors.length} geometries in batch starting at ${batchStartIndex}`);
+  }
+  
+  return features;
+}
+
+function calculateGridStatistics(gridData) {
+  if (!gridData || !gridData.features || gridData.features.length === 0) return;
+  
+  
+  gridStatistics = {
+    pop: { min: Infinity, max: -Infinity },
+    imd_score_mhclg: { min: Infinity, max: -Infinity },
+    hh_caravail_ts045: { min: Infinity, max: -Infinity },
+    pop_growth: { min: Infinity, max: -Infinity },
+    imd_decile_mhclg: { min: Infinity, max: -Infinity }
+  };
+  
+  const features = gridData.features;
+  
+  for (let i = 0; i < features.length; i++) {
+    const props = features[i].properties;
+    if (!props) continue;
+    
+    for (const field in gridStatistics) {
+      const value = props[field];
+      if (value !== undefined && value !== null) {
+        const numValue = parseFloat(value);
+        if (!isNaN(numValue)) {
+          if (numValue < gridStatistics[field].min) gridStatistics[field].min = numValue;
+          if (numValue > gridStatistics[field].max) gridStatistics[field].max = numValue;
+        }
+      }
+    }
+  }
+  
+  updateSliderRanges('Amenities', 'Opacity');
+  updateSliderRanges('Amenities', 'Outline');
+}
+
+function showLoadingIndicator(processId, message = 'Loading...', progress = null) {
+  let indicator = document.getElementById(`loading-indicator-${processId}`);
+  
+  if (!indicator) {
+    indicator = document.createElement('div');
+    indicator.id = `loading-indicator-${processId}`;
+    indicator.style.cssText = `
+      position: fixed;
+      bottom: ${10 + (activeLoadingIndicators.size * 60)}px;
+      left: 10px;
+      background: rgba(255,255,255,0.95);
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      z-index: ${indicatorZIndex++};
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-left: 3px solid #3388ff;
+      min-width: 200px;
+    `;
+    
+    const topRow = document.createElement('div');
+    topRow.style.cssText = 'display:flex;align-items:center;';
+    
+    const spinner = document.createElement('div');
+    spinner.className = 'mini-spinner';
+    spinner.style.cssText = `
+      width: 14px;
+      height: 14px;
+      border: 2px solid #e0e0e0;
+      border-top-color: #3388ff;
+      border-radius: 50%;
+      margin-right: 10px;
+      animation: spin 1s linear infinite;
+    `;
+    
+    if (!document.querySelector('#spinner-animation-style')) {
+      const style = document.createElement('style');
+      style.id = 'spinner-animation-style';
+      style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+      document.head.appendChild(style);
+    }
+    
+    const text = document.createElement('span');
+    text.id = `loading-text-${processId}`;
+    text.style.cssText = 'font-weight:500;color:#333;';
+    
+    const progressBar = document.createElement('div');
+    progressBar.id = `loading-progress-${processId}`;
+    progressBar.style.cssText = `
+      width: 0%;
+      height: 2px;
+      background: #3388ff;
+      margin-top: 4px;
+      transition: width 0.3s ease;
+      display: none;
+    `;
+    
+    topRow.appendChild(spinner);
+    topRow.appendChild(text);
+    indicator.appendChild(topRow);
+    indicator.appendChild(progressBar);
+    document.body.appendChild(indicator);
+    
+    activeLoadingIndicators.set(processId, indicator);
+  }
+  
+  const textElement = document.getElementById(`loading-text-${processId}`);
+  const progressElement = document.getElementById(`loading-progress-${processId}`);
+  
+  if (textElement) textElement.textContent = message;
+  
+  if (progressElement && progress !== null) {
+    progressElement.style.display = 'block';
+    progressElement.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  } else if (progressElement) {
+    progressElement.style.display = 'none';
+  }
+  
+  indicator.style.display = 'flex';
+}
+
+function hideLoadingIndicator(processId) {
+  const indicator = document.getElementById(`loading-indicator-${processId}`);
+  if (indicator) {
+    indicator.style.transition = 'opacity 0.3s';
+    indicator.style.opacity = '0';
+    setTimeout(() => {
+      if (indicator.parentNode) {
+        indicator.parentNode.removeChild(indicator);
+      }
+      activeLoadingIndicators.delete(processId);
+      
+      repositionLoadingIndicators();
+    }, 300);
+  }
+}
+
+function repositionLoadingIndicators() {
+  let index = 0;
+  activeLoadingIndicators.forEach((indicator, processId) => {
+    indicator.style.bottom = `${10 + (index * 60)}px`;
+    index++;
+  });
+}
+
+function showErrorNotification(message) {
+  const notification = document.createElement('div');
+  notification.className = 'error-notification';
+  notification.style.cssText = 'position:fixed;top:20px;right:20px;background:#f44336;color:white;padding:10px 20px;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,0.2);z-index:9999;max-width:80%;';
+  notification.textContent = message;
+  
+  const closeBtn = document.createElement('span');
+  closeBtn.style.cssText = 'margin-left:10px;cursor:pointer;font-weight:bold;';
+  closeBtn.textContent = '×';
+  closeBtn.onclick = function() {
+    document.body.removeChild(notification);
+  };
+  
+  notification.appendChild(closeBtn);
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    if (document.body.contains(notification)) {
+      notification.style.transition = 'opacity 0.5s';
+      notification.style.opacity = '0';
+      setTimeout(() => {
+        if (document.body.contains(notification)) {
+          document.body.removeChild(notification);
+        }
+      }, 500);
+    }
+  }, 5000);
+}
+
+const toTitleCase = (str) => {
+  const wordsToNotCapitalize = ['of', 'the', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'with', 'by'];
+  return str.toLowerCase().replace(/\b\w/g, (letter, index) => {
+    const word = str.toLowerCase().match(/\b\w+/g);
+    const currentWordIndex = str.toLowerCase().substring(0, index).split(/\b\w+/).length - 1;
+    const currentWord = word ? word[currentWordIndex] : '';
+    
+    if (currentWordIndex === 0 || !wordsToNotCapitalize.includes(currentWord)) {
+      return letter.toUpperCase();
+    }
+    return letter;
+  });
+}
+
+function getJourneyTimeData(originId) {
+  
+  if (!fullCsvData || !originId) {
+    return [];
+  }
+  
+  const originIdStr = String(originId);
+  const originIdNum = Number(originId);
+    
+  const filteredTrainingCentres = filterTrainingCentres();
+  const allowedDestinationIds = new Set(
+    filteredTrainingCentres.features.map(feature => String(feature.properties.fid))
+  );
+    
+  const originRecords = fullCsvData.filter(row => {
+    if (!row.origin || !row.destination || !row.totaltime) {
+      return false;
+    }
+    
+    const rowOrigin = String(row.origin).trim();
+    const isOriginMatch = rowOrigin === originIdStr || Number(row.origin) === originIdNum;
+    
+    const destinationId = String(row.destination);
+    const isDestinationAllowed = allowedDestinationIds.has(destinationId);
+    
+    const totalTime = parseFloat(row.totaltime);
+    const hasValidTime = !isNaN(totalTime);
+    
+    return isOriginMatch && isDestinationAllowed && hasValidTime;
+  });
+    
+  if (originRecords.length === 0) {
+    return [];
+  }
+  
+  originRecords.sort((a, b) => parseFloat(a.totaltime) - parseFloat(b.totaltime));
+  
+  const journeyTimeData = originRecords.map(record => {
+    let destinationLocation = 'Unknown';
+    
+    if (amenityLayers['TrainingCentres']) {
+      const matchingCenter = amenityLayers['TrainingCentres'].features.find(feature => {
+        const featureFid = String(feature.properties.fid);
+        const recordDestination = String(record.destination);
+        return featureFid === recordDestination;
+      });
+      
+      if (matchingCenter && matchingCenter.properties) {
+        const deliveryPostcode = matchingCenter.properties['Delivery Postcode'] || '';
+        const postcode = matchingCenter.properties.postcode || '';
+        
+        const formattedDeliveryPostcode = deliveryPostcode ? toTitleCase(deliveryPostcode) : '';
+        
+        if (formattedDeliveryPostcode && postcode) {
+          destinationLocation = `${formattedDeliveryPostcode}, ${postcode}`;
+        } else if (formattedDeliveryPostcode) {
+          destinationLocation = formattedDeliveryPostcode;
+        } else if (postcode) {
+          destinationLocation = postcode;
+        }
+      } else {
+      }
+    }
+    
+    let services = record.services || '';
+    if (!services || services.trim() === '' || services.toLowerCase() === 'n/a') {
+      services = 'walking only';
+    } else {
+      services = services.replace(/_/g, ' + ');
+    }
+    
+    return {
+      destination: destinationLocation,
+      journeyTime: Math.round(parseFloat(record.totaltime)),
+      services: services
+    };
+  });
+  
+  return journeyTimeData;
+}
+
+function createJourneyTimeContent(journeyTimeData) {  
+  if (!journeyTimeData || journeyTimeData.length === 0) {
+    return '<p>No journey time data available</p>';
+  }
+  
+  const totalRecords = journeyTimeData.length;
+  
+  let html = `
+    <div id="journey-time-container">
+      <div id="journey-time-content">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+          <span style="font-size: 0.9em; color: #666;">
+            <span id="journey-current-index">1</span> of ${totalRecords}
+          </span>
+        </div>
+        
+        <div id="journey-time-details">
+          <strong>Provider:</strong> <span id="journey-destination">${journeyTimeData[0].destination}</span><br>
+          <strong>Journey Time:</strong> <span id="journey-time">${journeyTimeData[0].journeyTime}</span> mins<br>
+          <strong>Services:</strong> <span id="journey-services">${journeyTimeData[0].services}</span>
+        </div>
+  `;
+  
+  if (totalRecords > 1) {
+    html += `
+      <div style="display: flex; justify-content: space-between; margin-top: 8px;">
+        <button id="journey-prev-btn" onclick="navigateJourneyTime(-1)" disabled 
+                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: not-allowed; opacity: 0.5;">
+          ← Previous
+        </button>
+        <button id="journey-next-btn" onclick="navigateJourneyTime(1)" 
+                style="padding: 4px 8px; background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; cursor: pointer;">
+          Next →
+        </button>
+      </div>
+    `;
+  }
+  
+  html += `</div></div>`;
+  
+  window.currentJourneyTimeData = journeyTimeData;
+  window.currentJourneyTimeIndex = 0;
+  
+  return html;
+}
+
+function navigateJourneyTime(direction) {
+  
+  if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
+    return;
+  }
+  
+  const totalRecords = window.currentJourneyTimeData.length;
+  let newIndex = window.currentJourneyTimeIndex + direction;
+  
+  if (newIndex < 0) newIndex = 0;
+  if (newIndex >= totalRecords) newIndex = totalRecords - 1;
+  
+  window.currentJourneyTimeIndex = newIndex;
+  const record = window.currentJourneyTimeData[newIndex];
+    
+  const currentIndexEl = document.getElementById('journey-current-index');
+  const destinationEl = document.getElementById('journey-destination');
+  const timeEl = document.getElementById('journey-time');
+  const servicesEl = document.getElementById('journey-services');
+  
+  if (currentIndexEl) currentIndexEl.textContent = newIndex + 1;
+  if (destinationEl) destinationEl.textContent = record.destination;
+  if (timeEl) timeEl.textContent = record.journeyTime;
+  if (servicesEl) servicesEl.textContent = record.services;
+  
+  const prevBtn = document.getElementById('journey-prev-btn');
+  const nextBtn = document.getElementById('journey-next-btn');
+  
+  if (prevBtn) {
+    prevBtn.disabled = newIndex === 0;
+    prevBtn.style.opacity = newIndex === 0 ? '0.5' : '1';
+    prevBtn.style.cursor = newIndex === 0 ? 'not-allowed' : 'pointer';
+  }
+  
+  if (nextBtn) {
+    nextBtn.disabled = newIndex === totalRecords - 1;
+    nextBtn.style.opacity = newIndex === totalRecords - 1 ? '0.5' : '1';
+    nextBtn.style.cursor = newIndex === totalRecords - 1 ? 'not-allowed' : 'pointer';
+  }
+}
 
 function initializeFileUpload() {
   const fileInput = document.getElementById('fileUpload');
@@ -2012,7 +1886,6 @@ function setupTrainingCenterFilters() {
   });
   
   function handleSubjectAimChange() {
-    showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
     debouncedHandler();
   }
   
@@ -3684,16 +3557,6 @@ function removeUserLayer(layerId) {
   }
 }
 
-function isPanelOpen(panelName) {
-  const panelHeaders = document.querySelectorAll(".panel-header:not(.summary-header)");
-  for (const header of panelHeaders) {
-    if (header.textContent.includes(panelName) && !header.classList.contains("collapsed")) {
-      return true;
-    }
-  }
-  return false;
-}
-
 function initializeAndConfigureSlider(sliderElement, isInverse = false) {
   if (sliderElement.noUiSlider) {
     sliderElement.noUiSlider.destroy();
@@ -3749,7 +3612,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     handleElement.setAttribute('data-value', formattedValue);
     
     if (sliderElement._isInitialized) {
-      showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
       requestAnimationFrame(() => {
         debouncedUpdateOpacityOutlineFields();
       });
@@ -3764,7 +3626,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
 function updateSliderRanges(type, scaleType) {
   if (isUpdatingSliders) return;
   
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingSliders = true;
 
   let field, rangeElement, minElement, maxElement, isInverse;
@@ -3842,16 +3703,13 @@ function updateSliderRanges(type, scaleType) {
   } else {
     setTimeout(() => {
       rangeElement._isInitialized = true;
-      hideLoadingIndicator('amenities-catchment');
     }, 200);
   }
   
   isUpdatingSliders = false;
 }
 
-function toggleInverseScale(type, scaleType) {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  
+function toggleInverseScale(type, scaleType) {  
   let isInverse, rangeElement;
 
   if (scaleType === 'Opacity') {
@@ -3877,14 +3735,6 @@ function toggleInverseScale(type, scaleType) {
   if (!isUpdatingOpacityOutlineFields) {
     debouncedUpdateOpacityOutlineFields();
   }
-}
-
-function scaleExp(value, minVal, maxVal, minScale, maxScale, order) {
-  if (value <= minVal) return order === 'low-to-high' ? minScale : maxScale;
-  if (value >= maxVal) return order === 'low-to-high' ? maxScale : minScale;
-  const normalizedValue = (value - minVal) / (maxVal - minVal);
-  const scaledValue = order === 'low-to-high' ? normalizedValue : 1 - normalizedValue;
-  return minScale + scaledValue * (maxScale - minScale);
 }
 
 function formatValue(value, step) {
@@ -4551,18 +4401,13 @@ function drawSelectedAmenities() {
   amenitiesLayerGroup.addTo(map);
 }
 
-/**
- * Enhanced updateAmenitiesCatchmentLayer that waits for dependencies and retries automatically
- */
 function updateAmenitiesCatchmentLayer() {
   amenitiesUpdateRequested = true;
   
   if (isUpdatingCatchmentLayer) {
     return;
   }
-  
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  
+    
   const hasRequiredData = checkAmenitiesDataReady();
   
   if (!hasRequiredData.ready) {
@@ -4580,12 +4425,8 @@ function updateAmenitiesCatchmentLayer() {
   if (!amenitiesPanelOpen) {
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
-    hideLoadingIndicator('amenities-catchment');
     return;
   }
-
-  // Show journey time calculation indicator
-  showLoadingIndicator('calculating-journey-times', 'Calculating journey times...');
 
   const selectedYear = AmenitiesYear.value;
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
@@ -4618,8 +4459,6 @@ function updateAmenitiesCatchmentLayer() {
     updateFilterDropdown();
     updateFilterValues();
     updateSummaryStatistics([], 'amenities', false);
-    hideLoadingIndicator('amenities-catchment');
-    hideLoadingIndicator('calculating-journey-times');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4635,8 +4474,6 @@ function updateAmenitiesCatchmentLayer() {
       
       if (csvData.length === 0) {
         isUpdatingCatchmentLayer = false;
-        hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-journey-times');
         return;
       }
       
@@ -4657,16 +4494,10 @@ function updateAmenitiesCatchmentLayer() {
         updateFilterDropdown();
         updateFilterValues();
         updateSummaryStatistics([], 'amenities', false);
-        hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-journey-times');
         isUpdatingCatchmentLayer = false;
         return;
       }
       
-      // Journey time calculation completed
-      hideLoadingIndicator('calculating-journey-times');
-      
-      // Continue with existing logic...
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
       
@@ -4727,7 +4558,6 @@ function updateAmenitiesCatchmentLayer() {
         }
       });
       
-      // Fill missing times
       const gridTimeKeys = new Set(Object.keys(gridTimeMap));
       for (let i = 0; i < grid.features.length; i++) {
         const originId = grid.features[i].properties.OriginId_tracc;
@@ -4744,10 +4574,7 @@ function updateAmenitiesCatchmentLayer() {
         needToCreateNewLayer = true;
       }
       
-      if (needToCreateNewLayer) {            
-        // Show rendering indicator
-        showLoadingIndicator('rendering-layer', 'Rendering...');
-        
+      if (needToCreateNewLayer) {                    
         if (AmenitiesCatchmentLayer) {
           map.removeLayer(AmenitiesCatchmentLayer);
         }
@@ -4787,18 +4614,12 @@ function updateAmenitiesCatchmentLayer() {
           layer.feature.properties._weight = undefined;
         });
 
-        const updatesComplete = () => {
-          hideLoadingIndicator('rendering-layer');
-          
+        const updatesComplete = () => {          
           drawSelectedAmenities();
           updateLegend();
           updateFilterDropdown();
-          updateFilterValues('amenities');
-          
-          // Now calculate journey time statistics
-          calculateJourneyTimeStatistics();
-          
-          hideLoadingIndicator('amenities-catchment');
+          updateFilterValues('amenities');         
+          calculateTimeStatistics();         
         };
         
         updateSliderRanges('Amenities', 'Opacity');
@@ -4806,10 +4627,8 @@ function updateAmenitiesCatchmentLayer() {
         
         setTimeout(updatesComplete, 50);
       } else {
-        // Just apply styling and calculate stats
         applyAmenitiesCatchmentLayerStyling();
-        calculateJourneyTimeStatistics();
-        hideLoadingIndicator('amenities-catchment');
+        calculateTimeStatistics();
       }
         
       isUpdatingCatchmentLayer = false;
@@ -4817,24 +4636,11 @@ function updateAmenitiesCatchmentLayer() {
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
-      hideLoadingIndicator('amenities-catchment');
-      hideLoadingIndicator('calculating-journey-times');
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
 }
 
-function calculateJourneyTimeStatistics() {
-  showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
-  
-  setTimeout(() => {
-    updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
-    hideLoadingIndicator('calculating-journey-time-stats');
-  }, 100);
-}
-/**
- * Check if all required data for amenities catchment layer is ready
- */
 function checkAmenitiesDataReady() {
     const missing = [];
     
@@ -4868,9 +4674,6 @@ function checkAmenitiesDataReady() {
     };
 }
 
-/**
- * Set up automatic retry mechanism for amenities updates
- */
 function setupAmenitiesAutoRetry() {
     if (pendingAmenitiesUpdate) {
         return;
@@ -4904,9 +4707,6 @@ function setupAmenitiesAutoRetry() {
     }, 15000);
 }
 
-/**
- * Clear the amenities auto-retry mechanism
- */
 function clearAmenitiesAutoRetry() {
     pendingAmenitiesUpdate = false;
     amenitiesUpdateRequested = false;
@@ -4916,9 +4716,7 @@ function applyAmenitiesCatchmentLayerStyling() {
   if (!AmenitiesCatchmentLayer) {
     return;
   }
-  
-  showLoadingIndicator('rendering-layer', 'Rendering...');
-  
+    
   try {
     AmenitiesCatchmentLayer.eachLayer(layer => {
       const OriginId_tracc = layer.feature.properties.OriginId_tracc;
@@ -4975,11 +4773,8 @@ function applyAmenitiesCatchmentLayerStyling() {
         opacity: isVisible ? 1 : 0
       };
     });
-    
-    hideLoadingIndicator('rendering-layer');
   } catch (error) {
     console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-    hideLoadingIndicator('rendering-layer');
   }
 }
 
@@ -4988,12 +4783,10 @@ function updateOpacityAndOutlineFields() {
     return;
   }
   
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingOpacityOutlineFields = true;
   
   if (!AmenitiesCatchmentLayer) {
     isUpdatingOpacityOutlineFields = false;
-    hideLoadingIndicator('amenities-catchment');
     return;
   }
   
@@ -5099,12 +4892,9 @@ function updateOpacityAndOutlineFields() {
       if (currentIndex < features.length) {
         requestAnimationFrame(processBatch);
       } else {
-        // Apply styling with rendering indicator
-        showLoadingIndicator('rendering-layer', 'Rendering...');
         applyAmenitiesCatchmentLayerStyling();
         isUpdatingStyles = false;
         isUpdatingOpacityOutlineFields = false;
-        hideLoadingIndicator('amenities-catchment');
       }
     }
     
@@ -5172,12 +4962,9 @@ function updateOpacityAndOutlineFields() {
         layer.feature.properties._weight = result._weight;
       });
       
-      // Apply styling with rendering indicator
-      showLoadingIndicator('rendering-layer', 'Rendering...');
       applyAmenitiesCatchmentLayerStyling();
       isUpdatingStyles = false;
       isUpdatingOpacityOutlineFields = false;
-      hideLoadingIndicator('amenities-catchment');
       worker.terminate();
     };
     
@@ -5442,7 +5229,6 @@ function updateFilterValues(source = 'filter') {
       checkbox.addEventListener('change', function() {
         updateStoredSelections();
         updateFilterButtonText();
-        showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
         updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
@@ -5455,7 +5241,6 @@ function updateFilterValues(source = 'filter') {
       checkboxes.forEach(cb => cb.checked = isChecked);
       updateStoredSelections();
       updateFilterButtonText();
-      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
       updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
@@ -5503,16 +5288,11 @@ function updateFilterValues(source = 'filter') {
   }
 }
 
-/**
- * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
- */
 async function updateSummaryStatistics(features, source = 'filter', forceBaseStatsUpdate = false) {
   if (isCalculatingStats) {
     return;
   }
-  
-  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-    
+      
   const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
   
   if (needsAmenitiesCatchment && isUpdatingCatchmentLayer) {
@@ -5541,7 +5321,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
   try {
     if (!grid && (!features || features.length === 0)) {
       displayEmptyStatistics();
-      hideLoadingIndicator('calculating-stats');
       return;
     }
     
@@ -5552,7 +5331,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
       
       if (selectedValues.length === 0) {
         displayEmptyStatistics();
-        hideLoadingIndicator('calculating-stats');
         return;
       }
     }
@@ -5561,7 +5339,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
       displayEmptyStatistics();
-      hideLoadingIndicator('calculating-stats');
       return;
     }
 
@@ -5569,7 +5346,7 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     let timeStats = {};
     
     if (needsDemographicStatsUpdate || forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
-      baseStats = await calculateBaseStatistics(filteredFeatures);
+      baseStats = await calculateDemoStatistics(filteredFeatures);
       window.lastBaseStats = baseStats;
       needsDemographicStatsUpdate = false;
     } else {
@@ -5590,11 +5367,9 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     const stats = {...baseStats, ...timeStats};
     updateStatisticsUI(stats);
     
-    hideLoadingIndicator('calculating-stats');
   } catch (error) {
     console.error("Error calculating statistics:", error);
     displayEmptyStatistics();
-    hideLoadingIndicator('calculating-stats');
   } finally {
     isCalculatingStats = false;
   }
@@ -5830,10 +5605,24 @@ function applyRangeFilter(features, filterValue) {
   }
   return features;
 }
+// same
+function filterByJourneyTime(features, filterValue) {
+  if (filterValue === '>60') {
+    return features.filter(feature => {
+      const OriginId_tracc = feature.properties.OriginId_tracc;
+      const time = gridTimeMap[OriginId_tracc];
+      return time > 30;
+    });
+  } else {
+    const [minRange, maxRange] = filterValue.split('-').map(parseFloat);
+    return features.filter(feature => {
+      const OriginId_tracc = feature.properties.OriginId_tracc;
+      const time = gridTimeMap[OriginId_tracc];
+      return time >= minRange && (maxRange ? time <= maxRange : true);
+    });
+  }
+}
 
-/**
- * Wait for DuckDB analytics to be ready
- */
 function waitForDuckDBAnalytics(timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     if (window.duckdbAnalyticsReady) {
@@ -5854,19 +5643,21 @@ function waitForDuckDBAnalytics(timeoutMs = 10000) {
   });
 }
 
-/**
- * Calculate statistics using DuckDB for better performance on large datasets
- */
-async function calculateStatisticsWithDuckDB(features) {  
+async function calculateDemoStatistics(features) {
+  if (!features || features.length === 0) {
+    return {
+      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
+      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
+      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
+      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
+      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+    };
+  }
+
   try {
     const conn = await window.duckdbInstance.connect();
     
     const originIds = features.map(f => f.properties.OriginId_tracc).filter(id => id);
-    
-    if (originIds.length === 0) {
-      await conn.close();
-      return await calculateStatisticsWithJavaScript(features);
-    }
     
     const batchSize = 20000;
     await conn.query('CREATE TEMP TABLE filtered_origins (id INTEGER)');
@@ -5921,173 +5712,7 @@ async function calculateStatisticsWithDuckDB(features) {
     };
   } catch (error) {
     console.error('Error in DuckDB statistics calculation:', error);
-    return await calculateStatisticsWithJavaScript(features);
   }
-}
-
-/**
- * Original JavaScript-based statistics calculation (renamed for clarity)
- */
-function calculateStatisticsWithJavaScript(features) {
-  const timestamp = new Date().toLocaleTimeString();
-  
-  const BATCH_SIZE = 20000;
-  const totalBatches = Math.ceil(features.length / BATCH_SIZE);
-  
-  return new Promise(resolve => {
-    let stats = {
-      totalPopulation: 0,
-      minPopulation: Infinity,
-      maxPopulation: -Infinity,
-      
-      totalWeightedImdScore: 0,
-      minImdScore: Infinity,
-      maxImdScore: -Infinity,
-      
-      totalWeightedImdDecile: 0,
-      minImdDecile: Infinity,
-      maxImdDecile: -Infinity,
-      
-      totalWeightedCarAvailability: 0,
-      minCarAvailability: Infinity,
-      maxCarAvailability: -Infinity,
-      
-      totalPopGrowth: 0,
-      minPopGrowth: Infinity,
-      maxPopGrowth: -Infinity,
-      
-      populationWithImdScore: 0,
-      populationWithImdDecile: 0,
-      populationWithCarAvailability: 0
-    };
-    
-    let currentBatch = 0;
-    
-    function processBatch() {
-      const startIdx = currentBatch * BATCH_SIZE;
-      const endIdx = Math.min((currentBatch + 1) * BATCH_SIZE, features.length);
-      
-      for (let i = startIdx; i < endIdx; i++) {
-        const props = features[i].properties;
-        if (!props) continue;
-        
-        const pop = Number(props.pop);
-        if (isFinite(pop) && pop >= 0) {
-          stats.totalPopulation += pop;
-          stats.minPopulation = Math.min(stats.minPopulation, pop);
-          stats.maxPopulation = Math.max(stats.maxPopulation, pop);
-          
-          const imdScore = Number(props.imd_score_mhclg);
-          if (isFinite(imdScore)) {
-            stats.totalWeightedImdScore += imdScore * pop;
-            stats.minImdScore = Math.min(stats.minImdScore, imdScore);
-            stats.maxImdScore = Math.max(stats.maxImdScore, imdScore);
-            stats.populationWithImdScore += pop;
-          }
-          
-          const imdDecile = Number(props.imd_decile_mhclg);
-          if (isFinite(imdDecile)) {
-            stats.totalWeightedImdDecile += imdDecile * pop;
-            stats.minImdDecile = Math.min(stats.minImdDecile, imdDecile);
-            stats.maxImdDecile = Math.max(stats.maxImdDecile, imdDecile);
-            stats.populationWithImdDecile += pop;
-          }
-          
-          const carAvailability = Number(props.hh_caravail_ts045);
-          if (isFinite(carAvailability)) {
-            stats.totalWeightedCarAvailability += carAvailability * pop;
-            stats.minCarAvailability = Math.min(stats.minCarAvailability, carAvailability);
-            stats.maxCarAvailability = Math.max(stats.maxCarAvailability, carAvailability);
-            stats.populationWithCarAvailability += pop;
-          }
-        }
-        
-        const popGrowth = Number(props.pop_growth);
-        if (isFinite(popGrowth) && popGrowth >= 0) {
-          stats.totalPopGrowth += popGrowth;
-          stats.minPopGrowth = Math.min(stats.minPopGrowth, popGrowth);
-          stats.maxPopGrowth = Math.max(stats.maxPopGrowth, popGrowth);
-        }
-      }
-      
-      currentBatch++;
-      
-      if (currentBatch < totalBatches) {
-        requestAnimationFrame(processBatch);
-      } else {
-        if (stats.minPopulation === Infinity) stats.minPopulation = 0;
-        if (stats.maxPopulation === -Infinity) stats.maxPopulation = 0;
-        if (stats.minImdScore === Infinity) stats.minImdScore = 0;
-        if (stats.maxImdScore === -Infinity) stats.maxImdScore = 0;
-        if (stats.minImdDecile === Infinity) stats.minImdDecile = 0;
-        if (stats.maxImdDecile === -Infinity) stats.maxImdDecile = 0;
-        if (stats.minCarAvailability === Infinity) stats.minCarAvailability = 0;
-        if (stats.maxCarAvailability === -Infinity) stats.maxCarAvailability = 0;
-        if (stats.minPopGrowth === Infinity) stats.minPopGrowth = 0;
-        if (stats.maxPopGrowth === -Infinity) stats.maxPopGrowth = 0;
-        
-        const avgImdScore = stats.populationWithImdScore > 0 ? 
-          stats.totalWeightedImdScore / stats.populationWithImdScore : 0;
-        
-        const avgImdDecile = stats.populationWithImdDecile > 0 ? 
-          stats.totalWeightedImdDecile / stats.populationWithImdDecile : 0;
-        
-        const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
-          stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
-
-        resolve({
-          totalPopulation: stats.totalPopulation,
-          minPopulation: stats.minPopulation,
-          maxPopulation: stats.maxPopulation,
-          avgImdScore: avgImdScore,
-          minImdScore: stats.minImdScore,
-          maxImdScore: stats.maxImdScore,
-          avgImdDecile: avgImdDecile,
-          minImdDecile: stats.minImdDecile,
-          maxImdDecile: stats.maxImdDecile,
-          avgCarAvailability: avgCarAvailability,
-          minCarAvailability: stats.minCarAvailability,
-          maxCarAvailability: stats.maxCarAvailability,
-          totalPopGrowth: stats.totalPopGrowth,
-          minPopGrowth: stats.minPopGrowth,
-          maxPopGrowth: stats.maxPopGrowth
-        });
-      }
-    }
-    
-    processBatch();
-  });
-}
-
-/**
- * Enhanced statistics calculation that can use DuckDB for large datasets
- */
-async function calculateBaseStatistics(features) {
-  showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
-  if (!features || features.length === 0) {
-    return {
-      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
-      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
-      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
-      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
-      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
-    };
-  }
-
-  try {
-    await waitForDuckDBAnalytics(10000);
-    if (window.duckdbAnalyticsReady) {
-      const result = await calculateStatisticsWithDuckDB(features);
-      hideLoadingIndicator('base-statistics');
-      return result;
-    }
-  } catch (error) {
-    console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
-  }
-  
-  const result = await calculateStatisticsWithJavaScript(features);
-  hideLoadingIndicator('base-statistics');
-  return result;
 }
 
 function calculateTimeStatistics(features) {  
@@ -6160,29 +5785,6 @@ function updateStatisticsUI(stats) {
   document.getElementById('avg-journey-time').textContent = formatValue(stats.avgTime, 1);
   document.getElementById('min-journey-time').textContent = formatValue(stats.minTime, 1);
   document.getElementById('max-journey-time').textContent = formatValue(stats.maxTime, 1);
-}
-
-function filterByJourneyTime(features, filterValue) {
-  if (filterValue === '>60') {
-    return features.filter(feature => {
-      const OriginId_tracc = feature.properties.OriginId_tracc;
-      const time = gridTimeMap[OriginId_tracc];
-      return time > 30;
-    });
-  } else {
-    const [minRange, maxRange] = filterValue.split('-').map(parseFloat);
-    return features.filter(feature => {
-      const OriginId_tracc = feature.properties.OriginId_tracc;
-      const time = gridTimeMap[OriginId_tracc];
-      return time >= minRange && (maxRange ? time <= maxRange : true);
-    });
-  }
-}
-
-function calculateWeightedAverage(values, weights) {
-  const totalWeight = weights.reduce((a, b) => a + b, 0);
-  const weightedSum = values.reduce((sum, value, index) => sum + value * weights[index], 0);
-  return weightedSum / totalWeight;
 }
 
 function getCurrentFeatures() {
