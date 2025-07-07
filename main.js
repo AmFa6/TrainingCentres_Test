@@ -243,10 +243,6 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
   }
 });
 
-/**
- * Main application initialization
- * Using a phased loading approach to improve perceived performance
- */
 document.addEventListener('DOMContentLoaded', (event) => {
   clearAllLoadingIndicators();
   initializeUI();
@@ -260,7 +256,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
   
   initializeCollapsiblePanels();
   
-  // Load all data in parallel - grid data as highest priority
   loadAllDataInParallel().then(() => {    
     map.fire('baselayersloaded');
     initialLoadComplete = true;
@@ -271,10 +266,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
   });
 });
 
-/**
- * Initializes the basic UI components
- * This is the first function called during application initialization
- */
 function initializeUI() {
   createStaticLegendControls();
 
@@ -288,9 +279,6 @@ function initializeUI() {
   setupAdditionalUIListeners();
 }
 
-/**
- * Sets up event listeners for UI elements like checkboxes and buttons
- */
 function setupAdditionalUIListeners() {
   document.querySelectorAll('.legend-checkbox').forEach(checkbox => {
     checkbox.addEventListener('change', () => {
@@ -301,9 +289,6 @@ function setupAdditionalUIListeners() {
   });
 }
 
-/**
- * Creates and sets up event listeners for static legend controls
- */
 function createStaticLegendControls() {
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   if (amenitiesCheckbox) {
@@ -396,9 +381,6 @@ function createStaticLegendControls() {
   }
 }
 
-/**
- * Initializes collapsible legend controls
- */
 function initializeLegendControls() {  
   document.querySelectorAll('.legend-category-header').forEach(header => {
     header.addEventListener('click', function() {
@@ -425,9 +407,6 @@ function initializeLegendControls() {
   }
 }
 
-/**
- * Initializes collapsible panels and their behavior
- */
 function initializeCollapsiblePanels() {
   const collapsibleButtons = document.querySelectorAll(".collapsible");
   collapsibleButtons.forEach(button => {
@@ -537,9 +516,6 @@ function initializeCollapsiblePanels() {
   }
 }
 
-/**
- * Creates and sets up map panes with appropriate z-index values
- */
 function setupMapPanes() {
   const existingPanes = document.querySelectorAll('.leaflet-pane[style*="z-index"]');
   existingPanes.forEach(pane => {
@@ -555,10 +531,6 @@ function setupMapPanes() {
   map.createPane('userLayers').style.zIndex = 700;
 }
 
-/**
- * Loads base map layers (boundaries, transport infrastructure)
- * @returns {Promise} A promise that resolves when all base layers are loaded
- */
 function loadBaseLayers() {
   showLoadingIndicator('base-layers', 'Loading map layers...');
   return Promise.all([
@@ -569,33 +541,24 @@ function loadBaseLayers() {
   });
 }
 
-/**
- * Load all data in parallel with grid data as highest priority
- * This matches the desired flow: grid data first, then boundaries/transport/training centres/csv in parallel
- */
 function loadAllDataInParallel() {
-  // Show loading indicators for all parallel operations
   showLoadingIndicator('grid-data', 'Loading grid data...');
   showLoadingIndicator('boundary-data', 'Loading boundaries...');
   showLoadingIndicator('transport-data', 'Loading transport infrastructure...');
   showLoadingIndicator('training-centres', 'Loading training centres...');
   showLoadingIndicator('journey-time-csv', 'Loading journey time data...');
   
-  // Start all data loading operations in parallel
   const gridDataPromise = loadGridData();
   const boundaryDataPromise = loadBoundaryData();
   const transportDataPromise = loadTransportInfrastructure();
   const trainingCentresPromise = loadTrainingCentres();
   const journeyTimeCsvPromise = loadJourneyTimeCsv();
   
-  // Handle grid data + boundaries completion for dropdowns and base stats
   const gridAndBoundariesPromise = Promise.all([gridDataPromise, boundaryDataPromise])
     .then(() => {
-      console.log('Grid data and boundaries loaded - updating dropdowns and calculating base stats');
       updateFilterDropdown();
       updateFilterValues();
       
-      // Calculate base stats for MCA when both grid and boundaries are ready
       if (grid && grid.features) {
         updateSummaryStatistics(grid.features);
       }
@@ -610,10 +573,8 @@ function loadAllDataInParallel() {
       throw error;
     });
   
-  // Handle training centres completion for dropdowns
   const trainingCentresSetupPromise = trainingCentresPromise
     .then(() => {
-      console.log('Training centres loaded - setting up dropdowns');
       initializeTrainingCentres();
       hideLoadingIndicator('training-centres');
     })
@@ -623,10 +584,8 @@ function loadAllDataInParallel() {
       showErrorNotification('Error loading training center data. Some features may be limited.');
     });
   
-  // Handle transport infrastructure completion
   const transportSetupPromise = transportDataPromise
     .then(() => {
-      console.log('Transport infrastructure loaded');
       hideLoadingIndicator('transport-data');
     })
     .catch(error => {
@@ -634,10 +593,8 @@ function loadAllDataInParallel() {
       hideLoadingIndicator('transport-data');
     });
   
-  // Handle journey time CSV completion
   const csvSetupPromise = journeyTimeCsvPromise
     .then(() => {
-      console.log('Journey time CSV loaded');
       hideLoadingIndicator('journey-time-csv');
     })
     .catch(error => {
@@ -645,7 +602,6 @@ function loadAllDataInParallel() {
       hideLoadingIndicator('journey-time-csv');
     });
   
-  // Wait for all critical operations to complete
   return Promise.all([
     gridAndBoundariesPromise,
     trainingCentresSetupPromise,
@@ -654,9 +610,6 @@ function loadAllDataInParallel() {
   ]);
 }
 
-/**
- * Enhanced loadBoundaryData that triggers pending amenities updates when complete
- */
 function loadBoundaryData() {
   const ladCodesString = ladCodes.map(code => `'${code}'`).join(',');
   
@@ -746,10 +699,6 @@ function loadBoundaryData() {
   });
 }
 
-/**
- * Loads transport infrastructure (bus lines, stops, road network)
- * @returns {Promise} A promise that resolves when transport infrastructure is loaded
- */
 function loadTransportInfrastructure() {  
   return Promise.all([
     fetch('https://AmFa6.github.io/TAF_test/lines.geojson')
@@ -822,9 +771,6 @@ function loadTransportInfrastructure() {
   });
 }
 
-/**
- * Loads heavier data (grid, training centers) in the background
- */
 async function loadGridData() {
   try {
     const [data1, data2, csvText1, csvText2] = await Promise.all([
@@ -838,10 +784,7 @@ async function loadGridData() {
     grid = processedGrid;
     
     calculateGridStatistics(grid);
-    
-    // Note: updateFilterDropdown, updateFilterValues, and updateSummaryStatistics 
-    // are now called from loadAllDataInParallel when both grid and boundaries are ready
-    
+        
     if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
       setTimeout(() => {
         if (amenitiesUpdateRequested) {
@@ -852,7 +795,7 @@ async function loadGridData() {
     
   } catch (error) {
     console.error(`Error loading grid data:`, error);
-    throw error; // Re-throw to be handled by calling function
+    throw error;
   }
 }
 
@@ -910,9 +853,7 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
     const totalFeatures = allFeatures.length;
         
     for (let i = 0; i < totalFeatures; i += BATCH_SIZE) {
-      const batchEnd = Math.min(i + BATCH_SIZE, totalFeatures);
-      const batchStart = performance.now();
-      
+      const batchEnd = Math.min(i + BATCH_SIZE, totalFeatures);      
       for (let j = i; j < batchEnd; j++) {
         const feature = allFeatures[j];
         const originId = feature.properties.OriginId_tracc;
@@ -999,10 +940,6 @@ async function processBatchGeometries(batchRows, batchStartIndex) {
   return features;
 }
 
-/**
- * Calculates and stores min/max values for important grid attributes with optimized processing
- * @param {Object} gridData The grid GeoJSON data
- */
 function calculateGridStatistics(gridData) {
   if (!gridData || !gridData.features || gridData.features.length === 0) return;
   
@@ -1037,12 +974,6 @@ function calculateGridStatistics(gridData) {
   updateSliderRanges('Amenities', 'Outline');
 }
 
-/**
- * Shows a loading indicator that can overlap with others
- * @param {String} processId Unique identifier for this process
- * @param {String} message The message to display
- * @param {Number} progress Optional progress percentage (0-100)
- */
 function showLoadingIndicator(processId, message = 'Loading...', progress = null) {
   let indicator = document.getElementById(`loading-indicator-${processId}`);
   
@@ -1126,10 +1057,6 @@ function showLoadingIndicator(processId, message = 'Loading...', progress = null
   indicator.style.display = 'flex';
 }
 
-/**
- * Hides a specific loading indicator
- * @param {String} processId The process identifier
- */
 function hideLoadingIndicator(processId) {
   const indicator = document.getElementById(`loading-indicator-${processId}`);
   if (indicator) {
@@ -1146,9 +1073,6 @@ function hideLoadingIndicator(processId) {
   }
 }
 
-/**
- * Repositions remaining loading indicators to prevent gaps
- */
 function repositionLoadingIndicators() {
   let index = 0;
   activeLoadingIndicators.forEach((indicator, processId) => {
@@ -1168,22 +1092,6 @@ function clearAllLoadingIndicators() {
   activeLoadingIndicators.clear();
 }
 
-function debugLoadingIndicators() {
-  console.log('Active loading indicators:', activeLoadingIndicators.size);
-  console.log('Active indicator process IDs:', Array.from(activeLoadingIndicators.keys()));
-  
-  const visibleIndicators = document.querySelectorAll('[id^="loading-indicator-"]');
-  console.log('Visible indicators in DOM:', visibleIndicators.length);
-  
-  visibleIndicators.forEach(indicator => {
-    console.log('Indicator ID:', indicator.id, 'Display:', indicator.style.display);
-  });
-}
-
-/**
- * Shows an error notification to the user
- * @param {String} message The error message to display
- */
 function showErrorNotification(message) {
   const notification = document.createElement('div');
   notification.className = 'error-notification';
@@ -1240,12 +1148,6 @@ const toTitleCase = (str) => {
   });
 }
 
-/**
- * Get journey time data for a specific origin, sorted by travel time (closest first)
- * Only includes destinations that match current filtering criteria
- * @param {string} originId The OriginId_tracc to get journey time data for
- * @returns {Array} Array of journey time records sorted by total time
- */
 function getJourneyTimeData(originId) {
   
   if (!fullCsvData || !originId) {
@@ -1327,11 +1229,6 @@ function getJourneyTimeData(originId) {
   return journeyTimeData;
 }
 
-/**
- * Create HTML content for journey time display with navigation
- * @param {Array} journeyTimeData Array of journey time records
- * @returns {string} HTML content for the journey time section
- */
 function createJourneyTimeContent(journeyTimeData) {  
   if (!journeyTimeData || journeyTimeData.length === 0) {
     return '<p>No journey time data available</p>';
@@ -1378,10 +1275,6 @@ function createJourneyTimeContent(journeyTimeData) {
   return html;
 }
 
-/**
- * Navigate through journey time records
- * @param {number} direction -1 for previous, 1 for next
- */
 function navigateJourneyTime(direction) {
   
   if (!window.currentJourneyTimeData || window.currentJourneyTimeData.length === 0) {
@@ -4468,9 +4361,6 @@ function drawSelectedAmenities() {
   amenitiesLayerGroup.addTo(map);
 }
 
-/**
- * Enhanced updateAmenitiesCatchmentLayer that waits for dependencies and retries automatically
- */
 function updateAmenitiesCatchmentLayer() {
   amenitiesUpdateRequested = true;
   
@@ -4501,7 +4391,6 @@ function updateAmenitiesCatchmentLayer() {
     return;
   }
 
-  // Show journey time calculation indicator
   showLoadingIndicator('calculating-journey-times', 'Calculating journey times...');
 
   const selectedYear = AmenitiesYear.value;
@@ -4580,10 +4469,8 @@ function updateAmenitiesCatchmentLayer() {
         return;
       }
       
-      // Journey time calculation completed
       hideLoadingIndicator('calculating-journey-times');
       
-      // Continue with existing logic...
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
       
@@ -4644,7 +4531,6 @@ function updateAmenitiesCatchmentLayer() {
         }
       });
       
-      // Fill missing times
       const gridTimeKeys = new Set(Object.keys(gridTimeMap));
       for (let i = 0; i < grid.features.length; i++) {
         const originId = grid.features[i].properties.OriginId_tracc;
@@ -4662,7 +4548,6 @@ function updateAmenitiesCatchmentLayer() {
       }
       
       if (needToCreateNewLayer) {            
-        // Show rendering indicator
         showLoadingIndicator('rendering-layer', 'Rendering layer...');
         showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
         
@@ -4670,7 +4555,6 @@ function updateAmenitiesCatchmentLayer() {
           map.removeLayer(AmenitiesCatchmentLayer);
         }
         
-        // Start parallel operations: 1) Create and style layer, 2) Calculate statistics
         const layerCreationPromise = new Promise((resolve) => {
           AmenitiesCatchmentLayer = L.geoJSON(grid, {
             pane: 'polygonLayers',
@@ -4707,7 +4591,6 @@ function updateAmenitiesCatchmentLayer() {
             layer.feature.properties._weight = undefined;
           });
 
-          // Update sliders and complete layer creation
           updateSliderRanges('Amenities', 'Opacity');
           updateSliderRanges('Amenities', 'Outline');
           
@@ -4715,7 +4598,6 @@ function updateAmenitiesCatchmentLayer() {
           resolve();
         });
         
-        // Start journey time statistics calculation in parallel
         const statisticsPromise = new Promise((resolve) => {
           setTimeout(() => {
             updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
@@ -4724,7 +4606,6 @@ function updateAmenitiesCatchmentLayer() {
           }, 100);
         });
         
-        // Wait for both operations to complete, then finalize
         Promise.all([layerCreationPromise, statisticsPromise]).then(() => {
           drawSelectedAmenities();
           updateLegend();
@@ -4736,7 +4617,6 @@ function updateAmenitiesCatchmentLayer() {
         });
         
       } else {
-        // Just apply styling and calculate stats in parallel
         showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
         
         const stylingPromise = new Promise((resolve) => {
@@ -4769,9 +4649,7 @@ function updateAmenitiesCatchmentLayer() {
       amenitiesUpdateRequested = false;
     });
 }
-/**
- * Check if all required data for amenities catchment layer is ready
- */
+
 function checkAmenitiesDataReady() {
     const missing = [];
     
@@ -4805,9 +4683,6 @@ function checkAmenitiesDataReady() {
     };
 }
 
-/**
- * Set up automatic retry mechanism for amenities updates
- */
 function setupAmenitiesAutoRetry() {
     if (pendingAmenitiesUpdate) {
         return;
@@ -4841,9 +4716,6 @@ function setupAmenitiesAutoRetry() {
     }, 15000);
 }
 
-/**
- * Clear the amenities auto-retry mechanism
- */
 function clearAmenitiesAutoRetry() {
     pendingAmenitiesUpdate = false;
     amenitiesUpdateRequested = false;
@@ -5036,7 +4908,6 @@ function updateOpacityAndOutlineFields() {
       if (currentIndex < features.length) {
         requestAnimationFrame(processBatch);
       } else {
-        // Apply styling with rendering indicator
         showLoadingIndicator('rendering-layer', 'Rendering...');
         applyAmenitiesCatchmentLayerStyling();
         isUpdatingStyles = false;
@@ -5109,7 +4980,6 @@ function updateOpacityAndOutlineFields() {
         layer.feature.properties._weight = result._weight;
       });
       
-      // Apply styling with rendering indicator
       showLoadingIndicator('rendering-layer', 'Rendering...');
       applyAmenitiesCatchmentLayerStyling();
       isUpdatingStyles = false;
@@ -5440,14 +5310,9 @@ function updateFilterValues(source = 'filter') {
   }
 }
 
-/**
- * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
- */
 async function updateSummaryStatistics(features, source = 'filter', forceBaseStatsUpdate = false) {
-  console.log(`🔄 [CALC TRIGGER] updateSummaryStatistics called - Source: ${source}, Features: ${features ? features.length : 'undefined'}, Force update: ${forceBaseStatsUpdate}`);
   
   if (isCalculatingStats) {
-    console.log(`⏸️ [CALC SKIP] Calculation already in progress, skipping`);
     return;
   }
   
@@ -5509,23 +5374,17 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     let timeStats = {};
     
     if (needsDemographicStatsUpdate || forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
-      console.log(`📊 [BASE STATS] Starting base statistics calculation - needsUpdate: ${needsDemographicStatsUpdate}, forceUpdate: ${forceBaseStatsUpdate}, source: ${source}, hasCached: ${!!window.lastBaseStats}`);
       baseStats = await calculateBaseStatistics(filteredFeatures);
       window.lastBaseStats = baseStats;
       needsDemographicStatsUpdate = false;
-      console.log(`✅ [BASE STATS] Base statistics calculation completed`);
     } else {
-      console.log(`💾 [BASE STATS] Using cached base statistics`);
       baseStats = window.lastBaseStats;
     }
     
     if (needsJourneyTimeStatsUpdate && AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
-      console.log(`🕒 [TIME STATS] Starting journey time statistics calculation - gridTimeMap entries: ${Object.keys(gridTimeMap).length}`);
       timeStats = calculateTimeStatistics(filteredFeatures);
       needsJourneyTimeStatsUpdate = false;
-      console.log(`✅ [TIME STATS] Journey time statistics calculation completed`);
     } else if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0 && window.lastTimeStats) {
-      console.log(`💾 [TIME STATS] Using cached journey time statistics`);
       timeStats = window.lastTimeStats || calculateTimeStatistics(filteredFeatures);
     }
     
@@ -5535,9 +5394,7 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     
     const stats = {...baseStats, ...timeStats};
     updateStatisticsUI(stats);
-    
-    console.log(`🎯 [CALC COMPLETE] Statistics calculation completed successfully - Total pop: ${stats.totalPopulation}, Avg time: ${stats.avgTime || 'N/A'}`);
-    
+        
     hideLoadingIndicator('calculating-stats');
   } catch (error) {
     console.error("❌ [CALC ERROR] Error calculating statistics:", error);
@@ -5545,7 +5402,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     hideLoadingIndicator('calculating-stats');
   } finally {
     isCalculatingStats = false;
-    console.log(`🏁 [CALC END] updateSummaryStatistics function completed`);
   }
 }
 
@@ -5780,14 +5636,9 @@ function applyRangeFilter(features, filterValue) {
   return features;
 }
 
-function calculateStatisticsWithJavaScript(features) {
-  const startTime = performance.now();
-  const timestamp = new Date().toLocaleTimeString();
-  console.log(`🟨🔢 [JS CALC] Starting JavaScript statistics calculation for ${features.length} features at ${timestamp}`);
-  
+function calculateStatisticsWithJavaScript(features) {  
   const BATCH_SIZE = 20000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
-  console.log(`🟨📦 [JS CALC] Processing in ${totalBatches} batches of ${BATCH_SIZE} features each`);
   
   return new Promise(resolve => {
     let stats = {
@@ -5890,9 +5741,6 @@ function calculateStatisticsWithJavaScript(features) {
         const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
           stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
 
-        const endTime = performance.now();
-        console.log(`🟨✅ [JS CALC] JavaScript calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
-
         resolve({
           totalPopulation: stats.totalPopulation,
           minPopulation: stats.minPopulation,
@@ -5918,12 +5766,9 @@ function calculateStatisticsWithJavaScript(features) {
 }
 
 async function calculateBaseStatistics(features) {
-  console.log(`🔢 [CALC BASE] Starting base statistics calculation for ${features ? features.length : 0} features`);
-  
   showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
-  
+
   if (!features || features.length === 0) {
-    console.log(`⚠️ [CALC BASE] No features provided, returning empty statistics`);
     hideLoadingIndicator('base-statistics');
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
@@ -5934,17 +5779,12 @@ async function calculateBaseStatistics(features) {
     };
   }
 
-  console.log(`🟨 [JAVASCRIPT] Using JavaScript for statistics calculation`);
   const result = await calculateStatisticsWithJavaScript(features);
   hideLoadingIndicator('base-statistics');
-  console.log(`✅ [JAVASCRIPT] JavaScript calculation completed successfully`);
   return result;
 }
 
-function calculateTimeStatistics(features) {
-  const startTime = performance.now();
-  console.log(`🕒🔢 [TIME CALC] Starting journey time statistics calculation for ${features.length} features`);
-  
+function calculateTimeStatistics(features) {  
   let totalWeightedTime = 0;
   let totalPopulation = 0;
   let minTime = Infinity;
@@ -5987,10 +5827,7 @@ function calculateTimeStatistics(features) {
   if (maxTime === -Infinity) maxTime = 0;
   
   const avgTime = totalPopulation > 0 ? totalWeightedTime / totalPopulation : 0;
-  
-  const endTime = performance.now();
-  console.log(`🕒✅ [TIME CALC] Journey time calculation completed in ${(endTime - startTime).toFixed(2)}ms - Valid: ${validFeatureCount}, Missing time: ${missingTimeCount}, Zero pop: ${zeroPopCount}`);
-  
+    
   return {
     avgTime: avgTime,
     minTime: minTime,
