@@ -243,7 +243,6 @@ document.getElementById('highlightAreaCheckbox').addEventListener('change', func
 });
 
 document.addEventListener('DOMContentLoaded', (event) => {
-  clearAllLoadingIndicators();
   initializeUI();
   setupMapPanes();
   
@@ -264,7 +263,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
   }).catch(error => {
     console.error('Error loading base layers:', error);
     showErrorNotification('Error loading map layers. Please try refreshing the page.');
-    clearAllLoadingIndicators();
   });
 });
 
