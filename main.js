@@ -28,6 +28,7 @@ let csvDataCache = {};
 let fullCsvData = null;
 let amenitiesLayerGroup = L.featureGroup();
 let selectedAmenitiesAmenities = [];
+window.duckdbAnalyticsReady = false;
 let selectingFromMap = false;
 let selectedAmenitiesFromMap = [];
 let grid;
@@ -951,6 +952,7 @@ async function loadGridData() {
     
     calculateGridStatistics(grid);
     
+    // Initialize DuckDB analytics before updating summary statistics
     await initializeDuckDBForAnalytics(grid);
     
     updateFilterDropdown();
@@ -1058,57 +1060,52 @@ async function initializeDuckDB() {
 
 async function initializeDuckDBForAnalytics(gridData) {
   try {    
-    setTimeout(async () => {
-      try {
-        await waitForDuckDBModule();
-        await initializeDuckDB();
-        
-        const db = window.duckdbInstance;
-        const conn = await db.connect();
-        
-        if (!gridData || !gridData.features || gridData.features.length === 0) {
-          console.warn('No grid data available for DuckDB analytics');
-          await conn.close();
-          return;
-        }
-                
-        await conn.query(`
-          CREATE TABLE grid_analytics (
-            OriginId_tracc INTEGER,
-            pop DOUBLE,
-            pop_growth DOUBLE,
-            imd_score_mhclg DOUBLE,
-            imd_decile_mhclg INTEGER,
-            hh_caravail_ts045 DOUBLE,
-            lad24cd VARCHAR,
-            wd24cd VARCHAR
-          )
-        `);
-        
-        const BATCH_SIZE = 20000;
-        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
-          const batch = gridData.features.slice(i, i + BATCH_SIZE);
-          const values = batch.map(f => {
-            const props = f.properties;
-            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
-          }).join(', ');
-          
-          await conn.query(`
-            INSERT INTO grid_analytics VALUES ${values}
-          `);
-        }
-        
-        await conn.close();
-        
-        window.duckdbAnalyticsReady = true;
-        
-      } catch (error) {
-        console.warn('DuckDB analytics initialization failed (optional feature):', error);
-      }
-    }, 100);
+    await waitForDuckDBModule();
+    await initializeDuckDB();
+    
+    const db = window.duckdbInstance;
+    const conn = await db.connect();
+    
+    if (!gridData || !gridData.features || gridData.features.length === 0) {
+      console.warn('No grid data available for DuckDB analytics');
+      await conn.close();
+      return;
+    }
+            
+    await conn.query(`
+      CREATE TABLE grid_analytics (
+        OriginId_tracc INTEGER,
+        pop DOUBLE,
+        pop_growth DOUBLE,
+        imd_score_mhclg DOUBLE,
+        imd_decile_mhclg INTEGER,
+        hh_caravail_ts045 DOUBLE,
+        lad24cd VARCHAR,
+        wd24cd VARCHAR
+      )
+    `);
+    
+    const BATCH_SIZE = 20000;
+    for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
+      const batch = gridData.features.slice(i, i + BATCH_SIZE);
+      const values = batch.map(f => {
+        const props = f.properties;
+        return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
+      }).join(', ');
+      
+      await conn.query(`
+        INSERT INTO grid_analytics VALUES ${values}
+      `);
+    }
+    
+    await conn.close();
+    
+    window.duckdbAnalyticsReady = true;
+    console.log('DuckDB analytics initialized successfully');
     
   } catch (error) {
-    console.warn('Background DuckDB initialization failed (optional):', error);
+    console.warn('DuckDB analytics initialization failed (optional feature):', error);
+    window.duckdbAnalyticsReady = false;
   }
 }
 
@@ -5643,6 +5640,16 @@ function waitForDuckDBAnalytics(timeoutMs = 10000) {
   });
 }
 
+async function waitForDuckDBAnalytics(maxWaitTime = 10000) {
+  const startTime = Date.now();
+  
+  while (!window.duckdbAnalyticsReady && (Date.now() - startTime) < maxWaitTime) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  
+  return window.duckdbAnalyticsReady === true;
+}
+
 async function calculateDemoStatistics(features) {
   if (!features || features.length === 0) {
     return {
@@ -5670,6 +5677,13 @@ async function calculateDemoStatistics(features) {
           totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
         };
       }
+    }
+
+    // Wait for DuckDB analytics to be ready
+    const analyticsReady = await waitForDuckDBAnalytics();
+    if (!analyticsReady) {
+      console.warn('DuckDB analytics not ready, falling back to JavaScript calculation');
+      return calculateDemoStatisticsJS(features);
     }
 
     const conn = await window.duckdbInstance.connect();
@@ -5729,7 +5743,74 @@ async function calculateDemoStatistics(features) {
     };
   } catch (error) {
     console.error('Error in DuckDB statistics calculation:', error);
+    console.warn('Falling back to JavaScript calculation');
+    return calculateDemoStatisticsJS(features);
   }
+}
+
+function calculateDemoStatisticsJS(features) {
+  let totalPopulation = 0, minPopulation = Infinity, maxPopulation = -Infinity;
+  let totalImdScore = 0, totalImdDecile = 0, totalCarAvailability = 0, totalPopGrowth = 0;
+  let minImdScore = Infinity, maxImdScore = -Infinity;
+  let minImdDecile = Infinity, maxImdDecile = -Infinity;
+  let minCarAvailability = Infinity, maxCarAvailability = -Infinity;
+  let minPopGrowth = Infinity, maxPopGrowth = -Infinity;
+  let imdScoreCount = 0, imdDecileCount = 0, carAvailabilityCount = 0;
+
+  features.forEach(feature => {
+    const props = feature.properties;
+    
+    if (props.pop != null) {
+      totalPopulation += props.pop;
+      minPopulation = Math.min(minPopulation, props.pop);
+      maxPopulation = Math.max(maxPopulation, props.pop);
+    }
+    
+    if (props.imd_score_mhclg != null) {
+      totalImdScore += props.pop * props.imd_score_mhclg;
+      imdScoreCount += props.pop;
+      minImdScore = Math.min(minImdScore, props.imd_score_mhclg);
+      maxImdScore = Math.max(maxImdScore, props.imd_score_mhclg);
+    }
+    
+    if (props.imd_decile_mhclg != null) {
+      totalImdDecile += props.pop * props.imd_decile_mhclg;
+      imdDecileCount += props.pop;
+      minImdDecile = Math.min(minImdDecile, props.imd_decile_mhclg);
+      maxImdDecile = Math.max(maxImdDecile, props.imd_decile_mhclg);
+    }
+    
+    if (props.hh_caravail_ts045 != null) {
+      totalCarAvailability += props.pop * props.hh_caravail_ts045;
+      carAvailabilityCount += props.pop;
+      minCarAvailability = Math.min(minCarAvailability, props.hh_caravail_ts045);
+      maxCarAvailability = Math.max(maxCarAvailability, props.hh_caravail_ts045);
+    }
+    
+    if (props.pop_growth != null) {
+      totalPopGrowth += props.pop_growth;
+      minPopGrowth = Math.min(minPopGrowth, props.pop_growth);
+      maxPopGrowth = Math.max(maxPopGrowth, props.pop_growth);
+    }
+  });
+
+  return {
+    totalPopulation: totalPopulation || 0,
+    minPopulation: minPopulation === Infinity ? 0 : minPopulation,
+    maxPopulation: maxPopulation === -Infinity ? 0 : maxPopulation,
+    avgImdScore: imdScoreCount > 0 ? totalImdScore / imdScoreCount : 0,
+    minImdScore: minImdScore === Infinity ? 0 : minImdScore,
+    maxImdScore: maxImdScore === -Infinity ? 0 : maxImdScore,
+    avgImdDecile: imdDecileCount > 0 ? totalImdDecile / imdDecileCount : 0,
+    minImdDecile: minImdDecile === Infinity ? 0 : minImdDecile,
+    maxImdDecile: maxImdDecile === -Infinity ? 0 : maxImdDecile,
+    avgCarAvailability: carAvailabilityCount > 0 ? totalCarAvailability / carAvailabilityCount : 0,
+    minCarAvailability: minCarAvailability === Infinity ? 0 : minCarAvailability,
+    maxCarAvailability: maxCarAvailability === -Infinity ? 0 : maxCarAvailability,
+    totalPopGrowth: totalPopGrowth || 0,
+    minPopGrowth: minPopGrowth === Infinity ? 0 : minPopGrowth,
+    maxPopGrowth: maxPopGrowth === -Infinity ? 0 : maxPopGrowth
+  };
 }
 
 function calculateTimeStatistics(features) {  
