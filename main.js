@@ -951,6 +951,8 @@ async function loadGridData() {
     
     calculateGridStatistics(grid);
     
+    await initializeDuckDBForAnalytics(grid);
+    
     updateFilterDropdown();
     updateFilterValues();
     
