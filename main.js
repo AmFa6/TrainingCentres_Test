@@ -5507,7 +5507,10 @@ function updateFilterValues(source = 'filter') {
  * Enhanced updateSummaryStatistics that can wait for dependencies and auto-retry
  */
 async function updateSummaryStatistics(features, source = 'filter', forceBaseStatsUpdate = false) {
+  console.log(`🔄 [CALC TRIGGER] updateSummaryStatistics called - Source: ${source}, Features: ${features ? features.length : 'undefined'}, Force update: ${forceBaseStatsUpdate}`);
+  
   if (isCalculatingStats) {
+    console.log(`⏸️ [CALC SKIP] Calculation already in progress, skipping`);
     return;
   }
   
@@ -5569,17 +5572,23 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     let timeStats = {};
     
     if (needsDemographicStatsUpdate || forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
+      console.log(`📊 [BASE STATS] Starting base statistics calculation - needsUpdate: ${needsDemographicStatsUpdate}, forceUpdate: ${forceBaseStatsUpdate}, source: ${source}, hasCached: ${!!window.lastBaseStats}`);
       baseStats = await calculateBaseStatistics(filteredFeatures);
       window.lastBaseStats = baseStats;
       needsDemographicStatsUpdate = false;
+      console.log(`✅ [BASE STATS] Base statistics calculation completed`);
     } else {
+      console.log(`💾 [BASE STATS] Using cached base statistics`);
       baseStats = window.lastBaseStats;
     }
     
     if (needsJourneyTimeStatsUpdate && AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+      console.log(`🕒 [TIME STATS] Starting journey time statistics calculation - gridTimeMap entries: ${Object.keys(gridTimeMap).length}`);
       timeStats = calculateTimeStatistics(filteredFeatures);
       needsJourneyTimeStatsUpdate = false;
+      console.log(`✅ [TIME STATS] Journey time statistics calculation completed`);
     } else if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0 && window.lastTimeStats) {
+      console.log(`💾 [TIME STATS] Using cached journey time statistics`);
       timeStats = window.lastTimeStats || calculateTimeStatistics(filteredFeatures);
     }
     
@@ -5590,13 +5599,16 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     const stats = {...baseStats, ...timeStats};
     updateStatisticsUI(stats);
     
+    console.log(`🎯 [CALC COMPLETE] Statistics calculation completed successfully - Total pop: ${stats.totalPopulation}, Avg time: ${stats.avgTime || 'N/A'}`);
+    
     hideLoadingIndicator('calculating-stats');
   } catch (error) {
-    console.error("Error calculating statistics:", error);
+    console.error("❌ [CALC ERROR] Error calculating statistics:", error);
     displayEmptyStatistics();
     hideLoadingIndicator('calculating-stats');
   } finally {
     isCalculatingStats = false;
+    console.log(`🏁 [CALC END] updateSummaryStatistics function completed`);
   }
 }
 
@@ -5858,16 +5870,21 @@ function waitForDuckDBAnalytics(timeoutMs = 10000) {
  * Calculate statistics using DuckDB for better performance on large datasets
  */
 async function calculateStatisticsWithDuckDB(features) {  
+  const startTime = performance.now();
+  console.log(`🦆🔢 [DUCKDB CALC] Starting DuckDB statistics calculation for ${features.length} features`);
+  
   try {
     const conn = await window.duckdbInstance.connect();
     
     const originIds = features.map(f => f.properties.OriginId_tracc).filter(id => id);
     
     if (originIds.length === 0) {
+      console.log(`🦆⚠️ [DUCKDB CALC] No valid origin IDs found, falling back to JavaScript`);
       await conn.close();
       return await calculateStatisticsWithJavaScript(features);
     }
     
+    console.log(`🦆📊 [DUCKDB CALC] Processing ${originIds.length} origin IDs with DuckDB SQL query`);
     const batchSize = 20000;
     await conn.query('CREATE TEMP TABLE filtered_origins (id INTEGER)');
     
@@ -5902,6 +5919,9 @@ async function calculateStatisticsWithDuckDB(features) {
     
     const row = result.toArray()[0];
     
+    const endTime = performance.now();
+    console.log(`🦆✅ [DUCKDB CALC] DuckDB calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
+    
     return {
       totalPopulation: Number(row.total_population) || 0,
       minPopulation: Number(row.min_population) || 0,
@@ -5920,7 +5940,8 @@ async function calculateStatisticsWithDuckDB(features) {
       maxPopGrowth: Number(row.max_pop_growth) || 0
     };
   } catch (error) {
-    console.error('Error in DuckDB statistics calculation:', error);
+    const endTime = performance.now();
+    console.error(`🦆❌ [DUCKDB CALC] Error in DuckDB statistics calculation after ${(endTime - startTime).toFixed(2)}ms:`, error);
     return await calculateStatisticsWithJavaScript(features);
   }
 }
@@ -5929,10 +5950,13 @@ async function calculateStatisticsWithDuckDB(features) {
  * Original JavaScript-based statistics calculation (renamed for clarity)
  */
 function calculateStatisticsWithJavaScript(features) {
+  const startTime = performance.now();
   const timestamp = new Date().toLocaleTimeString();
+  console.log(`🟨🔢 [JS CALC] Starting JavaScript statistics calculation for ${features.length} features at ${timestamp}`);
   
   const BATCH_SIZE = 20000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
+  console.log(`🟨📦 [JS CALC] Processing in ${totalBatches} batches of ${BATCH_SIZE} features each`);
   
   return new Promise(resolve => {
     let stats = {
@@ -6035,6 +6059,9 @@ function calculateStatisticsWithJavaScript(features) {
         const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
           stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
 
+        const endTime = performance.now();
+        console.log(`🟨✅ [JS CALC] JavaScript calculation completed in ${(endTime - startTime).toFixed(2)}ms`);
+
         resolve({
           totalPopulation: stats.totalPopulation,
           minPopulation: stats.minPopulation,
@@ -6063,8 +6090,11 @@ function calculateStatisticsWithJavaScript(features) {
  * Enhanced statistics calculation that can use DuckDB for large datasets
  */
 async function calculateBaseStatistics(features) {
+  console.log(`🔢 [CALC BASE] Starting base statistics calculation for ${features ? features.length : 0} features`);
+  
   showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
   if (!features || features.length === 0) {
+    console.log(`⚠️ [CALC BASE] No features provided, returning empty statistics`);
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
       avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
@@ -6075,22 +6105,30 @@ async function calculateBaseStatistics(features) {
   }
 
   try {
+    console.log(`🦆 [DUCKDB CHECK] Waiting for DuckDB analytics to be ready...`);
     await waitForDuckDBAnalytics(10000);
     if (window.duckdbAnalyticsReady) {
+      console.log(`🦆 [DUCKDB] DuckDB is ready! Using DuckDB for statistics calculation`);
       const result = await calculateStatisticsWithDuckDB(features);
       hideLoadingIndicator('base-statistics');
+      console.log(`✅ [DUCKDB] DuckDB calculation completed successfully`);
       return result;
     }
   } catch (error) {
-    console.warn(`DuckDB not ready, falling back to JavaScript calculation:`, error);
+    console.warn(`🦆❌ [DUCKDB FALLBACK] DuckDB not ready, falling back to JavaScript calculation:`, error);
   }
   
+  console.log(`🟨 [JAVASCRIPT] Using JavaScript for statistics calculation (DuckDB not available)`);
   const result = await calculateStatisticsWithJavaScript(features);
   hideLoadingIndicator('base-statistics');
+  console.log(`✅ [JAVASCRIPT] JavaScript calculation completed successfully`);
   return result;
 }
 
-function calculateTimeStatistics(features) {  
+function calculateTimeStatistics(features) {
+  const startTime = performance.now();
+  console.log(`🕒🔢 [TIME CALC] Starting journey time statistics calculation for ${features.length} features`);
+  
   let totalWeightedTime = 0;
   let totalPopulation = 0;
   let minTime = Infinity;
@@ -6133,6 +6171,9 @@ function calculateTimeStatistics(features) {
   if (maxTime === -Infinity) maxTime = 0;
   
   const avgTime = totalPopulation > 0 ? totalWeightedTime / totalPopulation : 0;
+  
+  const endTime = performance.now();
+  console.log(`🕒✅ [TIME CALC] Journey time calculation completed in ${(endTime - startTime).toFixed(2)}ms - Valid: ${validFeatureCount}, Missing time: ${missingTimeCount}, Zero pop: ${zeroPopCount}`);
   
   return {
     avgTime: avgTime,
