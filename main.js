@@ -1184,9 +1184,6 @@ async function processGridData(data1, data2, csvText1, csvText2) {
       type: 'FeatureCollection',
       features: processedFeatures
     };
-    
-    // Load data into DuckDB for analytics
-    await loadDataIntoDuckDB(processedFeatures);
             
     resolve(combinedData);
   });
