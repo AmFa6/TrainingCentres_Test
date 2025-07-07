@@ -774,6 +774,9 @@ async function loadGridData() {
     
     calculateGridStatistics(grid);
     
+    // Initialize DuckDB for analytics with the processed grid data
+    initializeDuckDBForAnalytics(grid);
+    
     updateFilterDropdown();
     updateFilterValues();
     
@@ -972,8 +975,10 @@ async function processGridDataFast(data1, data2, csvText1, csvText2) {
  * Initialize DuckDB in background for advanced analytics (non-blocking)
  */
 async function initializeDuckDBForAnalytics(gridData) {
+  console.log('🦆🚀 [DUCKDB ANALYTICS] Starting DuckDB analytics initialization...');
   try {    
     setTimeout(async () => {
+      console.log('🦆⏰ [DUCKDB ANALYTICS] Beginning background initialization after 100ms delay');
       try {
         await waitForDuckDBModule();
         await initializeDuckDB();
@@ -1015,15 +1020,16 @@ async function initializeDuckDBForAnalytics(gridData) {
         
         await conn.close();
         
+        console.log('🦆✅ [DUCKDB ANALYTICS] DuckDB analytics initialization completed successfully');
         window.duckdbAnalyticsReady = true;
         
       } catch (error) {
-        console.warn('DuckDB analytics initialization failed (optional feature):', error);
+        console.error('🦆❌ [DUCKDB ANALYTICS] DuckDB analytics initialization failed:', error);
       }
     }, 100);
     
   } catch (error) {
-    console.warn('Background DuckDB initialization failed (optional):', error);
+    console.error('🦆❌ [DUCKDB ANALYTICS] Background DuckDB initialization failed:', error);
   }
 }
 
