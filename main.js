@@ -260,15 +260,13 @@ document.addEventListener('DOMContentLoaded', (event) => {
   
   initializeCollapsiblePanels();
   
-  loadBaseLayers().then(async () => {    
+  // Load all data in parallel - grid data as highest priority
+  loadAllDataInParallel().then(() => {    
     map.fire('baselayersloaded');
     initialLoadComplete = true;
-    
-    await loadJourneyTimeCsv();
-    loadBackgroundData();
   }).catch(error => {
-    console.error('Error loading base layers:', error);
-    showErrorNotification('Error loading map layers. Please try refreshing the page.');
+    console.error('Error loading data:', error);
+    showErrorNotification('Error loading map data. Please try refreshing the page.');
     clearAllLoadingIndicators();
   });
 });
@@ -572,6 +570,91 @@ function loadBaseLayers() {
 }
 
 /**
+ * Load all data in parallel with grid data as highest priority
+ * This matches the desired flow: grid data first, then boundaries/transport/training centres/csv in parallel
+ */
+function loadAllDataInParallel() {
+  // Show loading indicators for all parallel operations
+  showLoadingIndicator('grid-data', 'Loading grid data...');
+  showLoadingIndicator('boundary-data', 'Loading boundaries...');
+  showLoadingIndicator('transport-data', 'Loading transport infrastructure...');
+  showLoadingIndicator('training-centres', 'Loading training centres...');
+  showLoadingIndicator('journey-time-csv', 'Loading journey time data...');
+  
+  // Start all data loading operations in parallel
+  const gridDataPromise = loadGridData();
+  const boundaryDataPromise = loadBoundaryData();
+  const transportDataPromise = loadTransportInfrastructure();
+  const trainingCentresPromise = loadTrainingCentres();
+  const journeyTimeCsvPromise = loadJourneyTimeCsv();
+  
+  // Handle grid data + boundaries completion for dropdowns and base stats
+  const gridAndBoundariesPromise = Promise.all([gridDataPromise, boundaryDataPromise])
+    .then(() => {
+      console.log('Grid data and boundaries loaded - updating dropdowns and calculating base stats');
+      updateFilterDropdown();
+      updateFilterValues();
+      
+      // Calculate base stats for MCA when both grid and boundaries are ready
+      if (grid && grid.features) {
+        updateSummaryStatistics(grid.features);
+      }
+      
+      hideLoadingIndicator('grid-data');
+      hideLoadingIndicator('boundary-data');
+    })
+    .catch(error => {
+      console.error('Error loading grid data or boundaries:', error);
+      hideLoadingIndicator('grid-data');
+      hideLoadingIndicator('boundary-data');
+      throw error;
+    });
+  
+  // Handle training centres completion for dropdowns
+  const trainingCentresSetupPromise = trainingCentresPromise
+    .then(() => {
+      console.log('Training centres loaded - setting up dropdowns');
+      initializeTrainingCentres();
+      hideLoadingIndicator('training-centres');
+    })
+    .catch(error => {
+      console.error('Error loading training centres:', error);
+      hideLoadingIndicator('training-centres');
+      showErrorNotification('Error loading training center data. Some features may be limited.');
+    });
+  
+  // Handle transport infrastructure completion
+  const transportSetupPromise = transportDataPromise
+    .then(() => {
+      console.log('Transport infrastructure loaded');
+      hideLoadingIndicator('transport-data');
+    })
+    .catch(error => {
+      console.error('Error loading transport infrastructure:', error);
+      hideLoadingIndicator('transport-data');
+    });
+  
+  // Handle journey time CSV completion
+  const csvSetupPromise = journeyTimeCsvPromise
+    .then(() => {
+      console.log('Journey time CSV loaded');
+      hideLoadingIndicator('journey-time-csv');
+    })
+    .catch(error => {
+      console.error('Error loading journey time CSV:', error);
+      hideLoadingIndicator('journey-time-csv');
+    });
+  
+  // Wait for all critical operations to complete
+  return Promise.all([
+    gridAndBoundariesPromise,
+    trainingCentresSetupPromise,
+    transportSetupPromise,
+    csvSetupPromise
+  ]);
+}
+
+/**
  * Enhanced loadBoundaryData that triggers pending amenities updates when complete
  */
 function loadBoundaryData() {
@@ -742,25 +825,7 @@ function loadTransportInfrastructure() {
 /**
  * Loads heavier data (grid, training centers) in the background
  */
-function loadBackgroundData() {  
-  showLoadingIndicator('background-data', 'Loading training centres...');
-  loadTrainingCentres()
-    .then(() => {
-      hideLoadingIndicator('background-data');
-      initializeTrainingCentres();
-      loadGridData();
-    })
-    .catch(error => {
-      console.error('Error loading training centres:', error);
-      hideLoadingIndicator('background-data');
-      showErrorNotification('Error loading training center data. Some features may be limited.');
-      loadGridData();
-    });
-}
-
 async function loadGridData() {
-  showLoadingIndicator('grid-data', 'Loading grid data...');
-  
   try {
     const [data1, data2, csvText1, csvText2] = await Promise.all([
       fetch('https://AmFa6.github.io/TrainingCentres/grid-socioeco-lep_traccid_1.geojson').then(response => response.json()),
@@ -774,13 +839,9 @@ async function loadGridData() {
     
     calculateGridStatistics(grid);
     
-    updateFilterDropdown();
-    updateFilterValues();
+    // Note: updateFilterDropdown, updateFilterValues, and updateSummaryStatistics 
+    // are now called from loadAllDataInParallel when both grid and boundaries are ready
     
-    if (initialLoadComplete) {
-      updateSummaryStatistics(grid.features);
-    }
-        
     if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
       setTimeout(() => {
         if (amenitiesUpdateRequested) {
@@ -789,11 +850,9 @@ async function loadGridData() {
       }, 500);
     }
     
-    hideLoadingIndicator('grid-data');
-    
   } catch (error) {
     console.error(`Error loading grid data:`, error);
-    hideLoadingIndicator('grid-data');
+    throw error; // Re-throw to be handled by calling function
   }
 }
 
@@ -4604,70 +4663,99 @@ function updateAmenitiesCatchmentLayer() {
       
       if (needToCreateNewLayer) {            
         // Show rendering indicator
-        showLoadingIndicator('rendering-layer', 'Rendering...');
+        showLoadingIndicator('rendering-layer', 'Rendering layer...');
+        showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
         
         if (AmenitiesCatchmentLayer) {
           map.removeLayer(AmenitiesCatchmentLayer);
         }
         
-        AmenitiesCatchmentLayer = L.geoJSON(grid, {
-          pane: 'polygonLayers',
-          style: function(feature) {
-            const OriginId_tracc = feature.properties.OriginId_tracc;
-            const time = gridTimeMap[OriginId_tracc];
-            
-            let fillColor = 'transparent';
-            let fillOpacity = 0;
-            
-            if (time !== undefined && time < 120) {
-              if (time <= 10) fillColor = '#fde725';
-              else if (time <= 20) fillColor = '#8fd744';
-              else if (time <= 30) fillColor = '#35b779';
-              else if (time <= 40) fillColor = '#21908d';
-              else if (time <= 50) fillColor = '#31688e';
-              else if (time <= 60) fillColor = '#443a82';
-              else fillColor = '#440154';
-              fillOpacity = 0.7;
+        // Start parallel operations: 1) Create and style layer, 2) Calculate statistics
+        const layerCreationPromise = new Promise((resolve) => {
+          AmenitiesCatchmentLayer = L.geoJSON(grid, {
+            pane: 'polygonLayers',
+            style: function(feature) {
+              const OriginId_tracc = feature.properties.OriginId_tracc;
+              const time = gridTimeMap[OriginId_tracc];
+              
+              let fillColor = 'transparent';
+              let fillOpacity = 0;
+              
+              if (time !== undefined && time < 120) {
+                if (time <= 10) fillColor = '#fde725';
+                else if (time <= 20) fillColor = '#8fd744';
+                else if (time <= 30) fillColor = '#35b779';
+                else if (time <= 40) fillColor = '#21908d';
+                else if (time <= 50) fillColor = '#31688e';
+                else if (time <= 60) fillColor = '#443a82';
+                else fillColor = '#440154';
+                fillOpacity = 0.7;
+              }
+              
+              return {
+                weight: 0.5,
+                fillOpacity: fillOpacity,
+                opacity: fillOpacity > 0 ? 0.8 : 0,
+                fillColor: fillColor,
+                color: '#ffffff'
+              };
             }
-            
-            return {
-              weight: 0.5,
-              fillOpacity: fillOpacity,
-              opacity: fillOpacity > 0 ? 0.8 : 0,
-              fillColor: fillColor,
-              color: '#ffffff'
-            };
-          }
-        }).addTo(map);
-        
-        AmenitiesCatchmentLayer.eachLayer(layer => {
-          layer.feature.properties._opacity = undefined;
-          layer.feature.properties._weight = undefined;
-        });
-
-        const updatesComplete = () => {
-          hideLoadingIndicator('rendering-layer');
+          }).addTo(map);
           
+          AmenitiesCatchmentLayer.eachLayer(layer => {
+            layer.feature.properties._opacity = undefined;
+            layer.feature.properties._weight = undefined;
+          });
+
+          // Update sliders and complete layer creation
+          updateSliderRanges('Amenities', 'Opacity');
+          updateSliderRanges('Amenities', 'Outline');
+          
+          hideLoadingIndicator('rendering-layer');
+          resolve();
+        });
+        
+        // Start journey time statistics calculation in parallel
+        const statisticsPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+            hideLoadingIndicator('calculating-journey-time-stats');
+            resolve();
+          }, 100);
+        });
+        
+        // Wait for both operations to complete, then finalize
+        Promise.all([layerCreationPromise, statisticsPromise]).then(() => {
           drawSelectedAmenities();
           updateLegend();
           updateFilterDropdown();
           updateFilterValues('amenities');
           
-          // Now calculate journey time statistics
-          calculateJourneyTimeStatistics();
-          
           hideLoadingIndicator('amenities-catchment');
-        };
+          hideLoadingIndicator('calculating-journey-times');
+        });
         
-        updateSliderRanges('Amenities', 'Opacity');
-        updateSliderRanges('Amenities', 'Outline');
-        
-        setTimeout(updatesComplete, 50);
       } else {
-        // Just apply styling and calculate stats
-        applyAmenitiesCatchmentLayerStyling();
-        calculateJourneyTimeStatistics();
-        hideLoadingIndicator('amenities-catchment');
+        // Just apply styling and calculate stats in parallel
+        showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
+        
+        const stylingPromise = new Promise((resolve) => {
+          applyAmenitiesCatchmentLayerStyling();
+          resolve();
+        });
+        
+        const statisticsPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+            hideLoadingIndicator('calculating-journey-time-stats');
+            resolve();
+          }, 100);
+        });
+        
+        Promise.all([stylingPromise, statisticsPromise]).then(() => {
+          hideLoadingIndicator('amenities-catchment');
+          hideLoadingIndicator('calculating-journey-times');
+        });
       }
         
       isUpdatingCatchmentLayer = false;
@@ -4680,15 +4768,6 @@ function updateAmenitiesCatchmentLayer() {
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
-}
-
-function calculateJourneyTimeStatistics() {
-  showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
-  
-  setTimeout(() => {
-    updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
-    hideLoadingIndicator('calculating-journey-time-stats');
-  }, 100);
 }
 /**
  * Check if all required data for amenities catchment layer is ready
