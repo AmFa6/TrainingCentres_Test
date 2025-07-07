@@ -1072,7 +1072,7 @@ async function initializeDuckDB() {
 }
 
 async function processGridData(data1, data2, csvText1, csvText2) {
-  return new Promise((resolve) => {    
+  return new Promise(async (resolve) => {    
     const csvData1 = Papa.parse(csvText1, { 
       header: true, 
       skipEmptyLines: true,
@@ -1145,6 +1145,9 @@ async function processGridData(data1, data2, csvText1, csvText2) {
       type: 'FeatureCollection',
       features: processedFeatures
     };
+    
+    // Load data into DuckDB for analytics
+    await loadDataIntoDuckDB(processedFeatures);
             
     resolve(combinedData);
   });
