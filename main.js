@@ -1015,6 +1015,21 @@ async function waitForDuckDBModule() {
 }
 
 async function initializeDuckDB() {
+  // Prevent multiple simultaneous initializations
+  if (window.duckdbInitializing) {
+    console.log('DuckDB initialization already in progress, waiting...');
+    while (window.duckdbInitializing && !window.duckdbInstance) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    return window.duckdbInstance;
+  }
+  
+  if (window.duckdbInstance) {
+    return window.duckdbInstance;
+  }
+  
+  window.duckdbInitializing = true;
+  
   try {    
     if (!window.duckdb) {
       throw new Error('DuckDB-WASM module not available');
@@ -1047,8 +1062,10 @@ async function initializeDuckDB() {
       window.duckdbInstance = db;
     }
     
+    window.duckdbInitializing = false;
     return window.duckdbInstance;
   } catch (error) {
+    window.duckdbInitializing = false;
     console.error('Failed to initialize DuckDB-WASM:', error);
     throw error;
   }
@@ -1131,62 +1148,6 @@ async function processGridData(data1, data2, csvText1, csvText2) {
             
     resolve(combinedData);
   });
-}
-
-async function initializeDuckDB(gridData) {
-  try {    
-    setTimeout(async () => {
-      try {
-        await waitForDuckDBModule();
-        await initializeDuckDB();
-        
-        const db = window.duckdbInstance;
-        const conn = await db.connect();
-        
-        if (!gridData || !gridData.features || gridData.features.length === 0) {
-          console.warn('No grid data available for DuckDB analytics');
-          await conn.close();
-          return;
-        }
-                
-        await conn.query(`
-          CREATE TABLE grid_analytics (
-            OriginId_tracc INTEGER,
-            pop DOUBLE,
-            pop_growth DOUBLE,
-            imd_score_mhclg DOUBLE,
-            imd_decile_mhclg INTEGER,
-            hh_caravail_ts045 DOUBLE,
-            lad24cd VARCHAR,
-            wd24cd VARCHAR
-          )
-        `);
-        
-        const BATCH_SIZE = 20000;
-        for (let i = 0; i < gridData.features.length; i += BATCH_SIZE) {
-          const batch = gridData.features.slice(i, i + BATCH_SIZE);
-          const values = batch.map(f => {
-            const props = f.properties;
-            return `(${props.OriginId_tracc || 'NULL'}, ${props.pop || 'NULL'}, ${props.pop_growth || 'NULL'}, ${props.imd_score_mhclg || 'NULL'}, ${props.imd_decile_mhclg || 'NULL'}, ${props.hh_caravail_ts045 || 'NULL'}, '${(props.lad24cd || '').replace(/'/g, "''")}', '${(props.wd24cd || '').replace(/'/g, "''")}')`;
-          }).join(', ');
-          
-          await conn.query(`
-            INSERT INTO grid_analytics VALUES ${values}
-          `);
-        }
-        
-        await conn.close();
-        
-        window.duckdbAnalyticsReady = true;
-        
-      } catch (error) {
-        console.warn('DuckDB analytics initialization failed (optional feature):', error);
-      }
-    }, 100);
-    
-  } catch (error) {
-    console.warn('Background DuckDB initialization failed (optional):', error);
-  }
 }
 
 async function processBatchGeometries(batchRows, batchStartIndex) {
