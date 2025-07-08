@@ -4455,6 +4455,12 @@ function updateAmenitiesCatchmentLayer() {
     }
     
     gridTimeMap = {};
+    for (let i = 0; i < grid.features.length; i++) {
+      const originId = grid.features[i].properties.OriginId_tracc;
+      if (originId) {
+        gridTimeMap[originId] = 120;
+      }
+    }
     currentJourneyTimeDataset = null;
     
     drawSelectedAmenities([]);
@@ -4497,6 +4503,12 @@ function updateAmenitiesCatchmentLayer() {
         }
         
         gridTimeMap = {};
+        for (let i = 0; i < grid.features.length; i++) {
+          const originId = grid.features[i].properties.OriginId_tracc;
+          if (originId) {
+            gridTimeMap[originId] = 120;
+          }
+        }
         currentJourneyTimeDataset = null;
         
         drawSelectedAmenities();
