@@ -1774,7 +1774,7 @@ function getTrainingCenterPopupContent(properties) {
 
 function setupTrainingCenterFilters() {    
   const debouncedHandler = debounce(() => {
-    drawSelectedAmenites();
+    drawSelectedAmenities();
     
     needsJourneyTimeStatsUpdate = true;
     updateAmenitiesCatchmentLayer();
