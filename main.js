@@ -531,7 +531,7 @@ function setupMapPanes() {
 }
 
 function loadAllDataInParallel() {
-  showLoadingIndicator('initial-data-loading', 'Loading initial data...');
+  showLoadingIndicator('initial-data-loading', 'Loading data...');
   
   const gridDataPromise = loadGridData();
   const boundaryDataPromise = loadBoundaryData();
@@ -758,7 +758,15 @@ async function loadGridData() {
     grid = processedGrid;
     
     calculateGridStatistics(grid);
-        
+    
+    gridTimeMap = {};
+    for (let i = 0; i < grid.features.length; i++) {
+      const originId = grid.features[i].properties.OriginId_tracc;
+      if (originId) {
+        gridTimeMap[originId] = 120;
+      }
+    }
+    
     if (amenitiesUpdateRequested && !isUpdatingCatchmentLayer) {
       setTimeout(() => {
         if (amenitiesUpdateRequested) {
@@ -4547,9 +4555,7 @@ function updateAmenitiesCatchmentLayer() {
           }
         });
       }
-      
-      gridTimeMap = {};
-      
+            
       csvData.forEach(row => {
         const originId = row.origin;
         const destinationId = row.destination;
@@ -4565,14 +4571,6 @@ function updateAmenitiesCatchmentLayer() {
           }
         }
       });
-      
-      const gridTimeKeys = new Set(Object.keys(gridTimeMap));
-      for (let i = 0; i < grid.features.length; i++) {
-        const originId = grid.features[i].properties.OriginId_tracc;
-        if (!gridTimeKeys.has(String(originId))) {
-          gridTimeMap[originId] = 120;
-        }
-      }
       
       currentJourneyTimeDataset = {...gridTimeMap};
       needsJourneyTimeStatsUpdate = true;
