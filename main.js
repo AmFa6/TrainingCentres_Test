@@ -260,6 +260,7 @@ document.addEventListener('DOMContentLoaded', (event) => {
   loadAllDataInParallel().then(() => {    
     map.fire('baselayersloaded');
     initialLoadComplete = true;
+    hideLoadingIndicator('initial-data-loading');
   }).catch(error => {
     console.error('Error loading data:', error);
     showErrorNotification('Error loading map data. Please try refreshing the page.');
@@ -530,6 +531,8 @@ function setupMapPanes() {
 }
 
 function loadAllDataInParallel() {
+  showLoadingIndicator('initial-data-loading', 'Loading initial data...');
+  
   const gridDataPromise = loadGridData();
   const boundaryDataPromise = loadBoundaryData();
   const transportDataPromise = loadTransportInfrastructure();
@@ -4395,10 +4398,13 @@ function updateAmenitiesCatchmentLayer() {
   if (isUpdatingCatchmentLayer) {
     return;
   }
+  
+  showLoadingIndicator('updating-catchment-layer', 'Updating catchment layer...');
     
   const hasRequiredData = checkAmenitiesDataReady();
   
   if (!hasRequiredData.ready) {
+    hideLoadingIndicator('updating-catchment-layer');
     setupAmenitiesAutoRetry();
     return;
   }
@@ -4411,6 +4417,7 @@ function updateAmenitiesCatchmentLayer() {
     ?.classList.contains("collapsed");
   
   if (!amenitiesPanelOpen) {
+    hideLoadingIndicator('updating-catchment-layer');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4452,6 +4459,7 @@ function updateAmenitiesCatchmentLayer() {
     
     displayEmptyStatistics();
     
+    hideLoadingIndicator('updating-catchment-layer');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4466,6 +4474,7 @@ function updateAmenitiesCatchmentLayer() {
       fullCsvData = csvData;
       
       if (csvData.length === 0) {
+        hideLoadingIndicator('updating-catchment-layer');
         isUpdatingCatchmentLayer = false;
         return;
       }
@@ -4492,6 +4501,7 @@ function updateAmenitiesCatchmentLayer() {
         
         displayEmptyStatistics();
         
+        hideLoadingIndicator('updating-catchment-layer');
         isUpdatingCatchmentLayer = false;
         return;
       }
@@ -4637,6 +4647,7 @@ function updateAmenitiesCatchmentLayer() {
             updateFilterValues('amenities');
           }
           
+          hideLoadingIndicator('updating-catchment-layer');
           isUpdatingCatchmentLayer = false;
           amenitiesUpdateRequested = false;
         });
@@ -4656,6 +4667,7 @@ function updateAmenitiesCatchmentLayer() {
         });
         
         Promise.all([stylingPromise, statisticsPromise]).then(() => {
+          hideLoadingIndicator('updating-catchment-layer');
           isUpdatingCatchmentLayer = false;
           amenitiesUpdateRequested = false;
         });
@@ -4663,6 +4675,7 @@ function updateAmenitiesCatchmentLayer() {
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
+      hideLoadingIndicator('updating-catchment-layer');
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
@@ -5326,8 +5339,11 @@ function updateFilterValues(source = 'filter') {
 }
 
 async function updateStatistics(features, recalculateBase = true, recalculateTime = true) {
+  showLoadingIndicator('calculating-statistics', 'Calculating statistics...');
+  
   if (!features || features.length === 0) {
     displayEmptyStatistics();
+    hideLoadingIndicator('calculating-statistics');
     return;
   }
   
@@ -5335,6 +5351,7 @@ async function updateStatistics(features, recalculateBase = true, recalculateTim
   
   if (!filteredFeatures || filteredFeatures.length === 0) {
     displayEmptyStatistics();
+    hideLoadingIndicator('calculating-statistics');
     return;
   }
   
@@ -5369,6 +5386,7 @@ async function updateStatistics(features, recalculateBase = true, recalculateTim
   }
   
   updateStatisticsUI(stats);
+  hideLoadingIndicator('calculating-statistics');
 }
 
 function displayEmptyStatistics() {
