@@ -4461,7 +4461,8 @@ function updateAmenitiesCatchmentLayer() {
         gridTimeMap[originId] = 120;
       }
     }
-    currentJourneyTimeDataset = null;
+    currentJourneyTimeDataset = {...gridTimeMap};
+    needsJourneyTimeStatsUpdate = true;
     
     drawSelectedAmenities([]);
     updateLegend();
@@ -4509,7 +4510,8 @@ function updateAmenitiesCatchmentLayer() {
             gridTimeMap[originId] = 120;
           }
         }
-        currentJourneyTimeDataset = null;
+        currentJourneyTimeDataset = {...gridTimeMap};
+        needsJourneyTimeStatsUpdate = true;
         
         drawSelectedAmenities();
         updateLegend();
@@ -4566,6 +4568,14 @@ function updateAmenitiesCatchmentLayer() {
             eligibleDestinations.add(destinationId);
           }
         });
+      }
+      
+      gridTimeMap = {};
+      for (let i = 0; i < grid.features.length; i++) {
+        const originId = grid.features[i].properties.OriginId_tracc;
+        if (originId) {
+          gridTimeMap[originId] = 120;
+        }
       }
             
       csvData.forEach(row => {
@@ -4663,6 +4673,33 @@ function updateAmenitiesCatchmentLayer() {
         });
         
       } else {        
+        AmenitiesCatchmentLayer.eachLayer(layer => {
+          const OriginId_tracc = layer.feature.properties.OriginId_tracc;
+          const time = gridTimeMap[OriginId_tracc];
+          
+          let fillColor = 'transparent';
+          let fillOpacity = 0;
+          
+          if (time !== undefined && time < 120) {
+            if (time <= 10) fillColor = '#fde725';
+            else if (time <= 20) fillColor = '#8fd744';
+            else if (time <= 30) fillColor = '#35b779';
+            else if (time <= 40) fillColor = '#21908d';
+            else if (time <= 50) fillColor = '#31688e';
+            else if (time <= 60) fillColor = '#443a82';
+            else fillColor = '#440154';
+            fillOpacity = 0.7;
+          }
+          
+          layer.feature.properties._fillColor = fillColor;
+          layer.feature.properties._range = time <= 10 ? "0-10" :
+                        time <= 20 ? "10-20" :
+                        time <= 30 ? "20-30" :
+                        time <= 40 ? "30-40" :
+                        time <= 50 ? "40-50" :
+                        time <= 60 ? "50-60" : ">60";
+        });
+        
         const stylingPromise = new Promise((resolve) => {
           applyAmenitiesCatchmentLayerStyling();
           resolve();
