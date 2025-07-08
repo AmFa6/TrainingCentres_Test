@@ -203,11 +203,12 @@ AmenitiesInverseOpacity.addEventListener("click", () => {
 AmenitiesInverseOutline.addEventListener("click", () => {
   toggleInverseScale('Amenities', 'Outline');
 });
-filterTypeDropdown.addEventListener('change', () => {
+filterTypeDropdown.addEventListener('change', async () => {
   updateFilterValues();
-  needsDemographicStatsUpdate = true;
-  needsJourneyTimeStatsUpdate = true;
-  updateSummaryStatistics(getCurrentFeatures(), 'filter', true); 
+  
+  const features = getCurrentFeatures();
+  await updateStatistics(features, true, true);
+  
   const highlightCheckbox = document.getElementById('highlightAreaCheckbox');
   if (filterTypeDropdown.value === 'Range') {
     highlightCheckbox.disabled = true;
@@ -224,10 +225,10 @@ filterTypeDropdown.addEventListener('change', () => {
     highlightSelectedArea();
   }
 });
-filterValueDropdown.addEventListener('change', () => {
-  needsDemographicStatsUpdate = true;
-  needsJourneyTimeStatsUpdate = true;
-  updateSummaryStatistics(getCurrentFeatures(), 'filter', true); 
+filterValueDropdown.addEventListener('change', async () => {
+  const features = getCurrentFeatures();
+  await updateStatistics(features, true, true);
+  
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
   }
@@ -536,12 +537,12 @@ function loadAllDataInParallel() {
   const journeyTimeCsvPromise = loadJourneyTimeCsv();
   
   const gridAndBoundariesPromise = Promise.all([gridDataPromise, boundaryDataPromise])
-    .then(() => {
+    .then(async () => {
       updateFilterDropdown();
       updateFilterValues();
       
       if (grid && grid.features) {
-        updateSummaryStatistics(grid.features);
+        await updateStatistics(grid.features, true, false);
       }
     })
     .catch(error => {
@@ -3247,7 +3248,29 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
 
     needsDemographicStatsUpdate = true;
     if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
-    updateSummaryStatistics(getCurrentFeatures());
+    
+    const features = getCurrentFeatures();
+    const filteredFeatures = applyFilters(features);
+    
+    (async () => {
+      if (!filteredFeatures || filteredFeatures.length === 0) {
+        displayEmptyStatistics();
+      } else {
+        const baseStats = await calculateBaseStatistics(filteredFeatures);
+        window.lastBaseStats = baseStats;
+        needsDemographicStatsUpdate = false;
+        
+        let timeStats = {};
+        if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+          timeStats = calculateTimeStatistics(filteredFeatures);
+          window.lastTimeStats = timeStats;
+          needsJourneyTimeStatsUpdate = false;
+        }
+        
+        const stats = {...baseStats, ...timeStats};
+        updateStatisticsUI(stats);
+      }
+    })();
     
     if (document.getElementById('highlightAreaCheckbox').checked) {
       highlightSelectedArea();
@@ -3301,12 +3324,11 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
     label.appendChild(span);
     filterCheckboxesSection.appendChild(label);
     
-    checkbox.addEventListener('change', function() {
+    checkbox.addEventListener('change', async function() {
       updateFilterButtonText();
       
-      needsDemographicStatsUpdate = true;
-      if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
-      updateSummaryStatistics(getCurrentFeatures());
+      const features = getCurrentFeatures();
+      await updateStatistics(features, true, true);
       
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
@@ -3314,14 +3336,34 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
     });
   });
   
-  selectAllCheckbox.addEventListener('change', function() {
+  selectAllCheckbox.addEventListener('change', async function() {
     const isChecked = this.checked;
     checkboxes.forEach(cb => cb.checked = isChecked);
     updateFilterButtonText();
     
     needsDemographicStatsUpdate = true;
     if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
-    updateSummaryStatistics(getCurrentFeatures());
+    
+    const features = getCurrentFeatures();
+    const filteredFeatures = applyFilters(features);
+    
+    if (!filteredFeatures || filteredFeatures.length === 0) {
+      displayEmptyStatistics();
+    } else {
+      const baseStats = await calculateBaseStatistics(filteredFeatures);
+      window.lastBaseStats = baseStats;
+      needsDemographicStatsUpdate = false;
+      
+      let timeStats = {};
+      if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+        timeStats = calculateTimeStatistics(filteredFeatures);
+        window.lastTimeStats = timeStats;
+        needsJourneyTimeStatsUpdate = false;
+      }
+      
+      const stats = {...baseStats, ...timeStats};
+      updateStatisticsUI(stats);
+    }
     
     if (document.getElementById('highlightAreaCheckbox').checked) {
       highlightSelectedArea();
@@ -3352,7 +3394,29 @@ function populateUserLayerFilterValues(userLayer, fieldName) {
   
   needsDemographicStatsUpdate = true;
   if (AmenitiesCatchmentLayer) needsJourneyTimeStatsUpdate = true;
-  updateSummaryStatistics(getCurrentFeatures());
+  
+  const features = getCurrentFeatures();
+  const filteredFeatures = applyFilters(features);
+  
+  (async () => {
+    if (!filteredFeatures || filteredFeatures.length === 0) {
+      displayEmptyStatistics();
+    } else {
+      const baseStats = await calculateBaseStatistics(filteredFeatures);
+      window.lastBaseStats = baseStats;
+      needsDemographicStatsUpdate = false;
+      
+      let timeStats = {};
+      if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+        timeStats = calculateTimeStatistics(filteredFeatures);
+        window.lastTimeStats = timeStats;
+        needsJourneyTimeStatsUpdate = false;
+      }
+      
+      const stats = {...baseStats, ...timeStats};
+      updateStatisticsUI(stats);
+    }
+  })();
   
   if (document.getElementById('highlightAreaCheckbox').checked) {
     highlightSelectedArea();
@@ -4381,8 +4445,13 @@ function updateAmenitiesCatchmentLayer() {
     drawSelectedAmenities([]);
     updateLegend();
     updateFilterDropdown();
-    updateFilterValues();
-    updateSummaryStatistics([], 'amenities', false);
+    const currentFilterType = filterTypeDropdown ? filterTypeDropdown.value : 'LA';
+    if (!previousFilterSelections[currentFilterType] || previousFilterSelections[currentFilterType].length === 0) {
+      updateFilterValues('amenities');
+    }
+    
+    displayEmptyStatistics();
+    
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4416,8 +4485,13 @@ function updateAmenitiesCatchmentLayer() {
         drawSelectedAmenities();
         updateLegend();
         updateFilterDropdown();
-        updateFilterValues();
-        updateSummaryStatistics([], 'amenities', false);
+        const currentFilterType = filterTypeDropdown ? filterTypeDropdown.value : 'LA';
+        if (!previousFilterSelections[currentFilterType] || previousFilterSelections[currentFilterType].length === 0) {
+          updateFilterValues('amenities');
+        }
+        
+        displayEmptyStatistics();
+        
         isUpdatingCatchmentLayer = false;
         return;
       }
@@ -4547,8 +4621,9 @@ function updateAmenitiesCatchmentLayer() {
         });
         
         const statisticsPromise = new Promise((resolve) => {
-          setTimeout(() => {
-            updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+          setTimeout(async () => {
+            const features = getCurrentFeatures();
+            await updateStatistics(features, false, true);
             resolve();
           }, 100);
         });
@@ -4557,8 +4632,13 @@ function updateAmenitiesCatchmentLayer() {
           drawSelectedAmenities();
           updateLegend();
           updateFilterDropdown();
-          updateFilterValues('amenities');
+          const currentFilterType = filterTypeDropdown ? filterTypeDropdown.value : 'LA';
+          if (!previousFilterSelections[currentFilterType] || previousFilterSelections[currentFilterType].length === 0) {
+            updateFilterValues('amenities');
+          }
           
+          isUpdatingCatchmentLayer = false;
+          amenitiesUpdateRequested = false;
         });
         
       } else {        
@@ -4568,18 +4648,18 @@ function updateAmenitiesCatchmentLayer() {
         });
         
         const statisticsPromise = new Promise((resolve) => {
-          setTimeout(() => {
-            updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
+          setTimeout(async () => {
+            const features = getCurrentFeatures();
+            await updateStatistics(features, false, true);
             resolve();
           }, 100);
         });
         
         Promise.all([stylingPromise, statisticsPromise]).then(() => {
+          isUpdatingCatchmentLayer = false;
+          amenitiesUpdateRequested = false;
         });
       }
-        
-      isUpdatingCatchmentLayer = false;
-      amenitiesUpdateRequested = false;
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
@@ -5174,22 +5254,28 @@ function updateFilterValues(source = 'filter') {
       label.appendChild(span);
       filterValueContainer.appendChild(label);
 
-      checkbox.addEventListener('change', function() {
+      checkbox.addEventListener('change', async function() {
         updateStoredSelections();
         updateFilterButtonText();
-        updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
+        
+        const features = getCurrentFeatures();
+        await updateStatistics(features, true, true);
+        
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
         }
       });
     });
     
-    selectAllCheckbox.addEventListener('change', function() {
+    selectAllCheckbox.addEventListener('change', async function() {
       const isChecked = this.checked;
       checkboxes.forEach(cb => cb.checked = isChecked);
       updateStoredSelections();
       updateFilterButtonText();
-      updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
+      
+      const features = getCurrentFeatures();
+      await updateStatistics(features, true, true);
+      
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
       }
@@ -5228,7 +5314,10 @@ function updateFilterValues(source = 'filter') {
     updateFilterButtonText();
     
     if (source === 'filter') {
-      updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
+      const features = getCurrentFeatures();
+      (async () => {
+        await updateStatistics(features, true, true);
+      })();
     }
 
   } finally {
@@ -5236,92 +5325,50 @@ function updateFilterValues(source = 'filter') {
   }
 }
 
-async function updateSummaryStatistics(features, source = 'filter', forceBaseStatsUpdate = false) {
-  
-  if (isCalculatingStats) {
+async function updateStatistics(features, recalculateBase = true, recalculateTime = true) {
+  if (!features || features.length === 0) {
+    displayEmptyStatistics();
     return;
   }
-      
-  const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
   
-  if (needsAmenitiesCatchment && isUpdatingCatchmentLayer) {
-    const waitForCatchment = () => {
-      return new Promise((resolve) => {
-        const checkInterval = setInterval(() => {
-          if (!isUpdatingCatchmentLayer) {
-            clearInterval(checkInterval);
-            resolve();
-          }
-        }, 100);
-        
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          console.warn('Timeout waiting for catchment layer');
-          resolve();
-        }, 30000);
-      });
-    };
-    
-    await waitForCatchment();
-  }
+  const filteredFeatures = applyFilters(features);
   
-  isCalculatingStats = true;
-  
-  try {
-    if (!grid && (!features || features.length === 0)) {
-      displayEmptyStatistics();
-      return;
-    }
-    
-    const filterValueContainer = document.getElementById('filterValueContainer');
-    if (filterValueContainer) {
-      const selectedValues = Array.from(filterValueContainer.querySelectorAll('.filter-value-checkbox:checked'))
-        .map(checkbox => checkbox.value);
-      
-      if (selectedValues.length === 0) {
-        displayEmptyStatistics();
-        return;
-      }
-    }
-    
-    const filteredFeatures = applyFilters(features);
-    
-    if (!filteredFeatures || filteredFeatures.length === 0) {
-      displayEmptyStatistics();
-      return;
-    }
-
-    let baseStats = {};
-    let timeStats = {};
-    
-    if (needsDemographicStatsUpdate || forceBaseStatsUpdate || source === 'filter' || !window.lastBaseStats) {
-      baseStats = await calculateBaseStatistics(filteredFeatures);
-      window.lastBaseStats = baseStats;
-      needsDemographicStatsUpdate = false;
-    } else {
-      baseStats = window.lastBaseStats;
-    }
-    
-    if (needsJourneyTimeStatsUpdate && AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
-      timeStats = calculateTimeStatistics(filteredFeatures);
-      needsJourneyTimeStatsUpdate = false;
-    } else if (AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0 && window.lastTimeStats) {
-      timeStats = window.lastTimeStats || calculateTimeStatistics(filteredFeatures);
-    }
-    
-    if (Object.keys(timeStats).length > 0) {
-      window.lastTimeStats = timeStats;
-    }
-    
-    const stats = {...baseStats, ...timeStats};
-    updateStatisticsUI(stats);
-        
-  } catch (error) {
-    console.error("❌ [CALC ERROR] Error calculating statistics:", error);
+  if (!filteredFeatures || filteredFeatures.length === 0) {
     displayEmptyStatistics();
-  } finally {
-    isCalculatingStats = false;
+    return;
   }
+  
+  let stats = {};
+  
+  if (recalculateBase) {
+    if (filteredFeatures.length === 0) {
+      const emptyBaseStats = {
+        totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
+        avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
+        avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
+        avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
+        totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
+      };
+      window.lastBaseStats = emptyBaseStats;
+      stats = {...stats, ...emptyBaseStats};
+    } else {
+      const baseStats = await calculateDemoStatistics(filteredFeatures);
+      window.lastBaseStats = baseStats;
+      stats = {...stats, ...baseStats};
+    }
+  } else if (window.lastBaseStats) {
+    stats = {...stats, ...window.lastBaseStats};
+  }
+  
+  if (recalculateTime && AmenitiesCatchmentLayer && gridTimeMap && Object.keys(gridTimeMap).length > 0) {
+    const timeStats = calculateTimeStatistics(filteredFeatures);
+    window.lastTimeStats = timeStats;
+    stats = {...stats, ...timeStats};
+  } else if (window.lastTimeStats) {
+    stats = {...stats, ...window.lastTimeStats};
+  }
+  
+  updateStatisticsUI(stats);
 }
 
 function displayEmptyStatistics() {
@@ -5555,7 +5602,7 @@ function applyRangeFilter(features, filterValue) {
   return features;
 }
 
-function calculateStatisticsWithJavaScript(features) {  
+function calculateDemoStatistics(features) {  
   const BATCH_SIZE = 20000;
   const totalBatches = Math.ceil(features.length / BATCH_SIZE);
   
@@ -5682,21 +5729,6 @@ function calculateStatisticsWithJavaScript(features) {
     
     processBatch();
   });
-}
-
-async function calculateBaseStatistics(features) {
-  if (!features || features.length === 0) {
-    return {
-      totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
-      avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
-      avgImdDecile: 0, minImdDecile: 0, maxImdDecile: 0,
-      avgCarAvailability: 0, minCarAvailability: 0, maxCarAvailability: 0,
-      totalPopGrowth: 0, minPopGrowth: 0, maxPopGrowth: 0
-    };
-  }
-
-  const result = await calculateStatisticsWithJavaScript(features);
-  return result;
 }
 
 function calculateTimeStatistics(features) {  
