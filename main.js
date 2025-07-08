@@ -449,9 +449,6 @@ function initializeCollapsiblePanels() {
     }
     
     if (isOpen && header.textContent.includes("Journey Time Catchments - Training Centres")) {
-      showLoadingIndicator('amenities-catchment', 'Loading amenities catchment...');
-      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
-      
       if (lastAmenitiesState.selectingFromMap) {
         selectingFromMap = lastAmenitiesState.selectingFromMap;
         selectedAmenitiesFromMap = [...lastAmenitiesState.selectedAmenitiesFromMap];
@@ -531,23 +528,7 @@ function setupMapPanes() {
   map.createPane('userLayers').style.zIndex = 700;
 }
 
-function loadBaseLayers() {
-  showLoadingIndicator('base-layers', 'Loading map layers...');
-  return Promise.all([
-    loadBoundaryData(),
-    loadTransportInfrastructure()
-  ]).then(() => {
-    hideLoadingIndicator('base-layers');
-  });
-}
-
 function loadAllDataInParallel() {
-  showLoadingIndicator('grid-data', 'Loading grid data...');
-  showLoadingIndicator('boundary-data', 'Loading boundaries...');
-  showLoadingIndicator('transport-data', 'Loading transport infrastructure...');
-  showLoadingIndicator('training-centres', 'Loading training centres...');
-  showLoadingIndicator('journey-time-csv', 'Loading journey time data...');
-  
   const gridDataPromise = loadGridData();
   const boundaryDataPromise = loadBoundaryData();
   const transportDataPromise = loadTransportInfrastructure();
@@ -562,44 +543,33 @@ function loadAllDataInParallel() {
       if (grid && grid.features) {
         updateSummaryStatistics(grid.features);
       }
-      
-      hideLoadingIndicator('grid-data');
-      hideLoadingIndicator('boundary-data');
     })
     .catch(error => {
       console.error('Error loading grid data or boundaries:', error);
-      hideLoadingIndicator('grid-data');
-      hideLoadingIndicator('boundary-data');
       throw error;
     });
   
   const trainingCentresSetupPromise = trainingCentresPromise
     .then(() => {
       initializeTrainingCentres();
-      hideLoadingIndicator('training-centres');
     })
     .catch(error => {
       console.error('Error loading training centres:', error);
-      hideLoadingIndicator('training-centres');
       showErrorNotification('Error loading training center data. Some features may be limited.');
     });
   
   const transportSetupPromise = transportDataPromise
     .then(() => {
-      hideLoadingIndicator('transport-data');
     })
     .catch(error => {
       console.error('Error loading transport infrastructure:', error);
-      hideLoadingIndicator('transport-data');
     });
   
   const csvSetupPromise = journeyTimeCsvPromise
     .then(() => {
-      hideLoadingIndicator('journey-time-csv');
     })
     .catch(error => {
       console.error('Error loading journey time CSV:', error);
-      hideLoadingIndicator('journey-time-csv');
     });
   
   return Promise.all([
@@ -1822,7 +1792,6 @@ function setupTrainingCenterFilters() {
   });
   
   function handleSubjectAimChange() {
-    showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
     debouncedHandler();
   }
   
@@ -3559,7 +3528,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
     handleElement.setAttribute('data-value', formattedValue);
     
     if (sliderElement._isInitialized) {
-      showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
       requestAnimationFrame(() => {
         debouncedUpdateOpacityOutlineFields();
       });
@@ -3574,7 +3542,6 @@ function initializeAndConfigureSlider(sliderElement, isInverse = false) {
 function updateSliderRanges(type, scaleType) {
   if (isUpdatingSliders) return;
   
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingSliders = true;
 
   let field, rangeElement, minElement, maxElement, isInverse;
@@ -3652,16 +3619,13 @@ function updateSliderRanges(type, scaleType) {
   } else {
     setTimeout(() => {
       rangeElement._isInitialized = true;
-      hideLoadingIndicator('amenities-catchment');
     }, 200);
   }
   
   isUpdatingSliders = false;
 }
 
-function toggleInverseScale(type, scaleType) {
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  
+function toggleInverseScale(type, scaleType) {  
   let isInverse, rangeElement;
 
   if (scaleType === 'Opacity') {
@@ -4367,9 +4331,7 @@ function updateAmenitiesCatchmentLayer() {
   if (isUpdatingCatchmentLayer) {
     return;
   }
-  
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
-  
+    
   const hasRequiredData = checkAmenitiesDataReady();
   
   if (!hasRequiredData.ready) {
@@ -4387,11 +4349,8 @@ function updateAmenitiesCatchmentLayer() {
   if (!amenitiesPanelOpen) {
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
-    hideLoadingIndicator('amenities-catchment');
     return;
   }
-
-  showLoadingIndicator('calculating-journey-times', 'Calculating journey times...');
 
   const selectedYear = AmenitiesYear.value;
   const subjectAllCheckbox = document.querySelector('#subjectCheckboxesContainer input[value="All"]');
@@ -4424,8 +4383,6 @@ function updateAmenitiesCatchmentLayer() {
     updateFilterDropdown();
     updateFilterValues();
     updateSummaryStatistics([], 'amenities', false);
-    hideLoadingIndicator('amenities-catchment');
-    hideLoadingIndicator('calculating-journey-times');
     isUpdatingCatchmentLayer = false;
     amenitiesUpdateRequested = false;
     return;
@@ -4441,8 +4398,6 @@ function updateAmenitiesCatchmentLayer() {
       
       if (csvData.length === 0) {
         isUpdatingCatchmentLayer = false;
-        hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-journey-times');
         return;
       }
       
@@ -4463,14 +4418,10 @@ function updateAmenitiesCatchmentLayer() {
         updateFilterDropdown();
         updateFilterValues();
         updateSummaryStatistics([], 'amenities', false);
-        hideLoadingIndicator('amenities-catchment');
-        hideLoadingIndicator('calculating-journey-times');
         isUpdatingCatchmentLayer = false;
         return;
       }
-      
-      hideLoadingIndicator('calculating-journey-times');
-      
+            
       const yearPrefix = selectedYear === 'Any' ? null : selectedYear.substring(0, 4);
       const eligibleDestinations = new Set();
       
@@ -4548,8 +4499,6 @@ function updateAmenitiesCatchmentLayer() {
       }
       
       if (needToCreateNewLayer) {            
-        showLoadingIndicator('rendering-layer', 'Rendering layer...');
-        showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
         
         if (AmenitiesCatchmentLayer) {
           map.removeLayer(AmenitiesCatchmentLayer);
@@ -4594,14 +4543,12 @@ function updateAmenitiesCatchmentLayer() {
           updateSliderRanges('Amenities', 'Opacity');
           updateSliderRanges('Amenities', 'Outline');
           
-          hideLoadingIndicator('rendering-layer');
           resolve();
         });
         
         const statisticsPromise = new Promise((resolve) => {
           setTimeout(() => {
             updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
-            hideLoadingIndicator('calculating-journey-time-stats');
             resolve();
           }, 100);
         });
@@ -4612,13 +4559,9 @@ function updateAmenitiesCatchmentLayer() {
           updateFilterDropdown();
           updateFilterValues('amenities');
           
-          hideLoadingIndicator('amenities-catchment');
-          hideLoadingIndicator('calculating-journey-times');
         });
         
-      } else {
-        showLoadingIndicator('calculating-journey-time-stats', 'Calculating journey time statistics...');
-        
+      } else {        
         const stylingPromise = new Promise((resolve) => {
           applyAmenitiesCatchmentLayerStyling();
           resolve();
@@ -4627,14 +4570,11 @@ function updateAmenitiesCatchmentLayer() {
         const statisticsPromise = new Promise((resolve) => {
           setTimeout(() => {
             updateSummaryStatistics(getCurrentFeatures(), 'amenities', false);
-            hideLoadingIndicator('calculating-journey-time-stats');
             resolve();
           }, 100);
         });
         
         Promise.all([stylingPromise, statisticsPromise]).then(() => {
-          hideLoadingIndicator('amenities-catchment');
-          hideLoadingIndicator('calculating-journey-times');
         });
       }
         
@@ -4643,8 +4583,6 @@ function updateAmenitiesCatchmentLayer() {
     })
     .catch(error => {
       console.error("Error loading journey time data:", error);
-      hideLoadingIndicator('amenities-catchment');
-      hideLoadingIndicator('calculating-journey-times');
       isUpdatingCatchmentLayer = false;
       amenitiesUpdateRequested = false;
     });
@@ -4725,9 +4663,7 @@ function applyAmenitiesCatchmentLayerStyling() {
   if (!AmenitiesCatchmentLayer) {
     return;
   }
-  
-  showLoadingIndicator('rendering-layer', 'Rendering...');
-  
+    
   try {
     AmenitiesCatchmentLayer.eachLayer(layer => {
       const OriginId_tracc = layer.feature.properties.OriginId_tracc;
@@ -4785,10 +4721,8 @@ function applyAmenitiesCatchmentLayerStyling() {
       };
     });
     
-    hideLoadingIndicator('rendering-layer');
   } catch (error) {
     console.error("Error in applyAmenitiesCatchmentLayerStyling:", error);
-    hideLoadingIndicator('rendering-layer');
   }
 }
 
@@ -4797,12 +4731,10 @@ function updateOpacityAndOutlineFields() {
     return;
   }
   
-  showLoadingIndicator('amenities-catchment', 'Updating amenities catchment...');
   isUpdatingOpacityOutlineFields = true;
   
   if (!AmenitiesCatchmentLayer) {
     isUpdatingOpacityOutlineFields = false;
-    hideLoadingIndicator('amenities-catchment');
     return;
   }
   
@@ -4908,11 +4840,9 @@ function updateOpacityAndOutlineFields() {
       if (currentIndex < features.length) {
         requestAnimationFrame(processBatch);
       } else {
-        showLoadingIndicator('rendering-layer', 'Rendering...');
         applyAmenitiesCatchmentLayerStyling();
         isUpdatingStyles = false;
         isUpdatingOpacityOutlineFields = false;
-        hideLoadingIndicator('amenities-catchment');
       }
     }
     
@@ -4980,11 +4910,9 @@ function updateOpacityAndOutlineFields() {
         layer.feature.properties._weight = result._weight;
       });
       
-      showLoadingIndicator('rendering-layer', 'Rendering...');
       applyAmenitiesCatchmentLayerStyling();
       isUpdatingStyles = false;
       isUpdatingOpacityOutlineFields = false;
-      hideLoadingIndicator('amenities-catchment');
       worker.terminate();
     };
     
@@ -5249,7 +5177,6 @@ function updateFilterValues(source = 'filter') {
       checkbox.addEventListener('change', function() {
         updateStoredSelections();
         updateFilterButtonText();
-        showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
         updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
         if (document.getElementById('highlightAreaCheckbox').checked) {
           highlightSelectedArea();
@@ -5262,7 +5189,6 @@ function updateFilterValues(source = 'filter') {
       checkboxes.forEach(cb => cb.checked = isChecked);
       updateStoredSelections();
       updateFilterButtonText();
-      showLoadingIndicator('calculating-stats', 'Calculating journey time statistics...');
       updateSummaryStatistics(getCurrentFeatures(), 'filter', false); 
       if (document.getElementById('highlightAreaCheckbox').checked) {
         highlightSelectedArea();
@@ -5315,9 +5241,7 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
   if (isCalculatingStats) {
     return;
   }
-  
-  showLoadingIndicator('calculating-stats', 'Calculating statistics...');
-    
+      
   const needsAmenitiesCatchment = AmenitiesCatchmentLayer || amenitiesUpdateRequested;
   
   if (needsAmenitiesCatchment && isUpdatingCatchmentLayer) {
@@ -5346,7 +5270,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
   try {
     if (!grid && (!features || features.length === 0)) {
       displayEmptyStatistics();
-      hideLoadingIndicator('calculating-stats');
       return;
     }
     
@@ -5357,7 +5280,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
       
       if (selectedValues.length === 0) {
         displayEmptyStatistics();
-        hideLoadingIndicator('calculating-stats');
         return;
       }
     }
@@ -5366,7 +5288,6 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     
     if (!filteredFeatures || filteredFeatures.length === 0) {
       displayEmptyStatistics();
-      hideLoadingIndicator('calculating-stats');
       return;
     }
 
@@ -5395,11 +5316,9 @@ async function updateSummaryStatistics(features, source = 'filter', forceBaseSta
     const stats = {...baseStats, ...timeStats};
     updateStatisticsUI(stats);
         
-    hideLoadingIndicator('calculating-stats');
   } catch (error) {
     console.error("❌ [CALC ERROR] Error calculating statistics:", error);
     displayEmptyStatistics();
-    hideLoadingIndicator('calculating-stats');
   } finally {
     isCalculatingStats = false;
   }
@@ -5766,10 +5685,7 @@ function calculateStatisticsWithJavaScript(features) {
 }
 
 async function calculateBaseStatistics(features) {
-  showLoadingIndicator('base-statistics', 'Calculating demographic statistics...');
-
   if (!features || features.length === 0) {
-    hideLoadingIndicator('base-statistics');
     return {
       totalPopulation: 0, minPopulation: 0, maxPopulation: 0,
       avgImdScore: 0, minImdScore: 0, maxImdScore: 0,
@@ -5780,7 +5696,6 @@ async function calculateBaseStatistics(features) {
   }
 
   const result = await calculateStatisticsWithJavaScript(features);
-  hideLoadingIndicator('base-statistics');
   return result;
 }
 
