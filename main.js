@@ -184,7 +184,7 @@ function debounce(func, wait) {
 AmenitiesYear.addEventListener("change", debounce(() => {
   needsJourneyTimeStatsUpdate = true;
   updateAmenitiesCatchmentLayer();
-}, 250));
+}, 2000));
 AmenitiesOpacity.addEventListener("change", () => {
   updateSliderRanges('Amenities', 'Opacity');
   if (!isUpdatingOpacityOutlineFields) {
@@ -4351,7 +4351,6 @@ function drawSelectedAmenities() {
     return;
   }
 
-  // Get filtered centers based on current selections
   const filteredTrainingCentres = filterTrainingCentres();
   console.log("Using filtered centers:", filteredTrainingCentres.features.length);
   
@@ -4360,7 +4359,6 @@ function drawSelectedAmenities() {
 
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
-      // Rest of your icon code
       const icon = isAboveZoomThreshold ? 
         L.divIcon({ className: 'fa-icon', html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div>', iconSize: [60, 60], iconAnchor: [15, 15] }): 
         L.divIcon({ className: 'fa-icon', html: '<div class="dot" style="background-color:grey;"></div>', iconSize: [7, 7], iconAnchor: [3.5, 3.5] });
