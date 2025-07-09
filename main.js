@@ -295,9 +295,11 @@ function createStaticLegendControls() {
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   if (amenitiesCheckbox) {
     amenitiesCheckbox.addEventListener('change', () => {
+      console.log("Amenities checkbox clicked, new state:", amenitiesCheckbox.checked);
       if (amenitiesCheckbox.checked) {
         drawSelectedAmenities();
         amenitiesLayerGroup.addTo(map);
+        setTimeout(debugAmenitiesDisplay, 500);
       } else {
         map.removeLayer(amenitiesLayerGroup);
       }
@@ -1568,11 +1570,17 @@ function initializeFileUpload() {
 }
 
 function loadTrainingCentres() {
+  console.log("Loading training centres from:", AmenitiesFiles[0].path);
   return fetch(AmenitiesFiles[0].path)
     .then(response => response.json())
     .then(data => {
+      console.log("Training centres loaded:", data.features?.length || 0);
       amenityLayers['TrainingCentres'] = data;
       return data;
+    })
+    .catch(error => {
+      console.error("Error loading training centres:", error);
+      return null;
     });
 }
 
@@ -4398,6 +4406,36 @@ function drawSelectedAmenities() {
   
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
+}
+
+function debugAmenitiesDisplay() {
+  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
+  console.log("Amenities checkbox state:", amenitiesCheckbox?.checked);
+  console.log("Amenities layers available:", amenityLayers['TrainingCentres'] ? true : false);
+  
+  const filteredCentres = filterTrainingCentres();
+  console.log("Filtered training centres:", filteredCentres?.features?.length || 0);
+  
+  // Force redraw of amenities
+  if (amenitiesCheckbox?.checked) {
+    amenitiesLayerGroup.clearLayers();
+    if (amenityLayers['TrainingCentres']) {
+      const layer = L.geoJSON(amenityLayers['TrainingCentres'], {
+        pointToLayer: (feature, latlng) => {
+          const icon = L.divIcon({ 
+            className: 'fa-icon', 
+            html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div>', 
+            iconSize: [60, 60], 
+            iconAnchor: [15, 15] 
+          });
+          return L.marker(latlng, { icon: icon });
+        }
+      });
+      amenitiesLayerGroup.addLayer(layer);
+      amenitiesLayerGroup.addTo(map);
+      console.log("Force-added amenities to map");
+    }
+  }
 }
 
 function updateAmenitiesCatchmentLayer() {
