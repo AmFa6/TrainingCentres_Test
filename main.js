@@ -4352,13 +4352,16 @@ function drawSelectedAmenities() {
     return;
   }
 
+  // Get filtered centers based on current selections
   const filteredTrainingCentres = filterTrainingCentres();
+  console.log("Using filtered centers:", filteredTrainingCentres.features.length);
   
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
 
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
+      // Rest of your icon code
       const icon = isAboveZoomThreshold ? 
         L.divIcon({ className: 'fa-icon', html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div>', iconSize: [60, 60], iconAnchor: [15, 15] }): 
         L.divIcon({ className: 'fa-icon', html: '<div class="dot" style="background-color:grey;"></div>', iconSize: [7, 7], iconAnchor: [3.5, 3.5] });
@@ -4416,11 +4419,11 @@ function debugAmenitiesDisplay() {
   const filteredCentres = filterTrainingCentres();
   console.log("Filtered training centres:", filteredCentres?.features?.length || 0);
   
-  // Force redraw of amenities
+  // Force redraw of amenities - USE FILTERED CENTERS, NOT ALL CENTERS
   if (amenitiesCheckbox?.checked) {
     amenitiesLayerGroup.clearLayers();
-    if (amenityLayers['TrainingCentres']) {
-      const layer = L.geoJSON(amenityLayers['TrainingCentres'], {
+    if (filteredCentres && filteredCentres.features.length > 0) {
+      const layer = L.geoJSON(filteredCentres, {
         pointToLayer: (feature, latlng) => {
           const icon = L.divIcon({ 
             className: 'fa-icon', 
@@ -4433,7 +4436,7 @@ function debugAmenitiesDisplay() {
       });
       amenitiesLayerGroup.addLayer(layer);
       amenitiesLayerGroup.addTo(map);
-      console.log("Force-added amenities to map");
+      console.log("Force-added filtered amenities to map:", filteredCentres.features.length);
     }
   }
 }
