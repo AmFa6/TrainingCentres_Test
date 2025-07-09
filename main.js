@@ -299,7 +299,6 @@ function createStaticLegendControls() {
       if (amenitiesCheckbox.checked) {
         drawSelectedAmenities();
         amenitiesLayerGroup.addTo(map);
-        setTimeout(debugAmenitiesDisplay, 500);
       } else {
         map.removeLayer(amenitiesLayerGroup);
       }
@@ -4409,36 +4408,6 @@ function drawSelectedAmenities() {
   
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
-}
-
-function debugAmenitiesDisplay() {
-  const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-  console.log("Amenities checkbox state:", amenitiesCheckbox?.checked);
-  console.log("Amenities layers available:", amenityLayers['TrainingCentres'] ? true : false);
-  
-  const filteredCentres = filterTrainingCentres();
-  console.log("Filtered training centres:", filteredCentres?.features?.length || 0);
-  
-  // Force redraw of amenities - USE FILTERED CENTERS, NOT ALL CENTERS
-  if (amenitiesCheckbox?.checked) {
-    amenitiesLayerGroup.clearLayers();
-    if (filteredCentres && filteredCentres.features.length > 0) {
-      const layer = L.geoJSON(filteredCentres, {
-        pointToLayer: (feature, latlng) => {
-          const icon = L.divIcon({ 
-            className: 'fa-icon', 
-            html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div>', 
-            iconSize: [60, 60], 
-            iconAnchor: [15, 15] 
-          });
-          return L.marker(latlng, { icon: icon });
-        }
-      });
-      amenitiesLayerGroup.addLayer(layer);
-      amenitiesLayerGroup.addTo(map);
-      console.log("Force-added filtered amenities to map:", filteredCentres.features.length);
-    }
-  }
 }
 
 function updateAmenitiesCatchmentLayer() {
