@@ -24,24 +24,29 @@
   }
   
   /* Styling for training center markers */
+  .custom-div-icon {
+    background: transparent;
+    border: none;
+    pointer-events: auto !important;
+  }
+  
+  .custom-div-icon i.fa-graduation-cap {
+    font-size: 28px !important;
+    color: #333;
+    text-shadow: 0 0 3px rgba(0,0,0,0.7);
+    display: block;
+    z-index: 100;
+  }
+  
+  /* Also maintain backward compatibility with older classes */
   .fa-icon {
-    pointer-events: auto !important; /* Make sure click events work */
+    pointer-events: auto !important;
   }
   
-  .fa-icon .pin {
-    position: relative;
-    z-index: 2;
-    transform-origin: center;
-    pointer-events: auto;
-  }
-  
-  .fa-icon .pin i {
-    font-size: 24px !important; /* Make sure the icon is large */
-    filter: drop-shadow(1px 1px 2px rgba(0,0,0,0.5)); /* Add shadow for better visibility */
-  }
-  
-  .fa-icon .dot {
-    pointer-events: auto;
+  .fa-icon .pin,
+  .fa-icon i {
+    display: block;
+    z-index: 10;
   }
   
   /* Custom popup styling */
