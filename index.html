@@ -780,6 +780,25 @@
     font-size: 14px;
     color: #333;
   }
+  .remove-metric-btn {
+    background: none;
+    border: none;
+    color: #f44336;
+    cursor: pointer;
+    padding: 2px 5px;
+    font-size: 0.8em;
+    margin-left: 5px;
+    vertical-align: middle;
+  }
+
+  .remove-metric-btn:hover {
+    color: #d32f2f;
+  }
+
+  select[multiple] {
+    height: auto !important;
+    overflow-y: auto !important;
+  }
   </style>
 </head>
 <body>
@@ -1048,6 +1067,15 @@
           </tr>
         </tbody>
       </table>
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 10px;">
+        <button id="add-metric-btn" class="btn" style="padding: 4px 10px;">
+          <i class="fas fa-plus"></i> Add Metric
+        </button>
+        <div id="metric-selector" style="display: none; position: absolute; background: white; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); z-index: 1000; margin-top: 30px; width: 200px;">
+          <select id="additional-metric-dropdown" style="width: 100%; margin-bottom: 10px;"></select>
+          <button id="add-selected-metric" class="btn" style="width: 100%;">Add</button>
+        </div>
+      </div>      
     </div>
   </div>
   <div id="attribute-editor-modal" style="display:none;" class="modal-dialog">
