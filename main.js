@@ -26,7 +26,7 @@ let AmenitiesCatchmentLayer = null;
 let gridTimeMap = {};
 let csvDataCache = {};
 let fullCsvData = null;
-let amenitiesLayerGroup = L.featureGroup().addTo(map); // Add to map immediately so it's initialized
+let amenitiesLayerGroup = L.featureGroup().addTo(map);
 let selectedAmenitiesAmenities = [];
 let selectingFromMap = false;
 let selectedAmenitiesFromMap = [];
@@ -1109,11 +1109,11 @@ map.on('zoomend', () => {
   const isAboveZoomThreshold = currentZoom >= 14;
   
   if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
+    console.log("Zoom threshold crossed. Current zoom:", currentZoom, "Show graduation caps:", isAboveZoomThreshold);
     wasAboveZoomThreshold = isAboveZoomThreshold;
     
-    if (AmenitiesCatchmentLayer) {
-      drawSelectedAmenities(selectedAmenitiesAmenities);
-    }
+    // Always redraw amenities when crossing the zoom threshold
+    drawSelectedAmenities();
   }
 });
 
@@ -1853,6 +1853,11 @@ function updateAimLevelDropdownLabel() {
 }
 
 function initializeTrainingCentres() {    
+    // Set initial zoom threshold flag
+    const currentZoom = map.getZoom();
+    wasAboveZoomThreshold = currentZoom >= 14;
+    console.log("Initializing training centers. Initial zoom:", currentZoom, "Using graduation caps:", wasAboveZoomThreshold);
+    
     if (amenityLayers['TrainingCentres']) {
         setupTrainingCentersUI();
     } else {
@@ -4352,9 +4357,7 @@ function drawSelectedAmenities() {
   }
 
   const filteredTrainingCentres = filterTrainingCentres();
-  console.log("Using filtered centers:", filteredTrainingCentres.features.length);
   
-  // Debug to check if features are properly structured
   if (!filteredTrainingCentres.features || filteredTrainingCentres.features.length === 0) {
     console.warn("No training center features to display");
     return;
@@ -4362,48 +4365,61 @@ function drawSelectedAmenities() {
   
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
-
-  // Debug feature coordinates
-  filteredTrainingCentres.features.slice(0, 3).forEach((feature, i) => {
-    console.log(`Feature ${i} coordinates:`, feature.geometry.coordinates);
-  });
+  
+  console.log("Drawing training centers. Current zoom:", currentZoom, "Using graduation caps:", isAboveZoomThreshold);
+  console.log("First center coordinates:", filteredTrainingCentres.features[0].geometry.coordinates);
   
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
-      console.log("Creating marker at:", latlng);
-      // Use graduation cap icon when zoomed in, simple dot when zoomed out
-      const icon = isAboveZoomThreshold ? 
-        L.divIcon({ 
-          className: 'fa-icon', 
-          html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey; font-size: 24px;"></i></div>', 
-          iconSize: [120, 120], // Doubled the size
-          iconAnchor: [30, 30] 
-        }): 
-        L.divIcon({ 
-          className: 'fa-icon', 
-          html: '<div class="dot" style="background-color:grey; width: 7px; height: 7px; border-radius: 50%; display: block;"></div>', 
-          iconSize: [7, 7], 
-          iconAnchor: [3.5, 3.5] 
-        });
+      // Force a specific icon type based on zoom level
+      let iconHtml, iconSize, iconAnchor;
       
-      // Create marker with larger clickable area by setting interactive:true and larger hit area
+      if (isAboveZoomThreshold) {
+        // Graduation cap for zoomed in view
+        iconHtml = '<div style="background-color: transparent; position: relative; display: flex; justify-content: center; align-items: center;">' +
+                   '<i class="fas fa-graduation-cap" style="color: #333; font-size: 28px; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);"></i>' +
+                   '</div>';
+        iconSize = [40, 40];
+        iconAnchor = [20, 20];
+      } else {
+        // Simple dot for zoomed out view
+        iconHtml = '<div style="background-color: grey; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,0.5);"></div>';
+        iconSize = [8, 8]; 
+        iconAnchor = [4, 4];
+      }
+      
+      console.log("Creating icon with zoom:", currentZoom, "Using graduation cap:", isAboveZoomThreshold);
+      
+      const icon = L.divIcon({
+        className: 'custom-div-icon',
+        html: iconHtml,
+        iconSize: iconSize,
+        iconAnchor: iconAnchor
+      });
+      
       const marker = L.marker(latlng, { 
         icon: icon,
-        interactive: true, // Ensure it's clickable
+        interactive: true,
       });
       
       marker.on('add', function() {
+        console.log("Marker added to map, zoom:", map.getZoom(), "Using graduation cap:", isAboveZoomThreshold);
         const element = this.getElement();
         if (element) {
           element.style.opacity = 1;
-          // Add a larger invisible clickable area
+          
+          // Log what's in the element
+          console.log("Marker element HTML:", element.innerHTML);
+          
+          // Make the clickable area larger
           const clickableArea = document.createElement('div');
           clickableArea.style.position = 'absolute';
-          clickableArea.style.width = '40px';
-          clickableArea.style.height = '40px';
-          clickableArea.style.top = '-20px';
-          clickableArea.style.left = '-20px';
+          clickableArea.style.width = '60px'; // Increased from 40px
+          clickableArea.style.height = '60px'; // Increased from 40px
+          clickableArea.style.top = '-30px'; // Adjusted for new size
+          clickableArea.style.left = '-30px'; // Adjusted for new size
           clickableArea.style.cursor = 'pointer';
+          clickableArea.style.zIndex = '1';
           element.appendChild(clickableArea);
         }
       });
@@ -4411,15 +4427,13 @@ function drawSelectedAmenities() {
       marker.on('mouseover', function(e) {
         const element = e.target.getElement();
         if (element) {
-          // Increased scale factor for more noticeable hover effect
           element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '') + ' scale(1.5)'; 
           element.style.zIndex = 1000;
           element.style.transition = 'transform 0.2s ease';
           element.style.cursor = 'pointer';
-          // Add highlight effect
           const iconElement = element.querySelector('.pin i, .dot');
           if (iconElement) {
-            iconElement.style.color = '#333'; // Darker on hover
+            iconElement.style.color = '#333';
             iconElement.style.filter = 'drop-shadow(0 0 3px rgba(0,0,0,0.5))';
           }
         }
@@ -4430,7 +4444,6 @@ function drawSelectedAmenities() {
         if (element) {
           element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '');
           element.style.zIndex = '';
-          // Reset highlight effect
           const iconElement = element.querySelector('.pin i, .dot');
           if (iconElement) {
             iconElement.style.color = 'grey';
@@ -4443,9 +4456,8 @@ function drawSelectedAmenities() {
         const properties = feature.properties;
         const popupContent = getTrainingCenterPopupContent(properties);
         
-        // Create a more prominent popup
         L.popup({
-          className: 'training-center-popup', // Add custom class for styling
+          className: 'training-center-popup',
           maxWidth: 400,
           minWidth: 300,
           autoPan: true,
@@ -4456,13 +4468,12 @@ function drawSelectedAmenities() {
           .setContent(popupContent)
           .openOn(map);
           
-        // Highlight the clicked marker
         const element = this.getElement();
         if (element) {
-          element.style.zIndex = 2000; // Make sure it's on top
+          element.style.zIndex = 2000;
           const iconElement = element.querySelector('.pin i');
           if (iconElement) {
-            iconElement.style.color = '#0066cc'; // Highlight color
+            iconElement.style.color = '#0066cc';
             iconElement.style.filter = 'drop-shadow(0 0 5px rgba(0,100,200,0.8))';
           }
         }
@@ -4472,7 +4483,6 @@ function drawSelectedAmenities() {
     },
   });
   
-  console.log("Adding training centers layer with features:", layer.getLayers().length);
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
   console.log("Layer added to map");
