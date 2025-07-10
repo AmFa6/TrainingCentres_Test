@@ -1103,13 +1103,21 @@ function showErrorNotification(message) {
   }, 5000);
 }
 
+let zoomTimeout = null;
 map.on('zoomend', () => {
-  const currentZoom = map.getZoom();
-  const isAboveZoomThreshold = currentZoom >= 14;
-  if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
-    wasAboveZoomThreshold = isAboveZoomThreshold;
-    drawSelectedAmenities();
+  if (zoomTimeout) {
+    clearTimeout(zoomTimeout);
   }
+  
+  zoomTimeout = setTimeout(() => {
+    const currentZoom = map.getZoom();
+    const isAboveZoomThreshold = currentZoom >= 14;
+    
+    if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
+      wasAboveZoomThreshold = isAboveZoomThreshold;
+      updateMarkerAppearance(isAboveZoomThreshold);
+    }
+  }, 250);
 });
 
 const toTitleCase = (str) => {
@@ -4341,9 +4349,16 @@ function showAmenityCatchment(amenityType, amenityId) {
 
 function drawSelectedAmenities() {
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
-  amenitiesLayerGroup.clearLayers();
-
+  
   if (!amenitiesCheckbox || !amenitiesCheckbox.checked) {
+    amenitiesLayerGroup.clearLayers();
+    return;
+  }
+
+  if (amenitiesLayerGroup.getLayers().length > 0) {
+    const currentZoom = map.getZoom();
+    const isAboveZoomThreshold = currentZoom >= 14;
+    updateMarkerAppearance(isAboveZoomThreshold);
     return;
   }
 
@@ -4452,6 +4467,37 @@ function drawSelectedAmenities() {
   
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
+}
+
+function updateMarkerAppearance(isAboveZoomThreshold) {
+  if (!amenitiesLayerGroup || !amenitiesLayerGroup.getLayers().length) {
+    return;
+  }
+
+  const currentLayer = amenitiesLayerGroup.getLayers()[0];
+  
+  currentLayer.eachLayer(marker => {
+    const element = marker.getElement();
+    if (!element) return;
+        
+    if (isAboveZoomThreshold) {
+      if (!element.querySelector('i.fa-graduation-cap')) {
+        element.innerHTML = '<i class="fas fa-graduation-cap"></i>';
+        element.style.width = '40px';
+        element.style.height = '40px';
+        element.style.marginLeft = '-20px';
+        element.style.marginTop = '-20px';
+      }
+    } else {
+      if (!element.querySelector('.training-dot')) {
+        element.innerHTML = '<div class="training-dot"></div>';
+        element.style.width = '8px';
+        element.style.height = '8px';
+        element.style.marginLeft = '-4px';
+        element.style.marginTop = '-4px';
+      }
+    }
+  });
 }
 
 function updateAmenitiesCatchmentLayer() {
