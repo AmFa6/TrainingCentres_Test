@@ -1117,7 +1117,7 @@ map.on('zoomend', () => {
       wasAboveZoomThreshold = isAboveZoomThreshold;
       updateMarkerAppearance(isAboveZoomThreshold);
     }
-  }, 250);
+  }, 1000);
 });
 
 const toTitleCase = (str) => {
