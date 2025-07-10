@@ -1811,6 +1811,10 @@ function setupTrainingCenterFilters() {
     checkbox.addEventListener('change', handleSubjectAimChange);
   });
   
+  AmenitiesYear.addEventListener("change", function() {
+    debouncedHandler();
+  });
+  
   function handleSubjectAimChange() {
     debouncedHandler();
   }
@@ -4350,15 +4354,9 @@ function showAmenityCatchment(amenityType, amenityId) {
 function drawSelectedAmenities() {
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   
+  amenitiesLayerGroup.clearLayers();
+  
   if (!amenitiesCheckbox || !amenitiesCheckbox.checked) {
-    amenitiesLayerGroup.clearLayers();
-    return;
-  }
-
-  if (amenitiesLayerGroup.getLayers().length > 0) {
-    const currentZoom = map.getZoom();
-    const isAboveZoomThreshold = currentZoom >= 14;
-    updateMarkerAppearance(isAboveZoomThreshold);
     return;
   }
 
@@ -4460,7 +4458,19 @@ function drawSelectedAmenities() {
           }
         }
       });
-      
+
+      marker.on('popupclose', function() {
+        const element = this.getElement();
+        if (element) {
+          const iconElement = element.querySelector('i.fa-graduation-cap') || element.querySelector('.training-dot');
+          if (iconElement) {
+            iconElement.style.color = '';
+            iconElement.style.backgroundColor = '';
+            iconElement.style.boxShadow = '';
+          }
+          element.style.zIndex = '';
+        }
+      });
       return marker;
     },
   });
