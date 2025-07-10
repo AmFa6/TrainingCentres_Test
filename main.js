@@ -4371,13 +4371,13 @@ function drawSelectedAmenities() {
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
       console.log("Creating marker at:", latlng);
-      // Use simple circle markers as fallback if icons don't display
+      // Use graduation cap icon when zoomed in, simple dot when zoomed out
       const icon = isAboveZoomThreshold ? 
         L.divIcon({ 
           className: 'fa-icon', 
-          html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div><div style="width: 15px; height: 15px; border-radius: 50%; background-color: grey; display: block;"></div>', 
-          iconSize: [60, 60], 
-          iconAnchor: [15, 15] 
+          html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey; font-size: 24px;"></i></div>', 
+          iconSize: [120, 120], // Doubled the size
+          iconAnchor: [30, 30] 
         }): 
         L.divIcon({ 
           className: 'fa-icon', 
@@ -4386,22 +4386,42 @@ function drawSelectedAmenities() {
           iconAnchor: [3.5, 3.5] 
         });
       
-      const marker = L.marker(latlng, { icon: icon });
+      // Create marker with larger clickable area by setting interactive:true and larger hit area
+      const marker = L.marker(latlng, { 
+        icon: icon,
+        interactive: true, // Ensure it's clickable
+      });
       
       marker.on('add', function() {
         const element = this.getElement();
         if (element) {
           element.style.opacity = 1;
+          // Add a larger invisible clickable area
+          const clickableArea = document.createElement('div');
+          clickableArea.style.position = 'absolute';
+          clickableArea.style.width = '40px';
+          clickableArea.style.height = '40px';
+          clickableArea.style.top = '-20px';
+          clickableArea.style.left = '-20px';
+          clickableArea.style.cursor = 'pointer';
+          element.appendChild(clickableArea);
         }
       });
       
       marker.on('mouseover', function(e) {
         const element = e.target.getElement();
         if (element) {
-          element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '') + ' scale(1.3)';
+          // Increased scale factor for more noticeable hover effect
+          element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '') + ' scale(1.5)'; 
           element.style.zIndex = 1000;
           element.style.transition = 'transform 0.2s ease';
           element.style.cursor = 'pointer';
+          // Add highlight effect
+          const iconElement = element.querySelector('.pin i, .dot');
+          if (iconElement) {
+            iconElement.style.color = '#333'; // Darker on hover
+            iconElement.style.filter = 'drop-shadow(0 0 3px rgba(0,0,0,0.5))';
+          }
         }
       });
       
@@ -4410,6 +4430,12 @@ function drawSelectedAmenities() {
         if (element) {
           element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '');
           element.style.zIndex = '';
+          // Reset highlight effect
+          const iconElement = element.querySelector('.pin i, .dot');
+          if (iconElement) {
+            iconElement.style.color = 'grey';
+            iconElement.style.filter = 'none';
+          }
         }
       });
       
@@ -4417,10 +4443,29 @@ function drawSelectedAmenities() {
         const properties = feature.properties;
         const popupContent = getTrainingCenterPopupContent(properties);
         
-        L.popup()
+        // Create a more prominent popup
+        L.popup({
+          className: 'training-center-popup', // Add custom class for styling
+          maxWidth: 400,
+          minWidth: 300,
+          autoPan: true,
+          closeOnClick: false,
+          closeButton: true
+        })
           .setLatLng(latlng)
           .setContent(popupContent)
           .openOn(map);
+          
+        // Highlight the clicked marker
+        const element = this.getElement();
+        if (element) {
+          element.style.zIndex = 2000; // Make sure it's on top
+          const iconElement = element.querySelector('.pin i');
+          if (iconElement) {
+            iconElement.style.color = '#0066cc'; // Highlight color
+            iconElement.style.filter = 'drop-shadow(0 0 5px rgba(0,100,200,0.8))';
+          }
+        }
       });
       
       return marker;
