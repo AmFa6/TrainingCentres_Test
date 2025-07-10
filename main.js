@@ -295,7 +295,6 @@ function createStaticLegendControls() {
   const amenitiesCheckbox = document.getElementById('amenitiesCheckbox');
   if (amenitiesCheckbox) {
     amenitiesCheckbox.addEventListener('change', () => {
-      console.log("Amenities checkbox clicked, new state:", amenitiesCheckbox.checked);
       if (amenitiesCheckbox.checked) {
         drawSelectedAmenities();
         amenitiesLayerGroup.addTo(map);
@@ -1107,12 +1106,8 @@ function showErrorNotification(message) {
 map.on('zoomend', () => {
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
-  
   if (isAboveZoomThreshold !== wasAboveZoomThreshold) {
-    console.log("Zoom threshold crossed. Current zoom:", currentZoom, "Show graduation caps:", isAboveZoomThreshold);
     wasAboveZoomThreshold = isAboveZoomThreshold;
-    
-    // Always redraw amenities when crossing the zoom threshold
     drawSelectedAmenities();
   }
 });
@@ -1569,11 +1564,9 @@ function initializeFileUpload() {
 }
 
 function loadTrainingCentres() {
-  console.log("Loading training centres from:", AmenitiesFiles[0].path);
   return fetch(AmenitiesFiles[0].path)
     .then(response => response.json())
     .then(data => {
-      console.log("Training centres loaded:", data.features?.length || 0);
       amenityLayers['TrainingCentres'] = data;
       return data;
     })
@@ -1853,10 +1846,8 @@ function updateAimLevelDropdownLabel() {
 }
 
 function initializeTrainingCentres() {    
-    // Set initial zoom threshold flag
     const currentZoom = map.getZoom();
     wasAboveZoomThreshold = currentZoom >= 14;
-    console.log("Initializing training centers. Initial zoom:", currentZoom, "Using graduation caps:", wasAboveZoomThreshold);
     
     if (amenityLayers['TrainingCentres']) {
         setupTrainingCentersUI();
@@ -4365,31 +4356,21 @@ function drawSelectedAmenities() {
   
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
-  
-  console.log("Drawing training centers. Current zoom:", currentZoom, "Using graduation caps:", isAboveZoomThreshold);
-  console.log("First center coordinates:", filteredTrainingCentres.features[0].geometry.coordinates);
-  
+    
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
-      // Force a specific icon type based on zoom level
       let iconHtml, iconSize, iconAnchor;
       
       if (isAboveZoomThreshold) {
-        // Graduation cap for zoomed in view
-        iconHtml = '<div style="background-color: transparent; position: relative; display: flex; justify-content: center; align-items: center;">' +
-                   '<i class="fas fa-graduation-cap" style="color: #333; font-size: 28px; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);"></i>' +
-                   '</div>';
+        iconHtml = '<i class="fas fa-graduation-cap"></i>';
         iconSize = [40, 40];
         iconAnchor = [20, 20];
       } else {
-        // Simple dot for zoomed out view
-        iconHtml = '<div style="background-color: grey; width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 2px rgba(0,0,0,0.5);"></div>';
+        iconHtml = '<div class="training-dot"></div>';
         iconSize = [8, 8]; 
         iconAnchor = [4, 4];
       }
-      
-      console.log("Creating icon with zoom:", currentZoom, "Using graduation cap:", isAboveZoomThreshold);
-      
+            
       const icon = L.divIcon({
         className: 'custom-div-icon',
         html: iconHtml,
@@ -4403,21 +4384,16 @@ function drawSelectedAmenities() {
       });
       
       marker.on('add', function() {
-        console.log("Marker added to map, zoom:", map.getZoom(), "Using graduation cap:", isAboveZoomThreshold);
         const element = this.getElement();
         if (element) {
           element.style.opacity = 1;
-          
-          // Log what's in the element
-          console.log("Marker element HTML:", element.innerHTML);
-          
-          // Make the clickable area larger
+                    
           const clickableArea = document.createElement('div');
           clickableArea.style.position = 'absolute';
-          clickableArea.style.width = '60px'; // Increased from 40px
-          clickableArea.style.height = '60px'; // Increased from 40px
-          clickableArea.style.top = '-30px'; // Adjusted for new size
-          clickableArea.style.left = '-30px'; // Adjusted for new size
+          clickableArea.style.width = '60px';
+          clickableArea.style.height = '60px';
+          clickableArea.style.top = '-30px';
+          clickableArea.style.left = '-30px';
           clickableArea.style.cursor = 'pointer';
           clickableArea.style.zIndex = '1';
           element.appendChild(clickableArea);
@@ -4431,11 +4407,6 @@ function drawSelectedAmenities() {
           element.style.zIndex = 1000;
           element.style.transition = 'transform 0.2s ease';
           element.style.cursor = 'pointer';
-          const iconElement = element.querySelector('.pin i, .dot');
-          if (iconElement) {
-            iconElement.style.color = '#333';
-            iconElement.style.filter = 'drop-shadow(0 0 3px rgba(0,0,0,0.5))';
-          }
         }
       });
       
@@ -4444,11 +4415,6 @@ function drawSelectedAmenities() {
         if (element) {
           element.style.transform = element.style.transform.replace(/scale\([^)]*\)/, '');
           element.style.zIndex = '';
-          const iconElement = element.querySelector('.pin i, .dot');
-          if (iconElement) {
-            iconElement.style.color = 'grey';
-            iconElement.style.filter = 'none';
-          }
         }
       });
       
@@ -4471,10 +4437,11 @@ function drawSelectedAmenities() {
         const element = this.getElement();
         if (element) {
           element.style.zIndex = 2000;
-          const iconElement = element.querySelector('.pin i');
+          const iconElement = element.querySelector('i.fa-graduation-cap') || element.querySelector('.training-dot');
           if (iconElement) {
             iconElement.style.color = '#0066cc';
-            iconElement.style.filter = 'drop-shadow(0 0 5px rgba(0,100,200,0.8))';
+            iconElement.style.backgroundColor = '#0066cc';
+            iconElement.style.boxShadow = '0 0 5px rgba(0,100,200,0.8)';
           }
         }
       });
@@ -4485,7 +4452,6 @@ function drawSelectedAmenities() {
   
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
-  console.log("Layer added to map");
 }
 
 function updateAmenitiesCatchmentLayer() {
