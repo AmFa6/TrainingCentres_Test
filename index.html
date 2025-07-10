@@ -23,7 +23,6 @@
     font-weight: normal;
   }
   
-  /* Styling for training center markers */
   .custom-div-icon {
     background: transparent;
     border: none;
@@ -33,23 +32,33 @@
   .custom-div-icon i.fa-graduation-cap {
     font-size: 28px !important;
     color: #333;
-    text-shadow: 0 0 3px rgba(0,0,0,0.7);
+    text-shadow: 0 0 3px rgba(0,0,0,0.5);
     display: block;
-    z-index: 100;
+    text-align: center;
   }
   
-  /* Also maintain backward compatibility with older classes */
-  .fa-icon {
-    pointer-events: auto !important;
+  .custom-div-icon .training-dot {
+    background-color: #333;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    box-shadow: 0 0 2px rgba(0,0,0,0.5);
+    transition: transform 0.2s ease, background-color 0.2s ease;
   }
   
-  .fa-icon .pin,
-  .fa-icon i {
-    display: block;
-    z-index: 10;
+  .leaflet-marker-icon:hover {
+    z-index: 1000 !important;
   }
   
-  /* Custom popup styling */
+  .leaflet-marker-icon:hover i.fa-graduation-cap {
+    color: #0066cc;
+  }
+  
+  .leaflet-marker-icon:hover .training-dot {
+    background-color: #0066cc;
+    box-shadow: 0 0 4px rgba(0,100,200,0.7);
+  }
+  
   .training-center-popup .leaflet-popup-content-wrapper {
     background-color: #fff;
     border-radius: 8px;
@@ -551,7 +560,6 @@
     content: '\25B6';
   }
   
-  /* Styles for User Layer Features */
   .legend-file-upload-label {
     display: inline-block;
     padding: 4px 8px;
@@ -600,7 +608,6 @@
     overflow-y: auto;
   }
   
-  /* Style Dialog CSS */
   .modal-dialog {
     position: fixed;
     left: 50%;
@@ -690,7 +697,6 @@
     background-color: #d32f2f;
   }
   
-  /* Drawing Tools Styles */
   .draw-buttons {
     display: flex;
     gap: 5px;
@@ -901,7 +907,7 @@
         </div>
         <div class="legend-category-content">
           <div>
-            <input type="checkbox" id="amenitiesCheckbox"> <span style="font-size: 1em;">Amenities</span>
+            <input type="checkbox" id="amenitiesCheckbox"> <span style="font-size: 1em;">Training Centres</span>
           </div>
           <div>
             <input type="checkbox" id="busStopsCheckbox"> <span style="font-size: 1em;">Bus Stops</span>
