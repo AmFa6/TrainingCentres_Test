@@ -82,6 +82,8 @@ let indicatorZIndex = 1000;
 let needsDemographicStatsUpdate = false;
 let needsJourneyTimeStatsUpdate = false;
 let currentJourneyTimeDataset = null;
+let customMetricsInTable = [];
+let availableMetrics = {};
 
 function convertMultiPolygonToPolygons(geoJson) {
   return new Promise((resolve) => {
@@ -270,7 +272,6 @@ document.addEventListener('DOMContentLoaded', (event) => {
 
 function initializeUI() {
   createStaticLegendControls();
-
   initializeLegendControls();
   
   const dataLayerCategory = document.getElementById('data-layer-category');
@@ -279,6 +280,7 @@ function initializeUI() {
   }
   
   setupAdditionalUIListeners();
+  setupMetricSelector();
 }
 
 function setupAdditionalUIListeners() {
@@ -756,6 +758,32 @@ async function loadGridData() {
         
     const processedGrid = await processGridDataFast(data1, data2, csvText1, csvText2);
     grid = processedGrid;
+    
+    if (grid.features && grid.features.length > 0) {
+      availableMetrics = {};
+      const excludedColumns = ['OriginId_tracc', 'lad24cd', 'lsoa21cd', 'lsoa11cd', 'msoa21cd', 'wd24cd', 'geojson_geom'];
+      
+      const firstFeature = grid.features[0];
+      for (const key in firstFeature.properties) {
+        if (!excludedColumns.includes(key)) {
+          let displayName = key
+            .replace(/_/g, ' ')
+            .replace(/([A-Z])/g, ' $1')
+            .replace(/^\w/, c => c.toUpperCase());
+            
+          if (key === 'pop') displayName = 'Population';
+          else if (key === 'pop_growth') displayName = 'Population Growth';
+          else if (key === 'popemp') displayName = 'Population in Employment';
+          else if (key === 'hh_caravail_ts045') displayName = 'Car Availability';
+          else if (key === 'imd_score_mhclg') displayName = 'IMD Score';
+          else if (key === 'imd_decile_mhclg') displayName = 'IMD Decile';
+          
+          availableMetrics[key] = displayName;
+        }
+      }
+      
+      updateMetricDropdowns();
+    }
     
     calculateGridStatistics(grid);
     
@@ -1855,6 +1883,32 @@ function updateAimLevelDropdownLabel() {
   } else {
     aimLevelDropdown.textContent = 'Multiple Levels';
   }
+}
+
+function updateMetricDropdowns() {
+  const opacityDropdown = document.getElementById('opacityFieldAmenitiesDropdown');
+  const outlineDropdown = document.getElementById('outlineFieldAmenitiesDropdown');
+  
+  if (!opacityDropdown || !outlineDropdown) return;
+  
+  const currentOpacity = opacityDropdown.value;
+  const currentOutline = outlineDropdown.value;
+  
+  opacityDropdown.innerHTML = '<option value="None">-</option>';
+  outlineDropdown.innerHTML = '<option value="None">-</option>';
+  
+  for (const [key, displayName] of Object.entries(availableMetrics)) {
+    opacityDropdown.innerHTML += `<option value="${key}">${displayName}</option>`;
+    outlineDropdown.innerHTML += `<option value="${key}">${displayName}</option>`;
+  }
+  
+  opacityDropdown.value = currentOpacity;
+  outlineDropdown.value = currentOutline;
+  
+  opacityDropdown.style.maxHeight = '200px';
+  outlineDropdown.style.maxHeight = '200px';
+  opacityDropdown.style.overflowY = 'auto';
+  outlineDropdown.style.overflowY = 'auto';
 }
 
 function initializeTrainingCentres() {    
@@ -5783,6 +5837,7 @@ function calculateDemoStatistics(features) {
   
   return new Promise(resolve => {
     let stats = {
+      // Basic metrics always included
       totalPopulation: 0,
       minPopulation: Infinity,
       maxPopulation: -Infinity,
@@ -5807,6 +5862,19 @@ function calculateDemoStatistics(features) {
       populationWithImdDecile: 0,
       populationWithCarAvailability: 0
     };
+    
+    const allMetricStats = {};
+    for (const key in availableMetrics) {
+      if (!['pop', 'imd_score_mhclg', 'imd_decile_mhclg', 'hh_caravail_ts045', 'pop_growth'].includes(key)) {
+        allMetricStats[key] = {
+          total: 0,
+          min: Infinity,
+          max: -Infinity,
+          weighted: 0,
+          count: 0
+        };
+      }
+    }
     
     let currentBatch = 0;
     
@@ -5847,6 +5915,17 @@ function calculateDemoStatistics(features) {
             stats.maxCarAvailability = Math.max(stats.maxCarAvailability, carAvailability);
             stats.populationWithCarAvailability += pop;
           }
+          
+          for (const key in allMetricStats) {
+            const value = Number(props[key]);
+            if (isFinite(value)) {
+              allMetricStats[key].total += value;
+              allMetricStats[key].min = Math.min(allMetricStats[key].min, value);
+              allMetricStats[key].max = Math.max(allMetricStats[key].max, value);
+              allMetricStats[key].weighted += value * pop;
+              allMetricStats[key].count++;
+            }
+          }
         }
         
         const popGrowth = Number(props.pop_growth);
@@ -5881,6 +5960,22 @@ function calculateDemoStatistics(features) {
         
         const avgCarAvailability = stats.populationWithCarAvailability > 0 ? 
           stats.totalWeightedCarAvailability / stats.populationWithCarAvailability : 0;
+        
+        const additionalMetrics = {};
+        for (const key in allMetricStats) {
+          if (allMetricStats[key].min === Infinity) allMetricStats[key].min = 0;
+          if (allMetricStats[key].max === -Infinity) allMetricStats[key].max = 0;
+          
+          const avg = stats.totalPopulation > 0 ? 
+            allMetricStats[key].weighted / stats.totalPopulation : 0;
+            
+          additionalMetrics[key] = {
+            total: allMetricStats[key].total,
+            min: allMetricStats[key].min,
+            max: allMetricStats[key].max,
+            avg: avg
+          };
+        }
 
         resolve({
           totalPopulation: stats.totalPopulation,
@@ -5897,7 +5992,8 @@ function calculateDemoStatistics(features) {
           maxCarAvailability: stats.maxCarAvailability,
           totalPopGrowth: stats.totalPopGrowth,
           minPopGrowth: stats.minPopGrowth,
-          maxPopGrowth: stats.maxPopGrowth
+          maxPopGrowth: stats.maxPopGrowth,
+          additionalMetrics: additionalMetrics
         });
       }
     }
@@ -5957,6 +6053,106 @@ function calculateTimeStatistics(features) {
   }
 }
 
+function setupMetricSelector() {
+  const addMetricButton = document.getElementById('add-metric-btn');
+  const metricSelector = document.getElementById('metric-selector');
+  
+  if (addMetricButton && metricSelector) {
+    addMetricButton.addEventListener('click', function() {
+      if (metricSelector.style.display === 'none' || !metricSelector.style.display) {
+        metricSelector.style.display = 'block';
+      } else {
+        metricSelector.style.display = 'none';
+      }
+    });
+    
+    const metricDropdown = document.getElementById('additional-metric-dropdown');
+    const addSelectedMetricBtn = document.getElementById('add-selected-metric');
+    
+    if (addSelectedMetricBtn && metricDropdown) {
+      addSelectedMetricBtn.addEventListener('click', function() {
+        const selectedMetric = metricDropdown.value;
+        if (selectedMetric && selectedMetric !== 'none') {
+          addMetricToTable(selectedMetric);
+          metricSelector.style.display = 'none';
+        }
+      });
+    }
+  }
+}
+
+function populateMetricDropdown() {
+  const metricDropdown = document.getElementById('additional-metric-dropdown');
+  if (!metricDropdown) return;
+  
+  metricDropdown.innerHTML = '<option value="none">Select a metric</option>';
+  
+  for (const [key, displayName] of Object.entries(availableMetrics)) {
+    if (!['pop', 'imd_score_mhclg', 'imd_decile_mhclg', 'hh_caravail_ts045', 'pop_growth'].includes(key) && 
+        !customMetricsInTable.includes(key)) {
+      metricDropdown.innerHTML += `<option value="${key}">${displayName}</option>`;
+    }
+  }
+}
+
+function addMetricToTable(metricKey) {
+  if (customMetricsInTable.includes(metricKey)) return;
+  
+  customMetricsInTable.push(metricKey);
+  
+  const summaryTable = document.getElementById('summary-table').getElementsByTagName('tbody')[0];
+  const displayName = availableMetrics[metricKey];
+  
+  const newRow = summaryTable.insertRow();
+  newRow.id = `metric-row-${metricKey}`;
+  
+  newRow.innerHTML = `
+    <td>
+      ${displayName}
+      <button class="remove-metric-btn" data-metric="${metricKey}">
+        <i class="fas fa-times"></i>
+      </button>
+    </td>
+    <td id="avg-${metricKey}">-</td>
+    <td id="total-${metricKey}">-</td>
+    <td id="min-${metricKey}">-</td>
+    <td id="max-${metricKey}">-</td>
+  `;
+  
+  const removeBtn = newRow.querySelector('.remove-metric-btn');
+  removeBtn.addEventListener('click', function() {
+    removeMetricFromTable(metricKey);
+  });
+  
+  updateMetricStatistics(metricKey);
+}
+
+function removeMetricFromTable(metricKey) {
+  const index = customMetricsInTable.indexOf(metricKey);
+  if (index > -1) {
+    customMetricsInTable.splice(index, 1);
+    
+    const row = document.getElementById(`metric-row-${metricKey}`);
+    if (row) {
+      row.parentNode.removeChild(row);
+    }
+    
+    populateMetricDropdown();
+  }
+}
+
+function updateMetricStatistics(metricKey) {
+  if (!window.lastBaseStats || !window.lastBaseStats.additionalMetrics) return;
+  
+  const metricStats = window.lastBaseStats.additionalMetrics[metricKey];
+  if (!metricStats) return;
+  
+  document.getElementById(`avg-${metricKey}`).textContent = formatValue(metricStats.avg, 0.01);
+  document.getElementById(`total-${metricKey}`).textContent = formatValue(metricStats.total, 1);
+  document.getElementById(`min-${metricKey}`).textContent = formatValue(metricStats.min, 0.01);
+  document.getElementById(`max-${metricKey}`).textContent = formatValue(metricStats.max, 0.01);
+}
+
 function updateStatisticsUI(stats) {
   document.getElementById('total-population').textContent = formatValue(stats.totalPopulation, 10);
   document.getElementById('min-population').textContent = formatValue(stats.minPopulation, 10);
@@ -5976,6 +6172,14 @@ function updateStatisticsUI(stats) {
   document.getElementById('avg-journey-time').textContent = formatValue(stats.avgTime, 1);
   document.getElementById('min-journey-time').textContent = formatValue(stats.minTime, 1);
   document.getElementById('max-journey-time').textContent = formatValue(stats.maxTime, 1);
+  
+  if (stats.additionalMetrics) {
+    for (const metricKey of customMetricsInTable) {
+      updateMetricStatistics(metricKey);
+    }
+  }
+  
+  populateMetricDropdown();
 }
 
 function filterByJourneyTime(features, filterValue) {
