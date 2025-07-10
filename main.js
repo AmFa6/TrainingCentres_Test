@@ -26,7 +26,7 @@ let AmenitiesCatchmentLayer = null;
 let gridTimeMap = {};
 let csvDataCache = {};
 let fullCsvData = null;
-let amenitiesLayerGroup = L.featureGroup();
+let amenitiesLayerGroup = L.featureGroup().addTo(map); // Add to map immediately so it's initialized
 let selectedAmenitiesAmenities = [];
 let selectingFromMap = false;
 let selectedAmenitiesFromMap = [];
@@ -4354,14 +4354,37 @@ function drawSelectedAmenities() {
   const filteredTrainingCentres = filterTrainingCentres();
   console.log("Using filtered centers:", filteredTrainingCentres.features.length);
   
+  // Debug to check if features are properly structured
+  if (!filteredTrainingCentres.features || filteredTrainingCentres.features.length === 0) {
+    console.warn("No training center features to display");
+    return;
+  }
+  
   const currentZoom = map.getZoom();
   const isAboveZoomThreshold = currentZoom >= 14;
 
+  // Debug feature coordinates
+  filteredTrainingCentres.features.slice(0, 3).forEach((feature, i) => {
+    console.log(`Feature ${i} coordinates:`, feature.geometry.coordinates);
+  });
+  
   const layer = L.geoJSON(filteredTrainingCentres, {
     pointToLayer: (feature, latlng) => {
+      console.log("Creating marker at:", latlng);
+      // Use simple circle markers as fallback if icons don't display
       const icon = isAboveZoomThreshold ? 
-        L.divIcon({ className: 'fa-icon', html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div>', iconSize: [60, 60], iconAnchor: [15, 15] }): 
-        L.divIcon({ className: 'fa-icon', html: '<div class="dot" style="background-color:grey;"></div>', iconSize: [7, 7], iconAnchor: [3.5, 3.5] });
+        L.divIcon({ 
+          className: 'fa-icon', 
+          html: '<div class="pin"><i class="fas fa-graduation-cap" style="color: grey;"></i></div><div style="width: 15px; height: 15px; border-radius: 50%; background-color: grey; display: block;"></div>', 
+          iconSize: [60, 60], 
+          iconAnchor: [15, 15] 
+        }): 
+        L.divIcon({ 
+          className: 'fa-icon', 
+          html: '<div class="dot" style="background-color:grey; width: 7px; height: 7px; border-radius: 50%; display: block;"></div>', 
+          iconSize: [7, 7], 
+          iconAnchor: [3.5, 3.5] 
+        });
       
       const marker = L.marker(latlng, { icon: icon });
       
@@ -4404,8 +4427,10 @@ function drawSelectedAmenities() {
     },
   });
   
+  console.log("Adding training centers layer with features:", layer.getLayers().length);
   amenitiesLayerGroup.addLayer(layer);
   amenitiesLayerGroup.addTo(map);
+  console.log("Layer added to map");
 }
 
 function updateAmenitiesCatchmentLayer() {
